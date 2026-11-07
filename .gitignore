@@ -1,6 +1,16 @@
 # Bí mật và dữ liệu khách hàng — không đưa lên git
-api/config.php
-leadscan-config.php
-storage/*
-!storage/.htaccess
 .env
+backend/.env
+
+# Python
+backend/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+backend/*.db
+
+# Next.js
+web/node_modules/
+web/.next/
+web/next-env.d.ts
+*.tsbuildinfo

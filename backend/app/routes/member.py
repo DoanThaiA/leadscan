@@ -1,0 +1,405 @@
+"""API cổng thành viên: /api/member/*"""
+
+import secrets
+from datetime import timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from pydantic import BaseModel, Field
+from sqlalchemy import delete, func, or_, select
+from sqlalchemy.orm import Session, selectinload
+
+from app.config import get_settings
+from app.db import get_db, utcnow
+from app.member_auth import create_session, current_member, destroy_session
+from app.models import (
+    OPP_SOURCES,
+    Activity,
+    EnrichRequest,
+    InvoiceRequest,
+    MemberSession,
+    MemberUser,
+    Opportunity,
+    PasswordReset,
+    PaymentOrder,
+    Profile,
+    Purchase,
+    WalletTransaction,
+)
+from app.registration_form import REGIONS
+from app.schemas import LoginIn, PasswordChangeIn, ProfileIn, ProfileOut
+from app.schemas_commerce import EnrichIn, EnrichOut, InvoiceIn, OrderCreateIn, OrderOut, TxOut
+from app.security import DUMMY_HASH, add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
+from app.services import catalog, payments
+from app.worker import enqueue, send_invoice_request_task, send_password_reset_task
+
+router = APIRouter(prefix="/api/member")
+
+
+def _me(user: MemberUser) -> dict:
+    c = user.company
+    return {
+        "id": user.id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "company": {
+            "id": c.id,
+            "code": c.code,
+            "name": c.name,
+            "tax_code": c.tax_code,
+            "address": ", ".join(x for x in (c.address, c.province) if x),
+            "status": c.status,
+            "points_balance": c.points_balance,
+            "membership_expires_at": _iso(c.membership_expires_at),
+            "membership_active": catalog.membership_active(c),
+        },
+    }
+
+
+def _iso(dt):
+    return dt.isoformat() + "Z" if dt else None
+
+
+# ================================================================== đăng nhập
+
+
+@router.post("/auth/login")
+def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
+    cfg = get_settings()
+    if not origin_allowed(request, cfg):
+        raise HTTPException(403, "Yêu cầu không hợp lệ.")
+    key = "mlogin:" + sha256(client_ip(request, cfg))
+    if rate_limited(db, key, cfg.login_attempts_per_15min, timedelta(minutes=15)):
+        raise HTTPException(429, "Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.")
+    user = db.scalar(select(MemberUser).where(MemberUser.email == body.email.strip().lower()))
+    ok = verify_password(body.password, user.password_hash if user else DUMMY_HASH)
+    if not user or not ok:
+        add_hit(db, key)
+        db.commit()
+        raise HTTPException(401, "Email hoặc mật khẩu không đúng.")
+    if not user.is_active or user.company.status in ("suspended", "rejected"):
+        raise HTTPException(403, "Tài khoản đang bị khoá. Vui lòng liên hệ LeadScan.")
+    create_session(db, user, request, response)
+    return _me(user)
+
+
+@router.post("/auth/logout", status_code=204)
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    destroy_session(db, request, response)
+
+
+@router.get("/auth/me")
+def me(user: MemberUser = Depends(current_member)):
+    return _me(user)
+
+
+@router.post("/auth/password", status_code=204)
+def change_password(body: PasswordChangeIn, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(400, "Mật khẩu hiện tại không đúng.")
+    user.password_hash = hash_password(body.new_password)
+    db.commit()
+
+
+class ForgotIn(BaseModel):
+    email: str = Field(max_length=150)
+
+
+class ResetIn(BaseModel):
+    token: str = Field(max_length=200)
+    password: str = Field(min_length=8, max_length=200)
+
+
+@router.post("/auth/forgot")
+def forgot(body: ForgotIn, request: Request, db: Session = Depends(get_db)):
+    """Luôn trả cùng một thông báo để không lộ email nào có tài khoản."""
+    cfg = get_settings()
+    key = "forgot:" + sha256(client_ip(request, cfg))
+    if rate_limited(db, key, 5, timedelta(hours=1)):
+        raise HTTPException(429, "Bạn đã yêu cầu quá nhiều lần. Vui lòng thử lại sau.")
+    add_hit(db, key)
+    user = db.scalar(select(MemberUser).where(MemberUser.email == body.email.strip().lower(), MemberUser.is_active))
+    if user:
+        token = secrets.token_urlsafe(32)
+        db.add(PasswordReset(token_hash=sha256(token), user_id=user.id, expires_at=utcnow() + timedelta(hours=1)))
+        db.commit()
+        enqueue(send_password_reset_task, user.email, user.full_name, token)
+    db.commit()
+    return {"ok": True, "message": "Nếu email có tài khoản, chúng tôi đã gửi liên kết đặt lại mật khẩu (hiệu lực 60 phút)."}
+
+
+@router.post("/auth/reset", status_code=204)
+def reset(body: ResetIn, db: Session = Depends(get_db)):
+    pr = db.scalar(select(PasswordReset).where(PasswordReset.token_hash == sha256(body.token)))
+    if not pr or pr.used_at or pr.expires_at < utcnow():
+        raise HTTPException(400, "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.")
+    user = db.get(MemberUser, pr.user_id)
+    user.password_hash = hash_password(body.password)
+    pr.used_at = utcnow()
+    db.execute(delete(MemberSession).where(MemberSession.user_id == user.id))
+    db.commit()
+
+
+# ================================================================== tổng quan
+
+
+@router.get("/dashboard")
+def dashboard(user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    cid = user.company_id
+    bought = db.scalar(select(func.count()).select_from(Purchase).where(Purchase.company_id == cid)) or 0
+    spent = -(db.scalar(select(func.sum(WalletTransaction.amount)).where(WalletTransaction.company_id == cid, WalletTransaction.kind == "purchase")) or 0)
+    recent = db.scalars(select(Purchase).where(Purchase.company_id == cid).order_by(Purchase.id.desc()).limit(5)).unique().all()
+    newest = db.scalars(
+        select(Opportunity).options(selectinload(Opportunity.contacts)).where(Opportunity.status == "published").order_by(Opportunity.published_at.desc()).limit(6)
+    ).unique().all()
+    owned = catalog.purchased_ids(db, cid, [o.id for o in newest])
+    pending_orders = db.scalar(select(func.count()).select_from(PaymentOrder).where(PaymentOrder.company_id == cid, PaymentOrder.status == "pending", PaymentOrder.expires_at > utcnow())) or 0
+    return {
+        "me": _me(user),
+        "purchased_count": bought,
+        "points_spent": spent,
+        "pending_orders": pending_orders,
+        "recent_purchases": [{"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "opportunity": catalog.preview(p.opportunity, True)} for p in recent],
+        "new_opportunities": [catalog.preview(o, o.id in owned) for o in newest],
+    }
+
+
+# ================================================================== kho cơ hội
+
+
+@router.get("/opportunities")
+def list_opportunities(
+    q: str = Query("", max_length=100),
+    industry: str = "",
+    region: str = "",
+    source: str = "",
+    min_score: int = Query(0, ge=0, le=100),
+    max_price: int | None = Query(None, ge=0),
+    only: str = "",  # "available" = còn lượt, "purchased" = đã mua
+    sort: str = "new",  # new | score | price_asc | price_desc
+    page: int = Query(1, ge=1),
+    page_size: int = Query(12, ge=1, le=50),
+    user: MemberUser = Depends(current_member),
+    db: Session = Depends(get_db),
+):
+    stmt = select(Opportunity).where(Opportunity.status.in_(("published", "closed")))
+    if q.strip():
+        like = f"%{q.strip()}%"
+        stmt = stmt.where(or_(Opportunity.title.ilike(like), Opportunity.summary.ilike(like), Opportunity.code.ilike(like), Opportunity.province.ilike(like)))
+    if industry:
+        stmt = stmt.where(Opportunity.industry == industry)
+    if region:
+        stmt = stmt.where(Opportunity.region == region)
+    if source:
+        stmt = stmt.where(Opportunity.source_type == source)
+    if min_score:
+        stmt = stmt.where(Opportunity.score >= min_score)
+    if max_price is not None:
+        stmt = stmt.where(Opportunity.price <= max_price)
+    mine = select(Purchase.opportunity_id).where(Purchase.company_id == user.company_id)
+    if only == "purchased":
+        stmt = stmt.where(Opportunity.id.in_(mine))
+    elif only == "available":
+        stmt = stmt.where(Opportunity.status == "published", Opportunity.sold_count < Opportunity.max_buyers, Opportunity.id.not_in(mine))
+    else:
+        # phiếu đã đóng chỉ hiện nếu mình đã mua
+        stmt = stmt.where(or_(Opportunity.status == "published", Opportunity.id.in_(mine)))
+    order = {
+        "score": (Opportunity.score.desc(), Opportunity.id.desc()),
+        "price_asc": (Opportunity.price.asc(), Opportunity.id.desc()),
+        "price_desc": (Opportunity.price.desc(), Opportunity.id.desc()),
+    }.get(sort, (Opportunity.published_at.desc(), Opportunity.id.desc()))
+
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = db.scalars(stmt.options(selectinload(Opportunity.contacts)).order_by(*order).offset((page - 1) * page_size).limit(page_size)).unique().all()
+    owned = catalog.purchased_ids(db, user.company_id, [o.id for o in rows])
+    industries = db.scalars(
+        select(Opportunity.industry).where(Opportunity.status == "published", Opportunity.industry != "").distinct().order_by(Opportunity.industry)
+    ).all()
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [catalog.preview(o, o.id in owned) for o in rows],
+        "facets": {"industries": industries, "regions": REGIONS, "sources": OPP_SOURCES},
+    }
+
+
+def _get_opp(db: Session, opp_id: int, company_id: int) -> tuple[Opportunity, Purchase | None]:
+    o = db.get(Opportunity, opp_id)
+    p = db.scalar(select(Purchase).where(Purchase.company_id == company_id, Purchase.opportunity_id == opp_id)) if o else None
+    if not o or o.status == "draft" or (o.status == "closed" and not p):
+        raise HTTPException(404, "Không tìm thấy cơ hội.")
+    return o, p
+
+
+@router.get("/opportunities/{opp_id}")
+def get_opportunity(opp_id: int, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    o, p = _get_opp(db, opp_id, user.company_id)
+    if not p:
+        return {"opportunity": catalog.preview(o), "purchase": None}
+    enrich = db.scalars(select(EnrichRequest).where(EnrichRequest.purchase_id == p.id).order_by(EnrichRequest.id.desc())).unique().all()
+    return {
+        "opportunity": catalog.full(o),
+        "purchase": {"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "enrich_requests": [EnrichOut.model_validate(e).model_dump(mode="json") for e in enrich]},
+    }
+
+
+@router.post("/opportunities/{opp_id}/purchase")
+def purchase(opp_id: int, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    p = catalog.buy(db, user, opp_id)
+    db.refresh(user.company)
+    return {"ok": True, "purchase_id": p.id, "points_balance": user.company.points_balance}
+
+
+@router.get("/purchases")
+def list_purchases(
+    page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=50), user: MemberUser = Depends(current_member), db: Session = Depends(get_db)
+):
+    base = select(Purchase).where(Purchase.company_id == user.company_id)
+    total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
+    rows = db.scalars(base.order_by(Purchase.id.desc()).offset((page - 1) * page_size).limit(page_size)).unique().all()
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [{"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "opportunity": catalog.full(p.opportunity)} for p in rows],
+    }
+
+
+@router.post("/purchases/{purchase_id}/enrich", response_model=EnrichOut, status_code=201)
+def request_enrich(purchase_id: int, body: EnrichIn, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    p = db.get(Purchase, purchase_id)
+    if not p or p.company_id != user.company_id:
+        raise HTTPException(404, "Không tìm thấy phiếu.")
+    if db.scalar(select(EnrichRequest.id).where(EnrichRequest.purchase_id == p.id, EnrichRequest.status == "open")):
+        raise HTTPException(409, "Phiếu này đang có yêu cầu enrich chờ xử lý.")
+    e = EnrichRequest(purchase_id=p.id, note=body.note.strip())
+    db.add(e)
+    db.commit()
+    db.refresh(e)
+    return e
+
+
+# ================================================================== ví & nạp tiền
+
+
+@router.get("/wallet")
+def get_wallet(
+    page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100), user: MemberUser = Depends(current_member), db: Session = Depends(get_db)
+):
+    cid = user.company_id
+    base = select(WalletTransaction).where(WalletTransaction.company_id == cid)
+    total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
+    txs = db.scalars(base.order_by(WalletTransaction.id.desc()).offset((page - 1) * page_size).limit(page_size)).unique().all()
+    orders = db.scalars(select(PaymentOrder).where(PaymentOrder.company_id == cid).order_by(PaymentOrder.id.desc()).limit(30)).unique().all()
+    for o in orders:
+        payments.expire_if_due(o)
+    db.commit()
+    return {
+        "me": _me(user),
+        "transactions": {"total": total, "page": page, "page_size": page_size, "items": [TxOut.model_validate(t).model_dump(mode="json", exclude={"actor"}) for t in txs]},
+        "orders": [OrderOut.model_validate(o).model_dump(mode="json") for o in orders],
+    }
+
+
+@router.get("/packages")
+def packages(user: MemberUser = Depends(current_member)):
+    cfg = get_settings()
+    return {
+        "membership_active": catalog.membership_active(user.company),
+        "membership_expires_at": _iso(user.company.membership_expires_at),
+        "membership": {"amount": cfg.membership_fee, "points": cfg.membership_points, "days": cfg.membership_days},
+        "topup": {"packs": cfg.topup_packs, "min": cfg.topup_min, "max": cfg.topup_max},
+        "provider": cfg.payment_provider,
+    }
+
+
+@router.post("/orders", status_code=201)
+def create_order(body: OrderCreateIn, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    cfg = get_settings()
+    if body.kind == "membership":
+        amount, points = cfg.membership_fee, cfg.membership_points
+    else:
+        if not catalog.membership_active(user.company):
+            raise HTTPException(400, "Vui lòng thanh toán phí thành viên trước khi nạp thêm điểm.")
+        amount = int(body.amount or 0)
+        if not cfg.topup_min <= amount <= cfg.topup_max:
+            raise HTTPException(400, f"Số tiền nạp phải từ {cfg.topup_min:,}đ đến {cfg.topup_max:,}đ.".replace(",", "."))
+        points = amount
+    order = payments.create_order(db, cfg, user.company_id, user.id, body.kind, amount, points)
+    return {"order": OrderOut.model_validate(order).model_dump(mode="json"), "payment": payments.payment_info(order, cfg)}
+
+
+def _my_order(db: Session, user: MemberUser, code: str) -> PaymentOrder:
+    o = db.scalar(select(PaymentOrder).where(PaymentOrder.code == code.upper(), PaymentOrder.company_id == user.company_id))
+    if not o:
+        raise HTTPException(404, "Không tìm thấy đơn.")
+    return o
+
+
+@router.get("/orders/{code}")
+def get_order(code: str, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    o = _my_order(db, user, code)
+    payments.expire_if_due(o)
+    db.commit()
+    return {"order": OrderOut.model_validate(o).model_dump(mode="json"), "payment": payments.payment_info(o, get_settings()), "me": _me(user)}
+
+
+@router.post("/orders/{code}/cancel")
+def cancel_order(code: str, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    o = _my_order(db, user, code)
+    if o.status != "pending":
+        raise HTTPException(409, "Chỉ huỷ được đơn đang chờ thanh toán.")
+    o.status = "cancelled"
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/orders/{code}/simulate-paid")
+def simulate_paid(code: str, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    """Chỉ có khi payment_provider = mock (chạy thử). Production dùng webhook InfoCMS."""
+    cfg = get_settings()
+    if cfg.payment_provider != "mock":
+        raise HTTPException(404, "Không tồn tại.")
+    o = _my_order(db, user, code)
+    payments.expire_if_due(o)
+    if o.status != "pending":
+        raise HTTPException(409, "Đơn không còn chờ thanh toán.")
+    payments.mark_paid(db, cfg, o, o.amount, f"MOCK-{o.code}", note="Giả lập thanh toán")
+    return {"ok": True}
+
+
+@router.post("/orders/{code}/invoice", status_code=201)
+def request_invoice(code: str, body: InvoiceIn, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    o = _my_order(db, user, code)
+    if o.status != "paid":
+        raise HTTPException(400, "Chỉ yêu cầu xuất hoá đơn cho đơn đã thanh toán.")
+    if o.invoice:
+        raise HTTPException(409, "Đơn này đã gửi thông tin xuất hoá đơn.")
+    inv = InvoiceRequest(order_id=o.id, **body.model_dump())
+    db.add(inv)
+    db.commit()
+    db.refresh(inv)
+    enqueue(send_invoice_request_task, inv.id)
+    return {"ok": True, "invoice_id": inv.id}
+
+
+# ================================================================== chân dung cơ hội
+
+
+@router.get("/profile", response_model=ProfileOut | None)
+def get_profile(user: MemberUser = Depends(current_member)):
+    return user.company.profile
+
+
+@router.put("/profile", response_model=ProfileOut)
+def update_profile(body: ProfileIn, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    c = user.company
+    if c.profile is None:
+        c.profile = Profile()
+    for k, v in body.model_dump().items():
+        setattr(c.profile, k, v)
+    db.add(Activity(company_id=c.id, kind="update", content=f"{user.full_name} cập nhật chân dung cơ hội"))
+    db.commit()
+    db.refresh(c.profile)
+    return c.profile

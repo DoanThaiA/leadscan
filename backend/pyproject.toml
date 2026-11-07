@@ -1,0 +1,30 @@
+[project]
+name = "leadscan"
+version = "0.1.0"
+description = "LeadScan B2B — nền tảng phiếu cơ hội cho doanh nghiệp"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0.30",
+    "alembic>=1.13",
+    "pydantic-settings>=2.4",
+    "httpx>=0.27",
+    "psycopg[binary]>=3.2",
+    "celery[redis]>=5.4",
+    "tzdata>=2024.1",  # zoneinfo trên Windows không có sẵn dữ liệu múi giờ
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "respx>=0.21",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.uv]
+package = false

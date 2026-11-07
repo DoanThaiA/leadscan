@@ -1,0 +1,102 @@
+# LeadScan B2B — toàn bộ hệ thống trên 1 VPS.
+#   cp .env.example .env   # điền mật khẩu DB, tên miền, SMTP
+#   docker compose up -d --build
+# Chỉ Caddy mở cổng ra ngoài (80/443); các dịch vụ khác nói chuyện trong mạng nội bộ.
+
+x-backend: &backend
+  build: ./backend
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    LEADSCAN_DATABASE_URL: postgresql+psycopg://leadscan:${POSTGRES_PASSWORD:?Đặt POSTGRES_PASSWORD trong .env}@db:5432/leadscan
+    LEADSCAN_REDIS_URL: redis://redis:6379/0
+    LEADSCAN_CLIENT_IP_HEADER: X-Real-IP
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: leadscan
+      POSTGRES_USER: leadscan
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Đặt POSTGRES_PASSWORD trong .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U leadscan -d leadscan"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Chạy migration 1 lần mỗi lần deploy, xong thì thoát
+  migrate:
+    <<: *backend
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    <<: *backend
+    command: ["celery", "-A", "app.worker", "worker", "-l", "info", "--concurrency", "2"]
+
+  beat:
+    <<: *backend
+    command: ["celery", "-A", "app.worker", "beat", "-l", "info", "-s", "/tmp/celerybeat-schedule"]
+
+  web:
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_SITE_URL: ${SITE_URL:-https://leadscanb2b.com}
+        API_INTERNAL_URL: http://api:8000
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+
+volumes:
+  pgdata:
+  redisdata:
+  caddy_data:
+  caddy_config:

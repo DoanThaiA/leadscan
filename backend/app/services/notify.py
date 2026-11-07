@@ -1,0 +1,135 @@
+"""Gửi email (Resend hoặc SMTP). Lỗi gửi mail chỉ ghi log, không làm hỏng luồng chính."""
+
+import logging
+import smtplib
+import ssl
+from datetime import UTC
+from email.message import EmailMessage
+from email.utils import formataddr
+from zoneinfo import ZoneInfo
+
+import httpx
+
+from app.config import Settings
+from app.models import Company
+
+log = logging.getLogger("leadscan.notify")
+
+
+def _sender(cfg: Settings) -> str:
+    return formataddr((cfg.mail_from_name, cfg.notify_from)) if cfg.mail_from_name else cfg.notify_from
+
+
+def _send_resend(cfg: Settings, to: str, subject: str, body: str) -> bool:
+    """Gửi qua Resend HTTP API (https://resend.com/docs/api-reference/emails/send-email)."""
+    try:
+        r = httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {cfg.resend_api_key}"},
+            json={"from": _sender(cfg), "to": [to], "subject": subject, "text": body},
+            timeout=15,
+        )
+    except httpx.HTTPError as e:
+        log.error("Không gửi được email qua Resend: %s", e)
+        return False
+    if 200 <= r.status_code < 300:
+        log.info("Đã gửi email qua Resend tới %s (id %s)", to, r.json().get("id") if r.content else "?")
+        return True
+    log.error("Resend từ chối email tới %s: HTTP %s %s", to, r.status_code, r.text[:300])
+    return False
+
+
+def _send_smtp(cfg: Settings, to: str, subject: str, body: str) -> bool:
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = _sender(cfg)
+    msg["To"] = to
+    msg.set_content(body)
+    try:
+        ctx = ssl.create_default_context()
+        if cfg.smtp_ssl:
+            server = smtplib.SMTP_SSL(cfg.smtp_host, cfg.smtp_port, timeout=15, context=ctx)
+        else:
+            server = smtplib.SMTP(cfg.smtp_host, cfg.smtp_port, timeout=15)
+            server.starttls(context=ctx)
+        with server:
+            if cfg.smtp_user:
+                server.login(cfg.smtp_user, cfg.smtp_password)
+            server.send_message(msg)
+        return True
+    except (OSError, smtplib.SMTPException) as e:
+        log.error("Không gửi được email qua SMTP: %s", e)
+        return False
+
+
+def mail_provider(cfg: Settings) -> str | None:
+    """resend nếu có RESEND API key, smtp nếu có SMTP host, None nếu chưa cấu hình."""
+    if cfg.mail_mailer == "resend" or (cfg.mail_mailer == "auto" and cfg.resend_api_key):
+        return "resend" if cfg.resend_api_key else None
+    return "smtp" if cfg.smtp_host else None
+
+
+def send_mail(cfg: Settings, subject: str, body: str, to: str | None = None) -> bool:
+    to = to or cfg.notify_email
+    provider = mail_provider(cfg)
+    if not to or not provider:
+        return False
+    return (_send_resend if provider == "resend" else _send_smtp)(cfg, to, subject, body)
+
+
+def notify_new_registration(cfg: Settings, c: Company) -> bool:
+    contact = c.contacts[0] if c.contacts else None
+    body = (
+        f"Mã đăng ký: {c.code}\n"
+        f"Doanh nghiệp: {c.name}\n"
+        f"MST: {c.tax_code}\n"
+        f"Ngành hàng: {c.industry} · {c.province}\n"
+        + (f"Liên hệ: {contact.full_name} - {contact.phone} - {contact.email}\n" if contact else "")
+        + f"\nXem và xử lý: {cfg.admin_url.rstrip('/')}/khach-hang/{c.id}\n"
+    )
+    return send_mail(cfg, f"[LeadScan] Đăng ký mới: {c.name} ({c.code})", body)
+
+
+def _vn(dt) -> str:
+    if not dt:
+        return "—"
+    return dt.replace(tzinfo=UTC).astimezone(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%d/%m/%Y %H:%M")
+
+
+def _vnd(n: int | None) -> str:
+    return f"{(n or 0):,}đ".replace(",", ".")
+
+
+def send_invoice_request(cfg: Settings, inv) -> bool:
+    """Gửi thông tin xuất hoá đơn tới kế toán (cfg.invoice_email) để xuất thủ công."""
+    o = inv.order
+    c = o.company
+    body = (
+        "YÊU CẦU XUẤT HOÁ ĐƠN — LeadScan B2B\n"
+        "=====================================\n\n"
+        f"Mã đơn thanh toán : {o.code}\n"
+        f"Nội dung          : {'Phí thành viên LeadScan' if o.kind == 'membership' else 'Nạp điểm LeadScan'}\n"
+        f"Số tiền           : {_vnd(o.paid_amount or o.amount)}\n"
+        f"Thanh toán lúc    : {_vn(o.paid_at)}\n\n"
+        "THÔNG TIN XUẤT HOÁ ĐƠN\n"
+        f"Tên đơn vị        : {inv.company_name}\n"
+        f"Mã số thuế        : {inv.tax_code}\n"
+        f"Địa chỉ           : {inv.address}\n"
+        f"Người mua hàng    : {inv.buyer_name or '—'}\n"
+        f"Email nhận HĐ     : {inv.receive_email}\n"
+        f"Ghi chú           : {inv.note or '—'}\n\n"
+        f"Khách hàng trên hệ thống: {c.name} ({c.code})\n"
+        f"Sau khi xuất, cập nhật số hoá đơn tại: {cfg.admin_url.rstrip('/')}/hoa-don\n"
+    )
+    return send_mail(cfg, f"[LeadScan] Yêu cầu xuất hoá đơn {o.code} — {inv.company_name}", body, to=cfg.invoice_email)
+
+
+def send_password_reset(cfg: Settings, email: str, name: str, token: str) -> bool:
+    link = f"{cfg.member_url.rstrip('/')}/dat-lai-mat-khau?token={token}"
+    body = (
+        f"Chào {name},\n\n"
+        "Bạn (hoặc ai đó) vừa yêu cầu đặt lại mật khẩu tài khoản LeadScan B2B.\n"
+        f"Mở liên kết sau trong 60 phút để đặt mật khẩu mới:\n\n{link}\n\n"
+        "Nếu không phải bạn, hãy bỏ qua email này — mật khẩu hiện tại vẫn giữ nguyên.\n"
+    )
+    return send_mail(cfg, "[LeadScan] Đặt lại mật khẩu", body, to=email)
