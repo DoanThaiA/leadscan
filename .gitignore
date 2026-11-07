@@ -1,0 +1,6 @@
+# Bí mật và dữ liệu khách hàng — không đưa lên git
+api/config.php
+leadscan-config.php
+storage/*
+!storage/.htaccess
+.env

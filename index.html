@@ -451,6 +451,75 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
   .foot-grid{grid-template-columns:1fr}
   .dark,.cta{padding:76px 0}
 }
+/* ===== Form đăng ký thành viên ===== */
+.register{background:linear-gradient(180deg,#fff 0,#FFF7F3 100%)}
+.reg-grid{display:grid;grid-template-columns:.8fr 1.4fr;gap:40px;align-items:start}
+.reg-side{position:sticky;top:96px}
+.reg-side .h-display{font-size:clamp(28px,3.4vw,40px)}
+.reg-side>p{margin:16px 0 22px;color:var(--muted);font-size:16px}
+.reg-price{display:flex;align-items:baseline;gap:8px;padding:18px 20px;background:#fff;border:1px solid var(--orange-100);border-radius:var(--radius-lg);margin-bottom:22px}
+.reg-price b{font-family:var(--head);font-size:30px;color:var(--ink);letter-spacing:-.02em;line-height:1.1}
+.reg-price span{color:var(--soft);font-size:14px}
+.reg-price em{font-style:normal;margin-left:auto;font-size:12.5px;font-weight:600;color:var(--orange-600);background:var(--orange-50);padding:4px 10px;border-radius:99px;white-space:nowrap}
+.reg-next{list-style:none;counter-reset:n;margin-bottom:22px}
+.reg-next li{position:relative;padding:0 0 16px 42px;font-size:14px;color:var(--muted)}
+.reg-next li::before{counter-increment:n;content:counter(n);position:absolute;left:0;top:0;width:28px;height:28px;border-radius:50%;background:var(--orange);color:#fff;font-weight:700;font-size:13px;display:grid;place-items:center}
+.reg-next li::after{content:"";position:absolute;left:13.5px;top:30px;bottom:2px;width:1px;background:var(--orange-100)}
+.reg-next li:last-child::after{display:none}
+.reg-next b{display:block;color:var(--ink);font-size:14.5px}
+.reg-trust{display:flex;flex-direction:column;gap:8px;font-size:13.5px;color:var(--ink-2);font-weight:500}
+.reg-trust span{display:flex;gap:8px;align-items:center}
+.reg-trust .icon{width:16px;height:16px;color:var(--green)}
+.form-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:36px;box-shadow:0 24px 50px -32px rgba(60,30,10,.35)}
+.fs{border:0;margin:0 0 30px;min-width:0}
+.fs legend{display:flex;align-items:center;gap:10px;font-family:var(--head);font-weight:600;font-size:17px;color:var(--ink);margin-bottom:16px;padding:0;width:100%}
+.fs legend i{font-style:normal;width:26px;height:26px;border-radius:50%;background:var(--orange-50);color:var(--orange);font-size:13px;font-weight:700;display:grid;place-items:center}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.fld{display:flex;flex-direction:column;gap:6px;min-width:0}
+.fld.full{grid-column:1/-1}
+.fld>label,.fld>.lbl{font-size:13.5px;font-weight:600;color:var(--ink-2)}
+.fld .req{color:var(--orange)}
+.fld .opt-t{font-weight:400;color:var(--soft)}
+.fld input[type=text],.fld input[type=email],.fld input[type=tel],.fld input[type=url],.fld select,.fld textarea{width:100%;font:inherit;font-size:15px;color:var(--ink);background:#fff;border:1px solid #D5DADF;border-radius:var(--radius);padding:11px 13px;min-height:44px;transition:border-color .15s,box-shadow .15s}
+.fld textarea{resize:vertical;min-height:96px;line-height:1.5}
+.fld select{appearance:none;-webkit-appearance:none;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23707880' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 12px center;padding-right:36px}
+.fld input::placeholder,.fld textarea::placeholder{color:#9AA2AA}
+.fld input:hover,.fld select:hover,.fld textarea:hover{border-color:#B8BFC6}
+.fld input:focus,.fld select:focus,.fld textarea:focus{outline:0;border-color:var(--orange);box-shadow:0 0 0 3px rgba(250,83,32,.15)}
+.fld [aria-invalid=true]{border-color:#DC2626;background-color:#FEF8F8}
+.fld [aria-invalid=true]:focus{box-shadow:0 0 0 3px rgba(220,38,38,.15)}
+.hint{font-size:12.5px;color:var(--soft)}
+.err{font-size:12.5px;color:#DC2626;min-height:0;display:none}
+.err.show{display:block}
+.checks{display:flex;flex-wrap:wrap;gap:8px}
+.checks label{position:relative;cursor:pointer}
+.checks input{position:absolute;opacity:0;inset:0;cursor:pointer}
+.checks span{display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border:1px solid #D5DADF;border-radius:99px;font-size:13.5px;color:var(--ink-2);background:#fff;transition:.15s;user-select:none}
+.checks input:hover+span{border-color:#B8BFC6}
+.checks input:focus-visible+span{outline:2px solid var(--orange);outline-offset:2px}
+.checks input:checked+span{background:var(--orange-50);border-color:var(--orange);color:var(--orange-600);font-weight:500}
+.checks input:checked+span::before{content:"✓";font-weight:700}
+.agree{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--muted);cursor:pointer;margin:6px 0 4px}
+.agree input{width:18px;height:18px;margin-top:2px;accent-color:var(--orange);flex:none}
+.agree a{color:var(--orange);text-decoration:underline}
+.hp{position:absolute!important;left:-9999px;width:1px;height:1px;overflow:hidden}
+.form-actions{display:flex;align-items:center;gap:16px;margin-top:20px;flex-wrap:wrap}
+.form-actions .btn{min-width:240px;padding:14px 24px;font-size:16px}
+.form-actions small{color:var(--soft);font-size:12.5px;flex:1;min-width:200px}
+.btn[disabled]{opacity:.7;cursor:progress}
+.btn .spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;display:none}
+.btn.loading .spin{display:inline-block}
+.form-alert{display:none;margin-bottom:18px;padding:12px 14px;border-radius:8px;font-size:14px;background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA}
+.form-alert.show{display:block}
+.reg-done{display:none;text-align:center;padding:30px 10px}
+.reg-done.show{display:block}
+.reg-done .tick{width:64px;height:64px;border-radius:50%;background:#DCFCE7;color:var(--green);display:grid;place-items:center;margin:0 auto 18px}
+.reg-done .tick .icon{width:30px;height:30px;stroke-width:3}
+.reg-done h3{font-family:var(--head);font-size:26px;color:var(--ink);margin-bottom:8px}
+.reg-done p{color:var(--muted);max-width:460px;margin:0 auto 18px}
+.reg-code{display:inline-block;font-family:ui-monospace,Consolas,monospace;font-size:18px;font-weight:700;letter-spacing:.04em;color:var(--orange-600);background:var(--orange-50);border:1px dashed var(--orange);padding:10px 18px;border-radius:8px;margin-bottom:22px}
+@media (max-width:1080px){.reg-grid{grid-template-columns:1fr}.reg-side{position:static}}
+@media (max-width:640px){.form-card{padding:22px 16px}.fgrid{grid-template-columns:1fr}.form-actions .btn{width:100%;min-width:0}.reg-price{flex-wrap:wrap}.reg-price em{margin-left:0}}
 </style>
 </head>
 <body>
@@ -515,7 +584,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
     </nav>
     <div class="nav-actions">
       <a href="#" class="login">Đăng nhập</a>
-      <a href="#bang-gia" class="btn btn-primary btn-sm">Đăng ký thành viên</a>
+      <a href="#dang-ky" class="btn btn-primary btn-sm">Đăng ký thành viên</a>
     </div>
     <button class="burger" aria-label="Mở menu" aria-expanded="false" aria-controls="mobileMenu" id="burger"><svg class="icon" style="width:26px;height:26px"><use href="#i-menu"/></svg></button>
   </div>
@@ -527,7 +596,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
     <a href="#bang-gia">Bảng giá</a>
     <a href="#faq">Hỏi đáp</a>
     <a href="#">Đăng nhập</a>
-    <a href="#bang-gia" class="btn btn-primary">Đăng ký thành viên</a>
+    <a href="#dang-ky" class="btn btn-primary">Đăng ký thành viên</a>
   </div>
 </header>
 
@@ -540,7 +609,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
     <h1 class="h-display">Scan đúng <b>cơ hội kinh doanh</b> cho doanh nghiệp bạn</h1>
     <p class="hero-sub">Bạn chỉ cần làm một bài khảo sát ngắn. Hệ thống AI của LeadScan quét hơn 10 nhóm nguồn dữ liệu, làm giàu thông tin, chấm điểm từng cơ hội — bạn chọn và mua đúng phiếu cơ hội mình cần.</p>
     <div class="hero-cta">
-      <a href="#quy-trinh" class="btn btn-primary">Bắt đầu khảo sát <svg class="icon"><use href="#i-arrow"/></svg></a>
+      <a href="#dang-ky" class="btn btn-primary">Đăng ký ngay <svg class="icon"><use href="#i-arrow"/></svg></a>
       <a href="#bang-gia" class="btn btn-outline">Xem bảng giá</a>
     </div>
     <div class="hero-chips">
@@ -641,7 +710,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
         <p>Bạn trả lời vài câu hỏi về sản phẩm, khách hàng mục tiêu, khu vực và ngân sách. Từ đó hệ thống xây dựng “chân dung cơ hội tốt” riêng cho doanh nghiệp bạn — đây chính là bộ lọc cho AI.</p>
         <div class="feat"><h4><svg class="icon"><use href="#i-clipboard"/></svg>Khảo sát thông minh</h4><p>Câu hỏi được gợi ý theo ngành hàng, hoàn thành trong khoảng 5 phút.</p></div>
         <div class="feat"><h4><svg class="icon"><use href="#i-filter"/></svg>Bộ lọc riêng cho bạn</h4><p>Chân dung cơ hội tốt được dùng để lọc và chấm điểm mọi dữ liệu thu về.</p></div>
-        <a href="#bang-gia" class="link-arrow" style="margin-top:10px">Bắt đầu khảo sát <svg class="icon"><use href="#i-arrow"/></svg></a>
+        <a href="#dang-ky" class="link-arrow" style="margin-top:10px">Đăng ký để bắt đầu <svg class="icon"><use href="#i-arrow"/></svg></a>
       </div>
       <div class="visual">
         <div class="card">
@@ -764,7 +833,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
           <span class="pill-tag">Đội trợ lý · Mini App</span>
           <h3 style="font-size:26px;margin-top:14px">Đội trợ lý thực địa tại các hội chợ</h3>
           <p>Không chỉ dữ liệu online: đội trợ lý của LeadScan trực tiếp đi hội chợ, triển lãm, chụp ảnh gian hàng và danh thiếp qua Mini App. AI tự động làm giàu và chấm điểm chất lượng ngay sau đó.</p>
-          <a href="#bang-gia" class="link-arrow">Nhận cơ hội từ hội chợ <svg class="icon"><use href="#i-arrow"/></svg></a>
+          <a href="#dang-ky" class="link-arrow">Nhận cơ hội từ hội chợ <svg class="icon"><use href="#i-arrow"/></svg></a>
         </div>
         <div class="mini-steps">
           <div class="ms"><span class="k">01</span><div class="ic" style="display:grid;place-items:center"><svg class="icon"><use href="#i-map"/></svg></div><b>Đi hội chợ</b><small>Triển lãm, sự kiện ngành</small></div>
@@ -835,7 +904,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
           <div class="calc-bar"><div class="bar"><i id="oBar" style="width:29%"></i></div><p id="oNote">Đã dùng 29% số dư thành viên</p></div>
         </div>
         <div class="plan-chips"><span><svg class="icon"><use href="#i-check"/></svg>Không phí ẩn</span><span><svg class="icon"><use href="#i-check"/></svg>Trừ đúng giá phiếu</span><span><svg class="icon"><use href="#i-check"/></svg>Nạp thêm khi cần</span></div>
-        <a href="#" class="btn btn-primary">Đăng ký thành viên ngay</a>
+        <a href="#dang-ky" class="btn btn-primary">Đăng ký thành viên ngay</a>
       </div>
       <div class="plan reveal">
         <h3>Quyền lợi thành viên</h3>
@@ -857,6 +926,104 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
           <li><b>Theo dõi & nạp thêm</b>Xem số dư còn lại bất cứ lúc nào; dùng hết trước hạn có thể nạp thêm để tiếp tục mua.</li>
         </ol>
         <a href="#faq" class="btn btn-outline">Xem câu hỏi thường gặp</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ĐĂNG KÝ THÀNH VIÊN -->
+<section class="section register" id="dang-ky">
+  <div class="container reg-grid">
+    <div class="reg-side reveal">
+      <span class="pill-tag">Đăng ký thành viên</span>
+      <h2 class="h-display" style="margin-top:16px">Bắt đầu với <b>một biểu mẫu ngắn</b></h2>
+      <p>Cho chúng tôi biết doanh nghiệp bạn bán gì và muốn tìm khách hàng nào. LeadScan dùng thông tin này để dựng “chân dung cơ hội tốt” và thiết lập hệ thống AI quét cơ hội riêng cho bạn.</p>
+      <div class="reg-price"><b>10.000.000đ</b><span>/năm</span><em>Trừ dần vào phiếu</em></div>
+      <ol class="reg-next">
+        <li><b>Gửi đăng ký</b>Điền biểu mẫu bên cạnh, mất khoảng 3 phút.</li>
+        <li><b>LeadScan thiết lập hồ sơ</b>Dự án của doanh nghiệp bạn được tạo trên hệ thống, đội ngũ liên hệ xác nhận.</li>
+        <li><b>Nhận cơ hội & mua phiếu</b>AI quét, enrich và chấm điểm; bạn chọn phiếu từ 29.000đ.</li>
+      </ol>
+      <div class="reg-trust">
+        <span><svg class="icon"><use href="#i-shield"/></svg>Thông tin chỉ dùng để thiết lập dịch vụ</span>
+        <span><svg class="icon"><use href="#i-check"/></svg>Không thu phí khi gửi đăng ký</span>
+      </div>
+    </div>
+
+    <div class="form-card reveal">
+      <form id="regForm" novalidate autocomplete="on">
+        <div class="form-alert" id="regAlert" role="alert"></div>
+
+        <fieldset class="fs">
+          <legend><i>1</i>Thông tin doanh nghiệp</legend>
+          <div class="fgrid">
+            <div class="fld full"><label for="company_name">Tên doanh nghiệp <span class="req">*</span></label><input type="text" id="company_name" name="company_name" maxlength="150" autocomplete="organization" placeholder="Công ty TNHH ABC"><span class="err" id="e_company_name"></span></div>
+            <div class="fld"><label for="tax_code">Mã số thuế <span class="req">*</span></label><input type="text" id="tax_code" name="tax_code" inputmode="numeric" maxlength="14" placeholder="10 hoặc 13 chữ số"><span class="err" id="e_tax_code"></span></div>
+            <div class="fld"><label for="industry">Ngành hàng <span class="req">*</span></label><input type="text" id="industry" name="industry" maxlength="100" placeholder="Ví dụ: Bao bì, Điện tử, Logistics" list="industryList"><span class="err" id="e_industry"></span>
+              <datalist id="industryList"><option value="Sản xuất công nghiệp"><option value="Bao bì & in ấn"><option value="Điện tử & linh kiện"><option value="Xuất nhập khẩu"><option value="Thương mại & phân phối"><option value="Logistics & vận tải"><option value="Xây dựng & vật liệu"><option value="Thực phẩm & đồ uống"><option value="Dịch vụ B2B"><option value="Công nghệ thông tin"></datalist></div>
+            <div class="fld"><label for="company_size">Quy mô nhân sự <span class="req">*</span></label>
+              <select id="company_size" name="company_size"><option value="">Chọn quy mô…</option><option>Dưới 10 nhân sự</option><option>10–49 nhân sự</option><option>50–199 nhân sự</option><option>200–499 nhân sự</option><option>Từ 500 nhân sự</option></select><span class="err" id="e_company_size"></span></div>
+            <div class="fld"><label for="province">Tỉnh/thành <span class="req">*</span></label><input type="text" id="province" name="province" maxlength="80" autocomplete="address-level1" placeholder="Hà Nội" list="provinceList"><span class="err" id="e_province"></span>
+              <datalist id="provinceList"><option value="Hà Nội"><option value="TP. Hồ Chí Minh"><option value="Hải Phòng"><option value="Đà Nẵng"><option value="Cần Thơ"><option value="Bắc Ninh"><option value="Bắc Giang"><option value="Hải Dương"><option value="Hưng Yên"><option value="Vĩnh Phúc"><option value="Thái Nguyên"><option value="Quảng Ninh"><option value="Đồng Nai"><option value="Bình Dương"><option value="Long An"><option value="Bà Rịa - Vũng Tàu"></datalist></div>
+            <div class="fld full"><label for="website">Website <span class="opt-t">(không bắt buộc)</span></label><input type="url" id="website" name="website" maxlength="200" autocomplete="url" placeholder="congtyabc.vn"><span class="err" id="e_website"></span></div>
+          </div>
+        </fieldset>
+
+        <fieldset class="fs">
+          <legend><i>2</i>Người liên hệ</legend>
+          <div class="fgrid">
+            <div class="fld"><label for="contact_name">Họ và tên <span class="req">*</span></label><input type="text" id="contact_name" name="contact_name" maxlength="100" autocomplete="name" placeholder="Nguyễn Văn A"><span class="err" id="e_contact_name"></span></div>
+            <div class="fld"><label for="position">Chức vụ <span class="opt-t">(không bắt buộc)</span></label><input type="text" id="position" name="position" maxlength="100" autocomplete="organization-title" placeholder="Giám đốc kinh doanh"></div>
+            <div class="fld"><label for="email">Email <span class="req">*</span></label><input type="email" id="email" name="email" maxlength="150" autocomplete="email" placeholder="ten@congty.vn"><span class="err" id="e_email"></span></div>
+            <div class="fld"><label for="phone">Điện thoại / Zalo <span class="req">*</span></label><input type="tel" id="phone" name="phone" maxlength="20" autocomplete="tel" placeholder="0901 234 567"><span class="err" id="e_phone"></span></div>
+          </div>
+        </fieldset>
+
+        <fieldset class="fs">
+          <legend><i>3</i>Chân dung cơ hội bạn muốn tìm</legend>
+          <div class="fgrid">
+            <div class="fld full"><label for="offering">Bạn cung cấp sản phẩm/dịch vụ gì? <span class="req">*</span></label><textarea id="offering" name="offering" maxlength="1000" placeholder="Ví dụ: Thùng carton 5 lớp, màng PE, in bao bì theo yêu cầu…"></textarea><span class="err" id="e_offering"></span></div>
+            <div class="fld full"><label for="target_customers">Khách hàng lý tưởng của bạn là ai? <span class="req">*</span></label><textarea id="target_customers" name="target_customers" maxlength="1000" placeholder="Ví dụ: Nhà máy điện tử, doanh nghiệp FDI, quy mô trên 200 nhân sự…"></textarea><span class="err" id="e_target_customers"></span></div>
+            <div class="fld full"><span class="lbl">Khu vực ưu tiên <span class="opt-t">(chọn nhiều)</span></span>
+              <div class="checks" role="group" aria-label="Khu vực ưu tiên">
+                <label><input type="checkbox" name="target_regions" value="Miền Bắc"><span>Miền Bắc</span></label>
+                <label><input type="checkbox" name="target_regions" value="Miền Trung"><span>Miền Trung</span></label>
+                <label><input type="checkbox" name="target_regions" value="Miền Nam"><span>Miền Nam</span></label>
+                <label><input type="checkbox" name="target_regions" value="Toàn quốc"><span>Toàn quốc</span></label>
+                <label><input type="checkbox" name="target_regions" value="Quốc tế"><span>Quốc tế</span></label>
+              </div></div>
+            <div class="fld full"><span class="lbl">Loại cơ hội quan tâm <span class="opt-t">(chọn nhiều)</span></span>
+              <div class="checks" role="group" aria-label="Loại cơ hội quan tâm">
+                <label><input type="checkbox" name="opp_types" value="Đăng mua (App đăng mua)"><span>Đăng mua</span></label>
+                <label><input type="checkbox" name="opp_types" value="Dự án & gói thầu"><span>Dự án & gói thầu</span></label>
+                <label><input type="checkbox" name="opp_types" value="Nhà máy / dự án FDI mới"><span>Nhà máy / FDI mới</span></label>
+                <label><input type="checkbox" name="opp_types" value="Hội chợ & triển lãm"><span>Hội chợ & triển lãm</span></label>
+                <label><input type="checkbox" name="opp_types" value="Mạng xã hội & nhóm chat"><span>Mạng xã hội & nhóm chat</span></label>
+                <label><input type="checkbox" name="opp_types" value="Nguồn chính thống (Trang vàng, Bộ Công Thương, Công báo)"><span>Nguồn chính thống</span></label>
+              </div></div>
+            <div class="fld"><label for="expected_tickets">Dự kiến số phiếu mua/năm</label>
+              <select id="expected_tickets" name="expected_tickets"><option value="">Chưa chọn</option><option>Dưới 50 phiếu</option><option>50–200 phiếu</option><option>200–1.000 phiếu</option><option>Trên 1.000 phiếu</option><option>Chưa xác định</option></select></div>
+            <div class="fld"><label for="notes">Ghi chú thêm <span class="opt-t">(không bắt buộc)</span></label><input type="text" id="notes" name="notes" maxlength="500" placeholder="Yêu cầu đặc biệt nếu có"></div>
+          </div>
+        </fieldset>
+
+        <div class="hp" aria-hidden="true"><label>Để trống<input type="text" name="website_url" tabindex="-1" autocomplete="off"></label></div>
+
+        <label class="agree"><input type="checkbox" id="agree" name="agree"><span>Tôi đồng ý với <a href="#">Điều khoản sử dụng</a> và <a href="#">Chính sách bảo mật</a> của LeadScan B2B, và đồng ý để LeadScan liên hệ về dịch vụ.</span></label>
+        <span class="err" id="e_agree"></span>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="regSubmit"><span class="spin" aria-hidden="true"></span><span id="regLabel">Gửi đăng ký thành viên</span></button>
+          <small>Gửi đăng ký chưa phát sinh chi phí. LeadScan sẽ liên hệ xác nhận và hướng dẫn thanh toán phí thành viên.</small>
+        </div>
+      </form>
+
+      <div class="reg-done" id="regDone" role="status" tabindex="-1">
+        <div class="tick"><svg class="icon"><use href="#i-check"/></svg></div>
+        <h3>Đăng ký thành công!</h3>
+        <p>Cảm ơn bạn. LeadScan đã ghi nhận thông tin và tạo hồ sơ dự án cho doanh nghiệp của bạn. Chúng tôi sẽ liên hệ qua email hoặc điện thoại trong thời gian sớm nhất.</p>
+        <div class="reg-code" id="regCode">LS-00000000-0000</div><br>
+        <a href="#top" class="btn btn-outline">Về đầu trang</a>
       </div>
     </div>
   </div>
@@ -887,7 +1054,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
       <h2>Sẵn sàng tìm <b>cơ hội kinh doanh tiếp theo?</b></h2>
       <p>Làm khảo sát để vẽ chân dung cơ hội tốt — hệ thống AI của LeadScan sẽ bắt đầu tìm, làm giàu và chấm điểm cơ hội cho doanh nghiệp bạn.</p>
       <div class="cta-actions">
-        <a href="#quy-trinh" class="btn btn-primary">Bắt đầu khảo sát</a>
+        <a href="#dang-ky" class="btn btn-primary">Đăng ký thành viên</a>
         <a href="#lien-he" class="btn btn-ghost">Liên hệ tư vấn</a>
       </div>
     </div>
@@ -915,7 +1082,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
       <div>
         <a href="#top" class="logo"><span class="logo-mark"><svg class="icon"><use href="#i-scan"/></svg></span>LeadScan<span>B2B</span></a>
         <p>Nền tảng scan cơ hội kinh doanh B2B bằng AI: khảo sát nhu cầu, thu thập đa nguồn, làm giàu & chấm điểm, bán phiếu cơ hội theo chất lượng.</p>
-        <a href="#bang-gia" class="btn btn-primary btn-sm">Đăng ký thành viên</a>
+        <a href="#dang-ky" class="btn btn-primary btn-sm">Đăng ký thành viên</a>
       </div>
       <div><h4>Sản phẩm</h4><ul><li><a href="#quy-trinh">Quy trình</a></li><li><a href="#nguon-du-lieu">Nguồn dữ liệu</a></li><li><a href="#phieu-co-hoi">Phiếu cơ hội</a></li><li><a href="#bang-gia">Bảng giá</a></li></ul></div>
       <div><h4>Hỗ trợ</h4><ul><li><a href="#faq">Câu hỏi thường gặp</a></li><li><a href="#">Hướng dẫn sử dụng</a></li><li><a href="#">Chính sách bảo mật</a></li><li><a href="#">Điều khoản sử dụng</a></li></ul></div>
@@ -932,7 +1099,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
 
 <div class="m-cta" id="mcta" aria-hidden="true">
   <div><small>Phiếu cơ hội chỉ từ</small><b>29.000đ</b></div>
-  <a href="#bang-gia" class="btn btn-primary" tabindex="-1">Đăng ký thành viên</a>
+  <a href="#dang-ky" class="btn btn-primary" tabindex="-1">Đăng ký thành viên</a>
 </div>
 
 <script>
@@ -940,7 +1107,9 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
 const header=document.querySelector('header'),mcta=document.getElementById('mcta'),heroEl=document.querySelector('.hero'),footEl=document.querySelector('footer');
 function onScroll(){
   header.classList.toggle('scrolled',scrollY>10);
-  const show=scrollY>heroEl.offsetHeight*0.6 && footEl.getBoundingClientRect().top>innerHeight;
+  const reg=document.getElementById('dang-ky').getBoundingClientRect();
+  const inForm=reg.top<innerHeight*0.6 && reg.bottom>innerHeight*0.2;
+  const show=scrollY>heroEl.offsetHeight*0.6 && footEl.getBoundingClientRect().top>innerHeight && !inForm;
   mcta.classList.toggle('show',show);
 }
 addEventListener('scroll',onScroll,{passive:true});onScroll();
@@ -1017,6 +1186,79 @@ function calc(){
   [qty,avg].forEach(r=>r.style.setProperty('--fill',((r.value-r.min)/(r.max-r.min)*100)+'%'));
 }
 qty.oninput=avg.oninput=calc;calc();
+
+// ===== Form đăng ký =====
+(function(){
+  const form=document.getElementById('regForm'); if(!form) return;
+  const alertBox=document.getElementById('regAlert'),btn=document.getElementById('regSubmit'),label=document.getElementById('regLabel');
+  const done=document.getElementById('regDone'),codeEl=document.getElementById('regCode');
+  const t0=Date.now();
+  const $=n=>form.elements[n];
+  const val=n=>($(n).value||'').trim();
+  const checked=n=>[...form.querySelectorAll(`input[name="${n}"]:checked`)].map(i=>i.value);
+
+  function setErr(name,msg){
+    const e=document.getElementById('e_'+name),f=$(name);
+    if(e){e.textContent=msg||'';e.classList.toggle('show',!!msg)}
+    if(f&&f.setAttribute){msg?f.setAttribute('aria-invalid','true'):f.removeAttribute('aria-invalid');
+      if(msg&&e){f.setAttribute('aria-describedby','e_'+name)}}
+  }
+  function validate(){
+    const er={};
+    ['company_name','industry','province','contact_name','offering','target_customers'].forEach(n=>{if(!val(n))er[n]={
+      company_name:'Vui lòng nhập tên doanh nghiệp.',industry:'Vui lòng nhập ngành hàng.',province:'Vui lòng nhập tỉnh/thành.',
+      contact_name:'Vui lòng nhập họ tên người liên hệ.',offering:'Vui lòng mô tả sản phẩm/dịch vụ của bạn.',target_customers:'Vui lòng mô tả khách hàng mục tiêu.'}[n]});
+    if(!val('company_size'))er.company_size='Vui lòng chọn quy mô.';
+    if(!/^\d{10}(-?\d{3})?$/.test(val('tax_code').replace(/[^\d-]/g,'')))er.tax_code='Mã số thuế gồm 10 hoặc 13 chữ số.';
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(val('email')))er.email='Email chưa đúng định dạng.';
+    if(!/^(0|\+84)\d{9,10}$/.test(val('phone').replace(/[\s.\-()]/g,'')))er.phone='Số điện thoại chưa đúng định dạng.';
+    const w=val('website'); if(w&&!/^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/.*)?$/i.test(w))er.website='Website chưa đúng định dạng.';
+    if(!$('agree').checked)er.agree='Bạn cần đồng ý điều khoản để tiếp tục.';
+    return er;
+  }
+  const fields=['company_name','tax_code','industry','company_size','province','website','contact_name','email','phone','offering','target_customers','agree'];
+  function showErrors(er){
+    fields.forEach(n=>setErr(n,er[n]));
+    const first=fields.find(n=>er[n]);
+    if(first){const f=$(first);f.scrollIntoView({block:'center',behavior:'smooth'});setTimeout(()=>f.focus({preventScroll:true}),250)}
+    return !!first;
+  }
+  // xoá lỗi khi người dùng sửa
+  form.addEventListener('input',e=>{const n=e.target.name;if(n&&document.getElementById('e_'+n))setErr(n,'')});
+  form.addEventListener('change',e=>{const n=e.target.name;if(n&&document.getElementById('e_'+n))setErr(n,'')});
+
+  function busy(on){btn.disabled=on;btn.classList.toggle('loading',on);label.textContent=on?'Đang gửi…':'Gửi đăng ký thành viên'}
+  function banner(msg){alertBox.textContent=msg||'';alertBox.classList.toggle('show',!!msg);if(msg)alertBox.scrollIntoView({block:'center',behavior:'smooth'})}
+
+  form.addEventListener('submit',async e=>{
+    e.preventDefault(); banner('');
+    if(showErrors(validate()))return;
+    const body={
+      company_name:val('company_name'),tax_code:val('tax_code'),industry:val('industry'),company_size:val('company_size'),
+      province:val('province'),website:val('website'),contact_name:val('contact_name'),position:val('position'),
+      email:val('email'),phone:val('phone'),offering:val('offering'),target_customers:val('target_customers'),
+      target_regions:checked('target_regions'),opp_types:checked('opp_types'),expected_tickets:val('expected_tickets'),notes:val('notes'),
+      agree:true,website_url:val('website_url'),elapsed_ms:Date.now()-t0
+    };
+    busy(true);
+    try{
+      const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),30000);
+      const r=await fetch('api/register.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});
+      clearTimeout(to);
+      let j={};try{j=await r.json()}catch(_){}
+      if(r.ok&&j.ok){
+        codeEl.textContent=j.code;form.style.display='none';done.classList.add('show');
+        done.scrollIntoView({block:'center',behavior:'smooth'});done.focus({preventScroll:true});
+      }else if(j.fields&&Object.keys(j.fields).length){
+        showErrors(j.fields);banner(j.message||'Vui lòng kiểm tra lại thông tin.');
+      }else{
+        banner(j.message||'Không gửi được đăng ký. Vui lòng thử lại sau ít phút.');
+      }
+    }catch(err){
+      banner('Không kết nối được máy chủ. Vui lòng kiểm tra mạng và thử lại.');
+    }finally{busy(false)}
+  });
+})();
 </script>
 </body>
 </html>
