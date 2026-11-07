@@ -32,7 +32,7 @@ class Settings(BaseSettings):
         ]
     )
 
-    # Header chứa IP thật khi chạy sau proxy (Caddy ghi đè X-Real-IP). Để trống = IP kết nối trực tiếp.
+    # Header chứa IP thật khi chạy sau proxy (Nginx ghi đè X-Real-IP). Để trống = IP kết nối trực tiếp.
     # CHỈ đặt khi proxy phía trước luôn ghi đè header này.
     client_ip_header: str = ""
 

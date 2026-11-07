@@ -24,8 +24,8 @@ web/                Next.js 16
   app/page.tsx        landing page
   app/admin/          trang quản trị (/admin/...)
   app/thanh-vien/     cổng thành viên (/thanh-vien/...)
-deploy/Caddyfile    reverse proxy + HTTPS tự động
-docker-compose.yml  db (pgvector) · redis · migrate · api · worker · beat · web · caddy
+deploy/nginx.conf   Nginx trên VPS: /api → FastAPI, còn lại → Next.js (HTTPS bằng certbot)
+docker-compose.yml  db (pgvector) · redis · migrate · api · worker · beat · web
 ```
 
 ## Chức năng quản trị (`/admin`)
@@ -95,27 +95,44 @@ Chạy test trên PostgreSQL (giống production): đặt `LEADSCAN_TEST_DATABAS
 
 ## Deploy lên VPS (Ubuntu)
 
-1. Cài Docker + Docker Compose plugin; mở cổng 80, 443.
-2. Trỏ DNS tên miền về IP VPS.
+Kiến trúc: **Nginx cài trên VPS** nhận cổng 80/443 (HTTPS bằng certbot) → chuyển `/api/*` vào container `api` (127.0.0.1:8000), còn lại vào container `web` (127.0.0.1:3000). Các container khác không mở cổng ra ngoài.
+
+1. Cài Docker, Nginx, certbot; mở firewall cho SSH, 80, 443:
+   ```bash
+   curl -fsSL https://get.docker.com | sh
+   sudo apt install -y nginx certbot python3-certbot-nginx
+   sudo ufw allow OpenSSH && sudo ufw allow 'Nginx Full' && sudo ufw enable
+   ```
+2. Trỏ DNS `leadscanb2b.com` và `www.leadscanb2b.com` (bản ghi A) về IP VPS.
 3. Lấy code và tạo cấu hình:
    ```bash
    git clone <repo> leadscan && cd leadscan && cp .env.example .env
    ```
-   Điền trong `.env`: `SITE_ADDRESS` (tên miền), `SITE_URL`, `LEADSCAN_ADMIN_URL`, `LEADSCAN_MEMBER_URL`, `POSTGRES_PASSWORD` (chuỗi ngẫu nhiên dài), `LEADSCAN_RESEND_API_KEY` để gửi email, và cấu hình InfoCMS.
-4. Khởi động (Caddy tự xin chứng chỉ HTTPS; migration chạy tự động mỗi lần deploy):
+   Điền trong `.env`: `SITE_URL`, `LEADSCAN_ADMIN_URL`, `LEADSCAN_MEMBER_URL`, `POSTGRES_PASSWORD` (vd `openssl rand -hex 32`), `LEADSCAN_RESEND_API_KEY` để gửi email, và cấu hình thanh toán. Nếu VPS đã có ứng dụng khác chiếm cổng 8000/3000 thì đổi `API_PORT` / `WEB_PORT`.
+4. Khởi động (migration chạy tự động mỗi lần deploy):
    ```bash
    docker compose up -d --build
    ```
-5. Tạo tài khoản quản trị đầu tiên:
+5. Cấu hình Nginx + HTTPS (sửa `server_name` trong file nếu dùng tên miền khác, và 2 `upstream` nếu đã đổi cổng):
+   ```bash
+   sudo cp deploy/nginx.conf /etc/nginx/sites-available/leadscan
+   sudo ln -s /etc/nginx/sites-available/leadscan /etc/nginx/sites-enabled/
+   sudo nginx -t && sudo systemctl reload nginx
+   sudo certbot --nginx -d leadscanb2b.com -d www.leadscanb2b.com
+   ```
+   Certbot tự thêm chứng chỉ, chuyển hướng HTTP → HTTPS và tự gia hạn.
+6. Tạo tài khoản quản trị đầu tiên:
    ```bash
    docker compose exec api python -m app.cli create-admin --email ban@congty.vn --name "Tên bạn"
    ```
-6. Kiểm tra:
+7. Kiểm tra:
    ```bash
    docker compose exec api python -m app.cli diagnose
    ```
 
-Cập nhật phiên bản mới: `git pull && docker compose up -d --build`.
+Cập nhật phiên bản mới: `git pull && docker compose up -d --build` (không cần đụng vào Nginx).
+
+> **Lưu ý bảo mật:** cổng của `api`/`web` phải giữ dạng `127.0.0.1:...` trong `docker-compose.yml`. Docker tự mở firewall cho cổng nó publish (bỏ qua `ufw`), nên nếu bỏ `127.0.0.1` thì backend lộ ra Internet và khách có thể gửi `X-Real-IP` giả để lách giới hạn đăng nhập/đăng ký.
 
 ## Vận hành
 

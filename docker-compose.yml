@@ -1,7 +1,9 @@
 # LeadScan B2B — toàn bộ hệ thống trên 1 VPS.
-#   cp .env.example .env   # điền mật khẩu DB, tên miền, SMTP
+#   cp .env.example .env   # điền mật khẩu DB, tên miền, email
 #   docker compose up -d --build
-# Chỉ Caddy mở cổng ra ngoài (80/443); các dịch vụ khác nói chuyện trong mạng nội bộ.
+# Nginx cài trên VPS (deploy/nginx.conf) nhận 80/443 rồi chuyển vào api/web.
+# api và web chỉ mở cổng trên 127.0.0.1 nên bên ngoài không truy cập thẳng được;
+# db/redis/worker không mở cổng nào, chỉ nói chuyện trong mạng nội bộ của Docker.
 
 x-backend: &backend
   build: ./backend
@@ -56,6 +58,8 @@ services:
 
   api:
     <<: *backend
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"  # chỉ localhost — Nginx gọi vào /api/
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
       interval: 15s
@@ -77,26 +81,11 @@ services:
         NEXT_PUBLIC_SITE_URL: ${SITE_URL:-https://leadscanb2b.com}
         API_INTERNAL_URL: http://api:8000
     restart: unless-stopped
-
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    environment:
-      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"  # chỉ localhost — Nginx gọi vào /
     depends_on:
       - api
-      - web
 
 volumes:
   pgdata:
   redisdata:
-  caddy_data:
-  caddy_config:
