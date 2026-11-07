@@ -2,9 +2,16 @@
 declare(strict_types=1);
 
 /**
- * Thư viện dùng chung cho register.php và retry.php
- * - nạp cấu hình, lưu hồ sơ đăng ký, gọi API dev.mcv.network
+ * Thư viện dùng chung cho register.php, retry.php, diagnose.php
+ * Luồng đồng bộ mỗi hồ sơ đăng ký sang dev.mcv.network:
+ *   1) tạo KHÁCH HÀNG  (POST /customers)
+ *   2) tạo DỰ ÁN gắn khách hàng đó  (POST /projects, customer_id)
+ *   3) tạo NGƯỜI LIÊN HỆ chính của khách  (POST /customers/{id}/contacts)
+ * Mỗi bước được ghi nhớ trong hồ sơ nên retry sẽ chạy tiếp từ bước còn dang dở,
+ * không tạo trùng khách hàng/dự án.
  */
+
+date_default_timezone_set('Asia/Ho_Chi_Minh');
 
 const STORAGE_DIR = __DIR__ . '/../storage';
 
@@ -55,43 +62,110 @@ function read_json(string $path): ?array
     return is_array($data) ? $data : null;
 }
 
-/* ------------------------------------------------------------------ */
-/* ADAPTER: chuyển hồ sơ đăng ký → dữ liệu tạo dự án trên dev.mcv.network */
-/* Nếu API dự án có tên trường khác, chỉ cần sửa hàm này.               */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/* ADAPTER: map hồ sơ đăng ký → dữ liệu khách hàng / dự án / liên hệ   */
+/* Chỉ dùng văn bản thuần (không Markdown) vì ô Mô tả/Ghi chú hiển thị */
+/* nguyên văn. Nếu API đổi tên trường, chỉ cần sửa các hàm dưới đây.   */
+/* ================================================================== */
 
-function build_project_payload(array $d, string $code, string $key, array $cfg): array
+/** Ghép "Nhãn: giá trị" từng dòng, bỏ qua mục trống */
+function plain_rows(array $rows): string
 {
-    $line = static fn(string $label, ?string $v): string => ($v !== null && $v !== '') ? "- **{$label}:** {$v}\n" : '';
-    $list = static fn(array $a): string => $a ? implode(', ', $a) : '';
+    $out = [];
+    foreach ($rows as $label => $value) {
+        $v = is_array($value) ? implode(', ', $value) : trim((string)$value);
+        if ($v !== '') {
+            $out[] = "{$label}: {$v}";
+        }
+    }
+    return implode("\n", $out);
+}
 
-    $desc  = "Khách hàng đăng ký thành viên LeadScan B2B — mã đăng ký **{$code}**.\n\n";
-    $desc .= "## Doanh nghiệp\n";
-    $desc .= $line('Tên doanh nghiệp', $d['company_name']);
-    $desc .= $line('Mã số thuế', $d['tax_code']);
-    $desc .= $line('Ngành hàng', $d['industry']);
-    $desc .= $line('Quy mô', $d['company_size']);
-    $desc .= $line('Tỉnh/thành', $d['province']);
-    $desc .= $line('Website', $d['website']);
-    $desc .= "\n## Người liên hệ\n";
-    $desc .= $line('Họ tên', $d['contact_name']);
-    $desc .= $line('Chức vụ', $d['position']);
-    $desc .= $line('Email', $d['email']);
-    $desc .= $line('Điện thoại/Zalo', $d['phone']);
-    $desc .= "\n## Chân dung cơ hội mong muốn\n";
-    $desc .= $line('Sản phẩm/dịch vụ cung cấp', $d['offering']);
-    $desc .= $line('Khách hàng mục tiêu', $d['target_customers']);
-    $desc .= $line('Khu vực ưu tiên', $list($d['target_regions']));
-    $desc .= $line('Loại cơ hội quan tâm', $list($d['opp_types']));
-    $desc .= $line('Dự kiến số phiếu/năm', $d['expected_tickets']);
-    $desc .= $line('Ghi chú', $d['notes']);
-    $desc .= "\n_Gói đăng ký: Thành viên 10.000.000đ/năm — trừ dần vào giá phiếu cơ hội đã mua._\n";
+function build_customer_payload(array $d, string $code): array
+{
+    $address = $d['province'];
+    if (($d['address'] ?? '') !== '' && mb_stripos($d['address'], $d['province']) === false) {
+        $address = $d['address'] . ', ' . $d['province'];   // chưa có tỉnh/thành trong địa chỉ thì ghép thêm
+    } elseif (($d['address'] ?? '') !== '') {
+        $address = $d['address'];
+    }
 
-    $payload = [
-        'key'         => $key,
-        'name'        => mb_substr('LeadScan · ' . $d['company_name'], 0, 120),
-        'description' => $desc,
+    $contact = $d['contact_name'] . ($d['position'] !== '' ? ' (' . $d['position'] . ')' : '');
+    $note = plain_rows([
+        'Nguồn'           => 'Đăng ký thành viên trên LeadScan B2B',
+        'Mã đăng ký'      => $code,
+        'Thời gian'       => date('d/m/Y H:i'),
+        'Ngành hàng'      => $d['industry'],
+        'Quy mô nhân sự'  => $d['company_size'],
+        'Tỉnh/thành'      => $d['province'],
+        'Người liên hệ'   => $contact,
+        'Gói đăng ký'     => 'Thành viên 10.000.000đ/năm, trừ dần vào phiếu cơ hội đã mua',
+    ]);
+
+    return [
+        'code'     => $code,                 // "Mã khách hàng" là trường bắt buộc
+        'name'     => $d['company_name'],
+        'tax_code' => $d['tax_code'],
+        'email'    => $d['email'],
+        'phone'    => $d['phone'],
+        'address'  => $address,
+        'website'  => $d['website'] !== '' ? $d['website'] : null,
+        'note'     => $note,
     ];
+}
+
+function build_contact_payload(array $d): array
+{
+    return [
+        'full_name'  => $d['contact_name'],
+        'position'   => $d['position'] !== '' ? $d['position'] : null,
+        'email'      => $d['email'],
+        'phone'      => $d['phone'],
+        'is_primary' => true,
+    ];
+}
+
+/** Mô tả dự án = phần "Chân dung cơ hội bạn muốn tìm" của form, văn bản thuần */
+function build_project_description(array $d): string
+{
+    $blocks = ['CHÂN DUNG CƠ HỘI MUỐN TÌM'];
+
+    if ($d['offering'] !== '') {
+        $blocks[] = "Sản phẩm/dịch vụ cung cấp:\n" . $d['offering'];
+    }
+    if ($d['target_customers'] !== '') {
+        $blocks[] = "Khách hàng mục tiêu:\n" . $d['target_customers'];
+    }
+    $prefs = plain_rows([
+        'Khu vực ưu tiên'           => $d['target_regions'],
+        'Loại cơ hội quan tâm'      => $d['opp_types'],
+        'Dự kiến số phiếu mua/năm'  => $d['expected_tickets'],
+    ]);
+    if ($prefs !== '') {
+        $blocks[] = $prefs;
+    }
+    if ($d['notes'] !== '') {
+        $blocks[] = "Ghi chú thêm:\n" . $d['notes'];
+    }
+    return implode("\n\n", $blocks);
+}
+
+function build_project_payload(array $d, string $key, int $customerId, array $cfg): array
+{
+    $payload = [
+        'key'                 => $key,
+        'name'                => mb_substr('LeadScan - ' . $d['company_name'], 0, 120),
+        'description'         => build_project_description($d),
+        'customer_id'         => $customerId,
+        'product_owner_id'    => null,
+        'scrum_master_id'     => null,
+        'status'              => 'planning',
+        'start_date'          => null,
+        'end_date'            => null,
+        'sprint_duration_days'=> 14,
+        'budget_hours'        => null,
+    ];
+    // Cho phép ghi đè/ bổ sung từ config, ví dụ product_owner_id
     return array_merge($payload, $cfg['project_extra'] ?? []);
 }
 
@@ -105,9 +179,9 @@ function new_project_key(array $cfg): string
     return strtoupper((string)($cfg['key_prefix'] ?? 'LS')) . $s;
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /* Client HTTP cho dev.mcv.network                                      */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
 function http_request(string $method, string $url, array $headers, $body = null): array
 {
@@ -160,45 +234,83 @@ function mcv_token(array $cfg, bool $force = false): string
     return (string)$json['access_token'];
 }
 
-/**
- * Tạo dự án. Trả về mảng dự án từ API.
- * Tự đăng nhập lại khi token hết hạn, tự đổi mã key khi bị trùng.
- */
-function mcv_create_project(array $cfg, array $d, string $code): array
+/** Rút gọn thông báo lỗi từ API (FastAPI trả về trường "detail") */
+function mcv_error_text($json, string $raw): string
 {
-    $base  = rtrim($cfg['mcv_base_url'], '/');
-    $token = mcv_token($cfg);
-    $key   = new_project_key($cfg);
+    if (is_array($json) && isset($json['detail'])) {
+        return is_string($json['detail'])
+            ? $json['detail']
+            : (string)json_encode($json['detail'], JSON_UNESCAPED_UNICODE);
+    }
+    return mb_substr($raw, 0, 300);
+}
 
-    for ($attempt = 0; $attempt < 4; $attempt++) {
-        $payload = build_project_payload($d, $code, $key, $cfg);
-        [$status, $json, $raw] = http_request('POST', $base . '/projects', [
+/**
+ * Gọi API có xác thực. Trả về [http_status, json, raw].
+ * Tự đăng nhập lại 1 lần nếu token hết hạn (401).
+ */
+function mcv_call(array $cfg, string $method, string $path, ?array $payload = null): array
+{
+    $url = rtrim($cfg['mcv_base_url'], '/') . $path;
+    for ($try = 0; $try < 2; $try++) {
+        $token = mcv_token($cfg, $try > 0);
+        $res = http_request($method, $url, [
             'Authorization: Bearer ' . $token,
             'Content-Type: application/json',
             'Accept: application/json',
-        ], json_encode($payload, JSON_UNESCAPED_UNICODE));
-
-        if ($status === 401 && $attempt === 0) {
-            $token = mcv_token($cfg, true);
-            continue;
+        ], $payload === null ? null : json_encode($payload, JSON_UNESCAPED_UNICODE));
+        if ($res[0] !== 401) {
+            return $res;
         }
-        if ($status >= 200 && $status < 300 && is_array($json)) {
+    }
+    return $res;
+}
+
+function mcv_ok(int $status): bool
+{
+    return $status >= 200 && $status < 300;
+}
+
+function mcv_create_customer(array $cfg, array $d, string $code): array
+{
+    [$status, $json, $raw] = mcv_call($cfg, 'POST', '/customers', build_customer_payload($d, $code));
+    if (!mcv_ok($status) || !is_array($json) || empty($json['id'])) {
+        throw new RuntimeException("Tạo khách hàng thất bại (HTTP {$status}): " . mcv_error_text($json, $raw));
+    }
+    return $json;
+}
+
+function mcv_create_project(array $cfg, array $d, int $customerId): array
+{
+    $key = new_project_key($cfg);
+    for ($attempt = 0; $attempt < 4; $attempt++) {
+        [$status, $json, $raw] = mcv_call($cfg, 'POST', '/projects', build_project_payload($d, $key, $customerId, $cfg));
+        if (mcv_ok($status) && is_array($json) && !empty($json['id'])) {
             return $json;
         }
-        $keyClash = in_array($status, [409, 422], true) && stripos($raw, 'key') !== false;
-        if ($keyClash && $attempt < 3) {
+        // Trùng mã dự án → sinh mã khác rồi thử lại
+        if (in_array($status, [409, 422], true) && stripos($raw, 'key') !== false && $attempt < 3) {
             $key = new_project_key($cfg);
             continue;
         }
-        $detail = is_array($json) && isset($json['detail'])
-            ? (is_string($json['detail']) ? $json['detail'] : json_encode($json['detail'], JSON_UNESCAPED_UNICODE))
-            : mb_substr($raw, 0, 300);
-        throw new RuntimeException("Tạo dự án thất bại (HTTP {$status}): {$detail}");
+        throw new RuntimeException("Tạo dự án thất bại (HTTP {$status}): " . mcv_error_text($json, $raw));
     }
     throw new RuntimeException('Tạo dự án thất bại sau nhiều lần thử.');
 }
 
-/** Đồng bộ 1 hồ sơ sang dev.mcv.network và cập nhật trạng thái */
+function mcv_create_contact(array $cfg, array $d, int $customerId): array
+{
+    [$status, $json, $raw] = mcv_call($cfg, 'POST', "/customers/{$customerId}/contacts", build_contact_payload($d));
+    if (!mcv_ok($status) || !is_array($json)) {
+        throw new RuntimeException("Tạo người liên hệ thất bại (HTTP {$status}): " . mcv_error_text($json, $raw));
+    }
+    return $json;
+}
+
+/**
+ * Đồng bộ 1 hồ sơ sang dev.mcv.network: khách hàng → dự án → người liên hệ.
+ * Lưu tiến độ sau từng bước; status = 'synced' khi cả 3 bước xong.
+ */
 function sync_submission(array $cfg, string $code): array
 {
     $path = STORAGE_DIR . "/submissions/{$code}.json";
@@ -209,14 +321,29 @@ function sync_submission(array $cfg, string $code): array
     if (($rec['status'] ?? '') === 'synced') {
         return $rec;
     }
+    $d = $rec['data'];
+    $d['address'] = $d['address'] ?? '';
     $rec['attempts'] = (int)($rec['attempts'] ?? 0) + 1;
+
     try {
-        $project = mcv_create_project($cfg, $rec['data'], $code);
-        $rec['status']         = 'synced';
-        $rec['project_id']     = $project['id'] ?? null;
-        $rec['project_key']    = $project['key'] ?? null;
-        $rec['synced_at']      = date('c');
-        $rec['last_error']     = null;
+        if (empty($rec['customer_id'])) {
+            $c = mcv_create_customer($cfg, $d, $code);
+            $rec['customer_id'] = (int)$c['id'];
+            write_json($path, $rec);
+        }
+        if (empty($rec['project_id'])) {
+            $p = mcv_create_project($cfg, $d, (int)$rec['customer_id']);
+            $rec['project_id']  = (int)$p['id'];
+            $rec['project_key'] = $p['key'] ?? null;
+            write_json($path, $rec);
+        }
+        if (empty($rec['contact_done'])) {
+            mcv_create_contact($cfg, $d, (int)$rec['customer_id']);
+            $rec['contact_done'] = true;
+        }
+        $rec['status']     = 'synced';
+        $rec['synced_at']  = date('c');
+        $rec['last_error'] = null;
     } catch (Throwable $e) {
         $rec['status']     = 'pending';
         $rec['last_error'] = $e->getMessage();

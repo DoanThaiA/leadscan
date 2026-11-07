@@ -100,16 +100,23 @@ $OPPS    = ['Đăng mua (App đăng mua)', 'Dự án & gói thầu', 'Nhà máy 
 $SIZES   = ['Dưới 10 nhân sự', '10–49 nhân sự', '50–199 nhân sự', '200–499 nhân sự', 'Từ 500 nhân sự'];
 $TICKETS = ['Dưới 50 phiếu', '50–200 phiếu', '200–1.000 phiếu', 'Trên 1.000 phiếu', 'Chưa xác định'];
 
+/** Trường 1 dòng: gộp mọi khoảng trắng/xuống dòng thành 1 dấu cách */
+function str1(mixed $v, int $max): string
+{
+    return trim(preg_replace('/\s+/u', ' ', str($v, $max)) ?? '');
+}
+
 $d = [
-    'company_name'     => str($in['company_name'] ?? '', 150),
+    'company_name'     => str1($in['company_name'] ?? '', 150),
     'tax_code'         => preg_replace('/[^0-9\-]/', '', str($in['tax_code'] ?? '', 20)) ?? '',
-    'industry'         => str($in['industry'] ?? '', 100),
-    'company_size'     => str($in['company_size'] ?? '', 40),
-    'province'         => str($in['province'] ?? '', 80),
-    'website'          => str($in['website'] ?? '', 200),
-    'contact_name'     => str($in['contact_name'] ?? '', 100),
-    'position'         => str($in['position'] ?? '', 100),
-    'email'            => strtolower(str($in['email'] ?? '', 150)),
+    'industry'         => str1($in['industry'] ?? '', 100),
+    'company_size'     => str1($in['company_size'] ?? '', 40),
+    'province'         => str1($in['province'] ?? '', 80),
+    'address'          => str1($in['address'] ?? '', 200),
+    'website'          => str1($in['website'] ?? '', 200),
+    'contact_name'     => str1($in['contact_name'] ?? '', 100),
+    'position'         => str1($in['position'] ?? '', 100),
+    'email'            => strtolower(str1($in['email'] ?? '', 150)),
     'phone'            => preg_replace('/[\s.\-()]/', '', str($in['phone'] ?? '', 20)) ?? '',
     'offering'         => str($in['offering'] ?? '', 1000),
     'target_customers' => str($in['target_customers'] ?? '', 1000),
@@ -203,7 +210,7 @@ if (!empty($cfg['notify_email'])) {
     $subject = '=?UTF-8?B?' . base64_encode("[LeadScan] Đăng ký mới: {$d['company_name']} ({$code})") . '?=';
     $body = "Mã đăng ký: {$code}\nDoanh nghiệp: {$d['company_name']}\nMST: {$d['tax_code']}\n"
           . "Liên hệ: {$d['contact_name']} - {$d['phone']} - {$d['email']}\n"
-          . 'Dự án: ' . (($rec['status'] ?? '') === 'synced' ? ($rec['project_key'] ?? 'đã tạo') : 'CHƯA tạo được (sẽ tự thử lại)') . "\n";
+          . 'Khách hàng + dự án: ' . (($rec['status'] ?? '') === 'synced' ? 'đã tạo, mã dự án ' . ($rec['project_key'] ?? '?') : 'CHƯA tạo xong (sẽ tự thử lại): ' . ($rec['last_error'] ?? '')) . "\n";
     $headers = 'From: ' . ($cfg['notify_from'] ?? 'no-reply@leadscan.net') . "\r\nContent-Type: text/plain; charset=UTF-8";
     @mail((string)$cfg['notify_email'], $subject, $body, $headers);
 }

@@ -965,6 +965,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
               <select id="company_size" name="company_size"><option value="">Chọn quy mô…</option><option>Dưới 10 nhân sự</option><option>10–49 nhân sự</option><option>50–199 nhân sự</option><option>200–499 nhân sự</option><option>Từ 500 nhân sự</option></select><span class="err" id="e_company_size"></span></div>
             <div class="fld"><label for="province">Tỉnh/thành <span class="req">*</span></label><input type="text" id="province" name="province" maxlength="80" autocomplete="address-level1" placeholder="Hà Nội" list="provinceList"><span class="err" id="e_province"></span>
               <datalist id="provinceList"><option value="Hà Nội"><option value="TP. Hồ Chí Minh"><option value="Hải Phòng"><option value="Đà Nẵng"><option value="Cần Thơ"><option value="Bắc Ninh"><option value="Bắc Giang"><option value="Hải Dương"><option value="Hưng Yên"><option value="Vĩnh Phúc"><option value="Thái Nguyên"><option value="Quảng Ninh"><option value="Đồng Nai"><option value="Bình Dương"><option value="Long An"><option value="Bà Rịa - Vũng Tàu"></datalist></div>
+            <div class="fld full"><label for="address">Địa chỉ <span class="opt-t">(không bắt buộc)</span></label><input type="text" id="address" name="address" maxlength="200" autocomplete="street-address" placeholder="Số nhà, đường, quận/huyện"></div>
             <div class="fld full"><label for="website">Website <span class="opt-t">(không bắt buộc)</span></label><input type="url" id="website" name="website" maxlength="200" autocomplete="url" placeholder="congtyabc.vn"><span class="err" id="e_website"></span></div>
           </div>
         </fieldset>
@@ -1021,7 +1022,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
       <div class="reg-done" id="regDone" role="status" tabindex="-1">
         <div class="tick"><svg class="icon"><use href="#i-check"/></svg></div>
         <h3>Đăng ký thành công!</h3>
-        <p>Cảm ơn bạn. LeadScan đã ghi nhận thông tin và tạo hồ sơ dự án cho doanh nghiệp của bạn. Chúng tôi sẽ liên hệ qua email hoặc điện thoại trong thời gian sớm nhất.</p>
+        <p>Cảm ơn bạn. LeadScan đã ghi nhận thông tin đăng ký của doanh nghiệp bạn. Hãy lưu lại mã đăng ký bên dưới. Chúng tôi sẽ liên hệ qua email hoặc điện thoại trong thời gian sớm nhất.</p>
         <div class="reg-code" id="regCode">LS-00000000-0000</div><br>
         <a href="#top" class="btn btn-outline">Về đầu trang</a>
       </div>
@@ -1235,7 +1236,7 @@ qty.oninput=avg.oninput=calc;calc();
     if(showErrors(validate()))return;
     const body={
       company_name:val('company_name'),tax_code:val('tax_code'),industry:val('industry'),company_size:val('company_size'),
-      province:val('province'),website:val('website'),contact_name:val('contact_name'),position:val('position'),
+      province:val('province'),address:val('address'),website:val('website'),contact_name:val('contact_name'),position:val('position'),
       email:val('email'),phone:val('phone'),offering:val('offering'),target_customers:val('target_customers'),
       target_regions:checked('target_regions'),opp_types:checked('opp_types'),expected_tickets:val('expected_tickets'),notes:val('notes'),
       agree:true,website_url:val('website_url'),elapsed_ms:Date.now()-t0

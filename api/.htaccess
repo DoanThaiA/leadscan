@@ -1,5 +1,5 @@
 # Chỉ cho phép gọi register.php từ trình duyệt; các file còn lại không truy cập trực tiếp
-<FilesMatch "^(config(\.example)?|lib|retry)\.php$">
+<FilesMatch "^(config(\.example)?|lib|retry|diagnose)\.php$">
   Require all denied
 </FilesMatch>
 Options -Indexes
