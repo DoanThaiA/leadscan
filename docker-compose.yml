@@ -59,7 +59,7 @@ services:
   api:
     <<: *backend
     ports:
-      - "127.0.0.1:${API_PORT:-8000}:8000"  # chỉ localhost — Nginx gọi vào /api/
+      - "127.0.0.1:${API_PORT:-8012}:8000"  # chỉ localhost — Nginx gọi vào /api/
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
       interval: 15s
@@ -78,11 +78,11 @@ services:
     build:
       context: ./web
       args:
-        NEXT_PUBLIC_SITE_URL: ${SITE_URL:-https://leadscanb2b.com}
+        NEXT_PUBLIC_SITE_URL: ${SITE_URL:-https://leadscan.net}
         API_INTERNAL_URL: http://api:8000
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${WEB_PORT:-3000}:3000"  # chỉ localhost — Nginx gọi vào /
+      - "127.0.0.1:${WEB_PORT:-3012}:3000"  # chỉ localhost — Nginx gọi vào /
     depends_on:
       - api
 

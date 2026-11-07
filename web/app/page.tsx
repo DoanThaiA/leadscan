@@ -19,7 +19,7 @@ import Workflow from "@/components/landing/Workflow";
 const jsonLd = {
   "@context": "https://schema.org",
   "@graph": [
-    { "@type": "Organization", name: "LeadScan B2B", url: "https://leadscanb2b.com/", email: "contact@leadscanb2b.com" },
+    { "@type": "Organization", name: "LeadScan B2B", url: "https://leadscan.net/", email: "contact@leadscanb2b.com" },
     {
       "@type": "Service",
       name: "Scan cơ hội kinh doanh B2B",

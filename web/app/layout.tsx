@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://leadscanb2b.com";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://leadscan.net";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

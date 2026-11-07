@@ -95,7 +95,9 @@ Chạy test trên PostgreSQL (giống production): đặt `LEADSCAN_TEST_DATABAS
 
 ## Deploy lên VPS (Ubuntu)
 
-Kiến trúc: **Nginx cài trên VPS** nhận cổng 80/443 (HTTPS bằng certbot) → chuyển `/api/*` vào container `api` (127.0.0.1:8000), còn lại vào container `web` (127.0.0.1:3000). Các container khác không mở cổng ra ngoài.
+> Hướng dẫn chi tiết từng bước (chuẩn bị VPS, DNS, deploy key, `.env`, HTTPS, Resend, sao lưu, xử lý sự cố): xem **[DEPLOY.md](DEPLOY.md)**. Dưới đây là bản tóm tắt.
+
+Kiến trúc: **Nginx cài trên VPS** nhận cổng 80/443 (HTTPS bằng certbot) → chuyển `/api/*` vào container `api` (127.0.0.1:8012), còn lại vào container `web` (127.0.0.1:3012). Các container khác không mở cổng ra ngoài.
 
 1. Cài Docker, Nginx, certbot; mở firewall cho SSH, 80, 443:
    ```bash
@@ -103,12 +105,12 @@ Kiến trúc: **Nginx cài trên VPS** nhận cổng 80/443 (HTTPS bằng certbo
    sudo apt install -y nginx certbot python3-certbot-nginx
    sudo ufw allow OpenSSH && sudo ufw allow 'Nginx Full' && sudo ufw enable
    ```
-2. Trỏ DNS `leadscanb2b.com` và `www.leadscanb2b.com` (bản ghi A) về IP VPS.
+2. Trỏ DNS `leadscan.net` và `www.leadscan.net` (bản ghi A) về IP VPS.
 3. Lấy code và tạo cấu hình:
    ```bash
    git clone <repo> leadscan && cd leadscan && cp .env.example .env
    ```
-   Điền trong `.env`: `SITE_URL`, `LEADSCAN_ADMIN_URL`, `LEADSCAN_MEMBER_URL`, `POSTGRES_PASSWORD` (vd `openssl rand -hex 32`), `LEADSCAN_RESEND_API_KEY` để gửi email, và cấu hình thanh toán. Nếu VPS đã có ứng dụng khác chiếm cổng 8000/3000 thì đổi `API_PORT` / `WEB_PORT`.
+   Điền trong `.env`: `SITE_URL`, `LEADSCAN_ADMIN_URL`, `LEADSCAN_MEMBER_URL`, `POSTGRES_PASSWORD` (vd `openssl rand -hex 32`), `LEADSCAN_RESEND_API_KEY` để gửi email, và cấu hình thanh toán. Nếu VPS đã có ứng dụng khác chiếm cổng 8012/3012 thì đổi `API_PORT` / `WEB_PORT`.
 4. Khởi động (migration chạy tự động mỗi lần deploy):
    ```bash
    docker compose up -d --build
@@ -118,7 +120,7 @@ Kiến trúc: **Nginx cài trên VPS** nhận cổng 80/443 (HTTPS bằng certbo
    sudo cp deploy/nginx.conf /etc/nginx/sites-available/leadscan
    sudo ln -s /etc/nginx/sites-available/leadscan /etc/nginx/sites-enabled/
    sudo nginx -t && sudo systemctl reload nginx
-   sudo certbot --nginx -d leadscanb2b.com -d www.leadscanb2b.com
+   sudo certbot --nginx -d leadscan.net -d www.leadscan.net
    ```
    Certbot tự thêm chứng chỉ, chuyển hướng HTTP → HTTPS và tự gia hạn.
 6. Tạo tài khoản quản trị đầu tiên:

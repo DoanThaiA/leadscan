@@ -6,7 +6,7 @@ RUN npm ci
 FROM node:24-alpine AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
-ARG NEXT_PUBLIC_SITE_URL=https://leadscanb2b.com
+ARG NEXT_PUBLIC_SITE_URL=https://leadscan.net
 ARG API_INTERNAL_URL=http://api:8000
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL API_INTERNAL_URL=$API_INTERNAL_URL
 COPY --from=deps /app/node_modules ./node_modules

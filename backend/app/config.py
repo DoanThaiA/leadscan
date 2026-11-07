@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     login_attempts_per_15min: int = 10
 
     # Cổng thành viên
-    member_url: str = "https://leadscanb2b.com/thanh-vien"  # dùng cho link đặt lại mật khẩu trong email
+    member_url: str = "https://leadscan.net/thanh-vien"  # dùng cho link đặt lại mật khẩu trong email
 
     # Gói thành viên & nạp điểm (1 điểm = 1đ)
     membership_fee: int = 10_000_000
@@ -81,8 +81,8 @@ class Settings(BaseSettings):
     mail_from_name: str = "LeadScan B2B"
     # Email báo quản trị khi có đăng ký mới (để trống = không gửi)
     notify_email: str = ""
-    notify_from: str = "no-reply@leadscanb2b.com"  # địa chỉ gửi đi — tên miền phải được xác minh trên Resend
-    admin_url: str = "https://leadscanb2b.com/admin"  # link trong email thông báo
+    notify_from: str = "no-reply@leadscan.net"  # địa chỉ gửi đi — tên miền phải được xác minh trên Resend
+    admin_url: str = "https://leadscan.net/admin"  # link trong email thông báo
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
