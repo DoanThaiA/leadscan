@@ -3,6 +3,7 @@
     python -m app.cli create-admin --email a@b.vn --name "Nguyễn Văn A"   # tạo/đặt lại tài khoản quản trị
     python -m app.cli diagnose                                          # kiểm tra DB, Redis, SMTP
     python -m app.cli import-legacy DIR                                 # nhập hồ sơ JSON từ bản PHP cũ
+    python -m app.cli crawl-profit500 --chart 12 --year 2026            # quét PROFIT500 vào kho doanh nghiệp
 
 Mật khẩu lấy từ biến môi trường LEADSCAN_ADMIN_PASSWORD nếu có, nếu không sẽ hỏi khi chạy.
 """
@@ -143,6 +144,23 @@ def cmd_import_legacy(args) -> int:
     return 0
 
 
+def cmd_crawl_profit500(args) -> int:
+    from app.services import profit500
+
+    if args.chart not in profit500.CHARTS:
+        print("Bảng xếp hạng không hợp lệ. Chọn: " + ", ".join(f"{k} = {v}" for k, v in profit500.CHARTS.items()))
+        return 1
+    with new_session() as db:
+        stats = profit500.crawl(
+            db, chart=args.chart, year=args.year, limit=args.limit, page_size=args.page_size, update=args.update, delay=args.delay
+        )
+    print()
+    print(f"Xong: thêm mới {stats.created}, cập nhật {stats.updated}, bỏ qua {stats.skipped}, lỗi {len(stats.errors)}")
+    for e in stats.errors[:20]:
+        print("  - " + e)
+    return 1 if stats.errors and not (stats.created or stats.updated or stats.skipped) else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python -m app.cli", description="Lệnh quản trị LeadScan")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -154,6 +172,14 @@ def main(argv: list[str] | None = None) -> int:
     i = sub.add_parser("import-legacy", help="Nhập hồ sơ JSON từ bản PHP cũ")
     i.add_argument("dir")
     i.set_defaults(fn=cmd_import_legacy)
+    c = sub.add_parser("crawl-profit500", help="Quét doanh nghiệp từ bảng xếp hạng PROFIT500 vào kho doanh nghiệp")
+    c.add_argument("--chart", type=int, default=12, help="12 = Top 500 lợi nhuận tốt nhất, 13 = Top 500 tư nhân, 17 = Top 50 xuất sắc")
+    c.add_argument("--year", type=int, default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).year)
+    c.add_argument("--limit", type=int, default=0, help="Số doanh nghiệp tối đa (0 = tất cả)")
+    c.add_argument("--page-size", type=int, default=50)
+    c.add_argument("--delay", type=float, default=1.0, help="Số giây nghỉ giữa các lần tải trang (lịch sự với trang nguồn)")
+    c.add_argument("--update", action="store_true", help="Cập nhật cả doanh nghiệp đã có (mặc định chỉ thêm mới)")
+    c.set_defaults(fn=cmd_crawl_profit500)
     args = p.parse_args(argv)
     return args.fn(args)
 

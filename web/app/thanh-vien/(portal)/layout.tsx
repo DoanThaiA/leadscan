@@ -8,6 +8,7 @@ import { Icon, initials } from "@/components/admin/ui";
 import { MemberProvider, useMember } from "@/components/member/MemberContext";
 import { fmtPts } from "@/lib/commerce";
 import { mapi } from "@/lib/member/api";
+import { Logo } from "@/components/brand/Logo";
 
 const NAV = [
   { href: "/thanh-vien", label: "Tổng quan", icon: "home", exact: true },
@@ -34,14 +35,14 @@ function Shell({ children }: { children: ReactNode }) {
     <div className="adm-shell">
       <div className="adm-mtop">
         <button className="adm-btn ghost sm" aria-label="Mở menu" onClick={() => setOpen(true)}><Icon name="menu" /></button>
-        <b>LeadScan</b>
+        <Link href="/thanh-vien" aria-label="LeadScan"><Logo variant="mark" height={26} /></Link>
         <Link href="/thanh-vien/vi" className="adm-balance" style={{ padding: "4px 10px", fontSize: 12.5 }}>{fmtPts(me.company.points_balance)}</Link>
       </div>
       {open ? <div className="adm-scrim" onClick={() => setOpen(false)} /> : null}
 
       <aside className={open ? "adm-side open" : "adm-side"}>
         <Link href="/thanh-vien" className="adm-logo">
-          <span className="mark"><Icon name="scan" /></span>LeadScan<small>B2B</small>
+          <Logo height={24} />
         </Link>
         <Link href="/thanh-vien/vi" className="adm-card" style={{ padding: 12, margin: "0 2px 10px", display: "grid", gap: 2 }}>
           <span className="muted" style={{ fontSize: 12 }}>Số dư điểm</span>

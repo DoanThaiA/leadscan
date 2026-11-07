@@ -53,7 +53,6 @@ export default function Workflow() {
               <p>Dựa trên bộ lọc từ khảo sát, hệ thống Crawl AI liên tục thu thập tín hiệu kinh doanh từ web, mạng xã hội, hội nhóm, cổng thông tin nhà nước và đội trợ lý thực địa — sau đó lưu vào cơ sở dữ liệu cơ hội.</p>
               <div className="feat"><h4><svg className="icon"><use href="#i-globe" /></svg>Hơn 10 nhóm nguồn dữ liệu</h4><p>Web trả phí, mạng xã hội, nhóm chat, trang vàng, Bộ Công Thương, công báo, dự án thầu…</p></div>
               <div className="feat"><h4><svg className="icon"><use href="#i-db" /></svg>Cơ sở dữ liệu cơ hội</h4><p>Dữ liệu được chuẩn hoá, loại trùng và cập nhật liên tục, hai chiều với hệ thống AI.</p></div>
-              <a href="#nguon-du-lieu" className="link-arrow" style={{ marginTop: "10px" }}>Xem tất cả nguồn dữ liệu <svg className="icon"><use href="#i-arrow" /></svg></a>
             </div>
             <div className="visual blue">
               <div className="hub" id="hub">

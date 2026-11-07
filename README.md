@@ -50,6 +50,20 @@ docker-compose.yml  db (pgvector) · redis · migrate · api · worker · beat �
 
 Admin có thêm: **Cơ hội & phiếu** (nhập tay, định giá, mở bán), **Thanh toán** (xác nhận tay khi đã đối soát — dự phòng webhook), **Hoá đơn**, **Yêu cầu enrich**, và trong chi tiết khách hàng: **ví điểm, điều chỉnh điểm, tài khoản đăng nhập**.
 
+## Kho doanh nghiệp (`/admin/kho-doanh-nghiep`)
+
+Bảng `knowledge_companies` — danh sách doanh nghiệp làm đầu vào cho AI quét tìm cơ hội. Admin thêm / sửa / xoá, lọc theo trạng thái AI (Chờ quét · Đã quét · Lỗi · Bỏ qua), nguồn, tìm theo tên / MST / ngành / tỉnh.
+
+Nạp dữ liệu từ bảng xếp hạng PROFIT500 (phần "Giới thiệu chung" của từng doanh nghiệp: tên, tên tiếng Anh, MST, mã CK, trụ sở, điện thoại, fax, email, website, năm thành lập, ngành nghề, CEO, đoạn giới thiệu, logo, hạng):
+
+```bash
+docker compose exec api python -m app.cli crawl-profit500 --chart 12 --year 2026
+```
+
+- `--chart`: 12 = Top 500 lợi nhuận tốt nhất, 13 = Top 500 tư nhân, 17 = Top 50 xuất sắc.
+- Mặc định chỉ thêm doanh nghiệp mới (khớp theo mã doanh nghiệp tại nguồn, rồi theo MST); `--update` làm mới bản ghi đã có nhưng **giữ nguyên** trạng thái AI và ghi chú nội bộ.
+- Đi chậm 1 giây/request (`--delay`), 500 doanh nghiệp mất khoảng 10 phút. Mỗi bản ghi lưu link nguồn — khi dùng lại thông tin cần ghi nguồn "Vietnam Report".
+
 ## Tích hợp InfoCMS — cần hoàn tất khi có tài liệu
 
 InfoCMS (Smart Collect của InfoPlus) chưa công bố tài liệu API công khai. Hệ thống đã làm sẵn:
@@ -105,7 +119,7 @@ Kiến trúc: **Nginx cài trên VPS** nhận cổng 80/443 (HTTPS bằng certbo
    sudo apt install -y nginx certbot python3-certbot-nginx
    sudo ufw allow OpenSSH && sudo ufw allow 'Nginx Full' && sudo ufw enable
    ```
-2. Trỏ DNS `leadscan.net` và `www.leadscan.net` (bản ghi A) về IP VPS.
+2. Trỏ DNS `leadscan.net` (bản ghi A) về IP VPS.
 3. Lấy code và tạo cấu hình:
    ```bash
    git clone <repo> leadscan && cd leadscan && cp .env.example .env
@@ -117,10 +131,10 @@ Kiến trúc: **Nginx cài trên VPS** nhận cổng 80/443 (HTTPS bằng certbo
    ```
 5. Cấu hình Nginx + HTTPS (sửa `server_name` trong file nếu dùng tên miền khác, và 2 `upstream` nếu đã đổi cổng):
    ```bash
-   sudo cp deploy/nginx.conf /etc/nginx/sites-available/leadscan
-   sudo ln -s /etc/nginx/sites-available/leadscan /etc/nginx/sites-enabled/
+   sudo cp deploy/nginx.conf /etc/nginx/sites-available/leadscan.conf
+   sudo ln -s /etc/nginx/sites-available/leadscan.conf /etc/nginx/sites-enabled/leadscan.conf
    sudo nginx -t && sudo systemctl reload nginx
-   sudo certbot --nginx -d leadscan.net -d www.leadscan.net
+   sudo certbot --nginx -d leadscan.net
    ```
    Certbot tự thêm chứng chỉ, chuyển hướng HTTP → HTTPS và tự gia hạn.
 6. Tạo tài khoản quản trị đầu tiên:
@@ -142,6 +156,7 @@ Cập nhật phiên bản mới: `git pull && docker compose up -d --build` (kh�
 |---|---|
 | Tạo / đặt lại mật khẩu quản trị | `docker compose exec api python -m app.cli create-admin --email ...` |
 | Chẩn đoán DB, Redis, email (Resend/SMTP) | `docker compose exec api python -m app.cli diagnose` |
+| Quét PROFIT500 vào kho doanh nghiệp | `docker compose exec api python -m app.cli crawl-profit500 --chart 12 --year 2026` (thêm `--limit 20` để thử, `--update` để làm mới bản ghi đã có) |
 | Nhập hồ sơ JSON từ bản PHP cũ | copy thư mục `storage/submissions` vào container rồi `python -m app.cli import-legacy <thư mục>` |
 | Xem log | `docker compose logs -f api worker` |
 | Sao lưu DB | `docker compose exec db pg_dump -U leadscan leadscan > backup.sql` |

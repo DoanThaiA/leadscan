@@ -7,11 +7,13 @@ import { type ReactNode, useEffect, useState } from "react";
 import { AdminProvider, useAdmin } from "@/components/admin/AdminContext";
 import { Icon, initials } from "@/components/admin/ui";
 import { api } from "@/lib/admin/api";
+import { Logo } from "@/components/brand/Logo";
 
 const NAV = [
   { href: "/admin", label: "Tổng quan", icon: "home", exact: true },
   { href: "/admin/khach-hang", label: "Khách hàng", icon: "building" },
   { href: "/admin/co-hoi", label: "Cơ hội & phiếu", icon: "grid" },
+  { href: "/admin/kho-doanh-nghiep", label: "Kho doanh nghiệp (AI)", icon: "scan" },
   { href: "/admin/thanh-toan", label: "Thanh toán", icon: "card" },
   { href: "/admin/hoa-don", label: "Hoá đơn", icon: "receipt" },
   { href: "/admin/enrich", label: "Yêu cầu enrich", icon: "spark" },
@@ -38,14 +40,14 @@ function Shell({ children }: { children: ReactNode }) {
         <button className="adm-btn ghost sm" aria-label="Mở menu" onClick={() => setOpen(true)}>
           <Icon name="menu" />
         </button>
-        <b>LeadScan Admin</b>
+        <Link href="/admin" aria-label="LeadScan Admin"><Logo variant="mark" height={26} /></Link>
         <span style={{ width: 30 }} />
       </div>
       {open ? <div className="adm-scrim" onClick={() => setOpen(false)} /> : null}
 
       <aside className={open ? "adm-side open" : "adm-side"}>
         <Link href="/admin" className="adm-logo">
-          <span className="mark"><Icon name="scan" /></span>LeadScan<small>Admin</small>
+          <Logo height={24} /><small>Admin</small>
         </Link>
         <nav className="adm-nav" aria-label="Quản trị">
           {NAV.filter((n) => !n.adminOnly || user.role === "admin").map((n) => {

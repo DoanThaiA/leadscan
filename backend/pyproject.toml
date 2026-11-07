@@ -13,6 +13,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "celery[redis]>=5.4",
     "tzdata>=2024.1",  # zoneinfo trên Windows không có sẵn dữ liệu múi giờ
+    "beautifulsoup4>=4.15.0",
 ]
 
 [dependency-groups]

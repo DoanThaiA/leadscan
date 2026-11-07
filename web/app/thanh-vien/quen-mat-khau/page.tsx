@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 
-import { Icon } from "@/components/admin/ui";
 import { errMsg, mapi } from "@/lib/member/api";
+import { Logo } from "@/components/brand/Logo";
 
 export default function ForgotPage() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -27,7 +27,7 @@ export default function ForgotPage() {
   return (
     <div className="adm-login">
       <form className="adm-card" onSubmit={onSubmit}>
-        <Link href="/" className="adm-logo"><span className="mark"><Icon name="scan" /></span>LeadScan<small>B2B</small></Link>
+        <Link href="/" className="adm-logo"><Logo height={28} /></Link>
         <div style={{ textAlign: "center" }}>
           <h1>Quên mật khẩu</h1>
           <p className="muted" style={{ marginTop: 4 }}>Nhập email đăng ký, chúng tôi gửi liên kết đặt lại mật khẩu.</p>

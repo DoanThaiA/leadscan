@@ -1,4 +1,6 @@
 // Chuyển từ landing HTML gốc; sửa trực tiếp tại đây.
+import { Logo } from "@/components/brand/Logo";
+
 export default function Hero() {
   return (
     <>
@@ -21,7 +23,7 @@ export default function Hero() {
           <div className="frame reveal">
             <div className="app" aria-label="Minh hoạ giao diện LeadScan">
               <aside className="app-side">
-                <div className="logo"><span className="logo-mark"><svg className="icon"><use href="#i-scan" /></svg></span>LeadScan<span>B2B</span></div>
+                <div className="logo"><Logo height={20} /></div>
                 <div className="side-item"><svg className="icon"><use href="#i-home" /></svg>Tổng quan</div>
                 <div className="side-item"><svg className="icon"><use href="#i-clipboard" /></svg>Khảo sát của tôi</div>
                 <div className="side-item active"><svg className="icon"><use href="#i-scan" /></svg>Cơ hội phù hợp</div>
@@ -50,7 +52,7 @@ export default function Hero() {
               </div>
               <div className="app-list">
                 <div className="list-top"><h4><span>128</span> cơ hội khớp chân dung</h4><span className="btn btn-outline">Sắp xếp: Điểm cao</span></div>
-                <div className="opp"><div className="opp-ic" style={{ background: "#FA5320" }}>TA</div><div><div className="opp-t">Cần 200.000 hộp carton 5 lớp/tháng</div><div className="opp-m"><span>App đăng mua</span><span>· Bắc Ninh</span><span>· 2 giờ trước</span></div></div><span className="score s-hi">92</span><div className="opp-p">1.250.000đ<small>Enrich vòng 2</small></div></div>
+                <div className="opp"><div className="opp-ic" style={{ background: "#FA5320", color: "#2B1B14" }}>TA</div><div><div className="opp-t">Cần 200.000 hộp carton 5 lớp/tháng</div><div className="opp-m"><span>App đăng mua</span><span>· Bắc Ninh</span><span>· 2 giờ trước</span></div></div><span className="score s-hi">92</span><div className="opp-p">1.250.000đ<small>Enrich vòng 2</small></div></div>
                 <div className="opp"><div className="opp-ic" style={{ background: "#2563EB" }}>VP</div><div><div className="opp-t">Gói thầu bao bì nhựa cho KCN Yên Phong</div><div className="opp-m"><span>Dự án thầu</span><span>· Bắc Ninh</span><span>· Hôm nay</span></div></div><span className="score s-hi">88</span><div className="opp-p">3.900.000đ<small>Enrich vòng 3</small></div></div>
                 <div className="opp"><div className="opp-ic" style={{ background: "#16A34A" }}>HK</div><div><div className="opp-t">Nhà máy điện tử mới tìm NCC khay nhựa</div><div className="opp-m"><span>Bộ Công Thương</span><span>· Hà Nội</span></div></div><span className="score s-hi">81</span><div className="opp-p">450.000đ<small>Enrich vòng 1</small></div></div>
                 <div className="opp"><div className="opp-ic" style={{ background: "#9333EA" }}>MT</div><div><div className="opp-t">Hỏi giá màng co PE số lượng lớn</div><div className="opp-m"><span>Nhóm chat</span><span>· Hà Nội</span></div></div><span className="score s-md">74</span><div className="opp-p">29.000đ<small>Phiếu cơ bản</small></div></div>

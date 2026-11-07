@@ -53,12 +53,11 @@ git add -A && git commit -m "mô tả thay đổi" && git push origin main
 
 ## Phần 2 — Trỏ DNS về VPS
 
-Vào trang quản lý DNS của tên miền, tạo 2 bản ghi:
+Vào trang quản lý DNS của tên miền, tạo bản ghi:
 
 | Loại | Tên | Giá trị |
 |---|---|---|
 | A | `@` | IP của VPS |
-| A | `www` | IP của VPS |
 
 Làm sớm vì DNS có thể mất vài phút đến vài giờ mới cập nhật. Kiểm tra từ máy bạn:
 
@@ -217,7 +216,7 @@ nano .env
 |---|---|
 | `POSTGRES_PASSWORD` | Chuỗi vừa sinh bằng `openssl`. **Đặt 1 lần, không đổi về sau** (DB đã khởi tạo bằng mật khẩu này) |
 | `SITE_URL` | `https://leadscan.net` |
-| `LEADSCAN_ALLOWED_HOSTS` | `["leadscan.net","www.leadscan.net"]` |
+| `LEADSCAN_ALLOWED_HOSTS` | `["leadscan.net"]` |
 | `LEADSCAN_COOKIE_SECURE` | `true` |
 | `LEADSCAN_MAIL_MAILER` | `resend` |
 | `LEADSCAN_RESEND_API_KEY` | API key Resend (`re_...`) |
@@ -301,12 +300,16 @@ docker compose logs --tail=100 migrate api web
 Nếu dùng tên miền khác `leadscan.net`, sửa `server_name` trong `deploy/nginx.conf` trước.
 
 ```bash
-sudo cp ~/leadscan/deploy/nginx.conf /etc/nginx/sites-available/leadscan
+sudo cp ~/leadscan/deploy/nginx.conf /etc/nginx/sites-available/leadscan.conf
 ```
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/leadscan /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/leadscan.conf /etc/nginx/sites-enabled/leadscan.conf
 ```
+
+> Đặt tên file có đuôi **`.conf`**: nhiều VPS cấu hình `nginx.conf` chỉ nạp `sites-enabled/*.conf`
+> (kiểm tra bằng `grep -n include /etc/nginx/nginx.conf`). Thiếu đuôi `.conf` thì Nginx bỏ qua file,
+> certbot không tìm thấy block của tên miền và sẽ ghi chứng chỉ nhầm vào block mặc định.
 
 VPS mới chưa có site nào khác thì tắt trang mặc định của Nginx:
 
@@ -327,7 +330,7 @@ Lúc này `http://leadscan.net` (chưa HTTPS) đã vào được trang chủ.
 DNS phải trỏ đúng về VPS trước (Phần 2).
 
 ```bash
-sudo certbot --nginx -d leadscan.net -d www.leadscan.net
+sudo certbot --nginx -d leadscan.net
 ```
 
 Certbot hỏi email (để báo khi chứng chỉ sắp hết hạn) và đồng ý điều khoản. Nó tự thêm chứng chỉ vào cấu hình Nginx, tự chuyển hướng HTTP → HTTPS và tự gia hạn.
@@ -457,7 +460,7 @@ ssh deploy@IP_VPS "cd ~/leadscan && git pull && docker compose up -d --build"
 
 **3. Nếu `.env.example` có biến mới:** thêm biến đó vào `.env` trên VPS rồi chạy lại `docker compose up -d`.
 
-**4. Nếu `deploy/nginx.conf` thay đổi:** copy lại (giữ phần SSL certbot đã thêm — nên sửa tay file trong `/etc/nginx/sites-available/leadscan` cho khớp thay vì ghi đè), rồi `sudo nginx -t && sudo systemctl reload nginx`.
+**4. Nếu `deploy/nginx.conf` thay đổi:** copy lại (giữ phần SSL certbot đã thêm — nên sửa tay file trong `/etc/nginx/sites-available/leadscan.conf` cho khớp thay vì ghi đè), rồi `sudo nginx -t && sudo systemctl reload nginx`.
 
 Dọn image cũ cho đỡ đầy ổ (thỉnh thoảng):
 

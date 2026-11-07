@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type FormEvent, Suspense, useState } from "react";
 
-import { Icon } from "@/components/admin/ui";
 import { errMsg, mapi } from "@/lib/member/api";
+import { Logo } from "@/components/brand/Logo";
 
 function ResetForm() {
   const token = useSearchParams().get("token") ?? "";
@@ -30,7 +30,7 @@ function ResetForm() {
 
   return (
     <form className="adm-card" onSubmit={onSubmit}>
-      <Link href="/" className="adm-logo"><span className="mark"><Icon name="scan" /></span>LeadScan<small>B2B</small></Link>
+      <Link href="/" className="adm-logo"><Logo height={28} /></Link>
       <h1 style={{ textAlign: "center" }}>Đặt mật khẩu mới</h1>
       {msg ? <div className={msg.ok ? "adm-alert ok" : "adm-alert"} role="status">{msg.text}</div> : null}
       {msg?.ok ? (

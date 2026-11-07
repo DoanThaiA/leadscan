@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, Suspense, useState } from "react";
 
-import { Icon } from "@/components/admin/ui";
 import { errMsg, mapi } from "@/lib/member/api";
+import { Logo } from "@/components/brand/Logo";
 
 function LoginForm() {
   const router = useRouter();
@@ -31,7 +31,7 @@ function LoginForm() {
   return (
     <form className="adm-card" onSubmit={onSubmit}>
       <Link href="/" className="adm-logo">
-        <span className="mark"><Icon name="scan" /></span>LeadScan<small>B2B</small>
+        <Logo height={28} />
       </Link>
       <div style={{ textAlign: "center" }}>
         <h1>Đăng nhập thành viên</h1>

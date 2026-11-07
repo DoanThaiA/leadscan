@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Logo } from "@/components/brand/Logo";
 
 const LINKS = [
   ["#doi-tuong", "Giải pháp"],
   ["#quy-trinh", "Quy trình"],
-  ["#nguon-du-lieu", "Nguồn dữ liệu"],
   ["#phieu-co-hoi", "Phiếu cơ hội"],
   ["#bang-gia", "Bảng giá"],
   ["#faq", "Hỏi đáp"],
@@ -41,9 +41,8 @@ export default function Header() {
 
       <header id="top" className={scrolled ? "scrolled" : undefined}>
         <div className="container nav">
-          <a href="#top" className="logo" aria-label="LeadScan B2B">
-            <span className="logo-mark"><svg className="icon"><use href="#i-scan" /></svg></span>
-            LeadScan<span>B2B</span>
+          <a href="#top" className="logo" aria-label="LeadScan – về đầu trang">
+            <Logo height={26} />
           </a>
           <nav className="nav-links" aria-label="Điều hướng chính">
             {LINKS.map(([href, label]) => (

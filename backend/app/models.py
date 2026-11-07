@@ -15,6 +15,7 @@ Opportunity        cơ hội kinh doanh (nhập tay; sau này do crawl + AI tạ
 AdminUser / AdminSession   nhân viên quản trị và phiên đăng nhập
 MemberSession / PasswordReset   phiên đăng nhập & đặt lại mật khẩu của thành viên
 RateHit                    đếm lượt để giới hạn tần suất (đăng ký, đăng nhập)
+KnowledgeCompany           kho doanh nghiệp để AI quét (crawl từ bảng xếp hạng như PROFIT500 hoặc nhập tay)
 
 Điểm: 1 điểm = 1đ. Số dư lưu ở Company.points_balance và luôn bằng tổng WalletTransaction.amount.
 """
@@ -370,3 +371,68 @@ class EnrichRequest(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     purchase: Mapped[Purchase] = relationship(lazy="joined")
+
+
+# Kho doanh nghiệp để AI quét
+KNOWLEDGE_AI_STATUSES = {
+    "pending": "Chờ quét",
+    "done": "Đã quét",
+    "error": "Lỗi",
+    "skip": "Bỏ qua",
+}
+KNOWLEDGE_SOURCES = {"manual": "Nhập tay", "profit500": "PROFIT500"}
+
+
+class KnowledgeCompany(Base):
+    """Doanh nghiệp trong kho tri thức — danh sách đầu vào để AI quét tìm cơ hội.
+
+    Thông tin lấy từ phần "Giới thiệu chung" của trang nguồn (vd profit500.vn) hoặc admin nhập tay.
+    Chống trùng: (source, source_id) với dữ liệu crawl; tax_code (nếu có) là duy nhất trên toàn bảng.
+    """
+
+    __tablename__ = "knowledge_companies"
+    __table_args__ = (UniqueConstraint("source", "source_id", name="uq_knowledge_source"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # Định danh
+    name: Mapped[str] = mapped_column(String(300), index=True)
+    name_en: Mapped[str] = mapped_column(String(300), default="")
+    tax_code: Mapped[str | None] = mapped_column(String(20), unique=True)  # None = chưa có MST
+    stock_code: Mapped[str] = mapped_column(String(20), default="")  # rỗng = chưa niêm yết
+
+    # Giới thiệu chung
+    industry: Mapped[str] = mapped_column(String(200), default="", index=True)
+    address: Mapped[str] = mapped_column(String(500), default="")  # trụ sở chính
+    province: Mapped[str] = mapped_column(String(80), default="", index=True)  # tách từ địa chỉ để lọc
+    phone: Mapped[str] = mapped_column(String(100), default="")
+    fax: Mapped[str] = mapped_column(String(100), default="")
+    email: Mapped[str] = mapped_column(String(200), default="")
+    website: Mapped[str] = mapped_column(String(300), default="")
+    founded_year: Mapped[int | None] = mapped_column(Integer)
+    ceo_name: Mapped[str] = mapped_column(String(150), default="")
+    description: Mapped[str] = mapped_column(Text, default="")  # đoạn "Giới thiệu", dạng chữ thuần
+    logo_url: Mapped[str] = mapped_column(String(500), default="")
+
+    # Xếp hạng tại nguồn
+    rank: Mapped[int | None] = mapped_column(Integer)
+    rank_label: Mapped[str] = mapped_column(String(100), default="")  # nguyên văn, vd "52(B1/2026)"
+    rank_list: Mapped[str] = mapped_column(String(200), default="")  # tên bảng xếp hạng
+    rank_year: Mapped[int | None] = mapped_column(Integer)
+
+    # Nguồn dữ liệu
+    source: Mapped[str] = mapped_column(String(30), default="manual", index=True)
+    source_id: Mapped[str | None] = mapped_column(String(50))  # mã doanh nghiệp tại nguồn
+    source_url: Mapped[str] = mapped_column(String(500), default="")
+    extra: Mapped[dict] = mapped_column(JSON, default=dict)  # các dòng thông tin khác chưa có cột riêng
+    crawled_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    # Trạng thái AI quét
+    ai_status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    ai_scanned_at: Mapped[datetime | None] = mapped_column(DateTime)
+    ai_note: Mapped[str] = mapped_column(Text, default="")  # kết quả / lỗi lần quét gần nhất
+
+    note: Mapped[str] = mapped_column(Text, default="")  # ghi chú nội bộ
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

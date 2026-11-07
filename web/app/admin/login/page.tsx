@@ -3,8 +3,8 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, Suspense, useState } from "react";
 
-import { Icon } from "@/components/admin/ui";
 import { api, ApiError } from "@/lib/admin/api";
+import { Logo } from "@/components/brand/Logo";
 
 function LoginForm() {
   const router = useRouter();
@@ -30,7 +30,7 @@ function LoginForm() {
   return (
     <form className="adm-card" onSubmit={onSubmit}>
       <div className="adm-logo">
-        <span className="mark"><Icon name="scan" /></span>LeadScan<small>Admin</small>
+        <Logo height={28} /><small>Admin</small>
       </div>
       <div style={{ textAlign: "center" }}>
         <h1>Đăng nhập quản trị</h1>

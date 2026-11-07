@@ -11,8 +11,6 @@ import LandingEffects from "@/components/landing/LandingEffects";
 import MobileCta from "@/components/landing/MobileCta";
 import Pricing from "@/components/landing/Pricing";
 import Register from "@/components/landing/Register";
-import Sources from "@/components/landing/Sources";
-import Stats from "@/components/landing/Stats";
 import Tickets from "@/components/landing/Tickets";
 import Workflow from "@/components/landing/Workflow";
 
@@ -47,8 +45,6 @@ export default function LandingPage() {
         <Hero />
         <Audience />
         <Workflow />
-        <Sources />
-        <Stats />
         <Tickets />
         <Pricing />
         <Register />
