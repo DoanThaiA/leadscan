@@ -3,6 +3,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 
 import { Icon, Skeleton } from "@/components/admin/ui";
+import { MultiSelect } from "@/components/member/MultiSelect";
 import { SearchReqList } from "@/components/member/SearchReqList";
 import { type Criteria, criteriaTags, type SearchReq } from "@/lib/commerce";
 import { errMsg, mapi } from "@/lib/member/api";
@@ -14,35 +15,9 @@ interface MatchResp {
 
 const NOTE_MIN = 10;
 
-/** Nhóm chip chọn nhiều; quá `limit` thì thu gọn (chip đang chọn luôn hiện) */
-function ChipGroup({
-  icon, label, options, value, onChange, limit = 10, hint,
-}: {
-  icon: string; label: string; options: string[]; value: string[]; onChange: (v: string[]) => void; limit?: number; hint?: string;
-}) {
-  const [all, setAll] = useState(false);
-  const shown = all ? options : options.filter((o, i) => i < limit || value.includes(o));
-  const toggle = (o: string) => onChange(value.includes(o) ? value.filter((x) => x !== o) : [...value, o]);
-  return (
-    <div className="mt-group" role="group" aria-label={label}>
-      <div className="mt-label"><Icon name={icon} />{label}{value.length ? <small>{value.length} đã chọn</small> : hint ? <small>{hint}</small> : null}</div>
-      <div className="mt-chips">
-        {shown.map((o) => (
-          <button key={o} type="button" className="mt-chip" aria-pressed={value.includes(o)} onClick={() => toggle(o)}>{o}</button>
-        ))}
-        {options.length > shown.length || all ? (
-          <button type="button" className="mt-more" onClick={() => setAll(!all)}>{all ? "Thu gọn" : `+${options.length - shown.length} khác`}</button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 export default function MatchPage() {
   const [m, setM] = useState<MatchResp | null>(null);
   const [c, setC] = useState<Criteria | null>(null);
-  const [extra, setExtra] = useState<string[]>([]); // ngành tự thêm
-  const [other, setOther] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -56,15 +31,6 @@ export default function MatchPage() {
   }, []);
 
   const set = (patch: Partial<Criteria>) => { setC((prev) => (prev ? { ...prev, ...patch } : prev)); setMsg(null); };
-
-  function addIndustry(e: FormEvent) {
-    e.preventDefault();
-    const v = other.trim();
-    if (!v || !c || !m) return;
-    if (!m.options.industries.includes(v) && !extra.includes(v)) setExtra([...extra, v]);
-    if (!c.industries.includes(v)) set({ industries: [...c.industries, v] });
-    setOther("");
-  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -104,21 +70,15 @@ export default function MatchPage() {
           <aside className="mt-filter">
             <h2>Tiêu chí tìm kiếm</h2>
             <p className="hint">Chọn những gì bạn cần — bỏ trống nhóm nào thì không giới hạn nhóm đó</p>
-            <ChipGroup icon="factory" label="Ngành hàng" options={[...m.options.industries, ...extra]} value={c.industries} onChange={(v) => set({ industries: v })} />
-            <form className="mt-add" onSubmit={addIndustry} style={{ marginTop: -4, marginBottom: 12 }}>
-              <input className="adm-input" value={other} onChange={(e) => setOther(e.target.value)} placeholder="Thêm ngành khác…" maxLength={60} aria-label="Thêm ngành hàng khác" />
-              <button className="adm-btn sm" type="submit" disabled={!other.trim()} aria-label="Thêm ngành"><Icon name="plus" size={14} /></button>
-            </form>
-            <ChipGroup icon="map" label="Khu vực" options={m.options.regions} value={c.regions} onChange={(v) => set({ regions: v })} limit={9} />
-            <ChipGroup icon="users" label="Quy mô khách hàng" options={m.options.sizes} value={c.sizes} onChange={(v) => set({ sizes: v })} />
-            <ChipGroup icon="layers" label="Loại cơ hội" options={m.options.sources} value={c.sources} onChange={(v) => set({ sources: v })} />
-            <div className="mt-group" role="group" aria-label="Điểm chất lượng tối thiểu">
-              <div className="mt-label"><Icon name="gauge" />Điểm chất lượng tối thiểu</div>
-              <div className="mt-chips">
-                {m.options.min_scores.map((s) => (
-                  <button key={s} type="button" className="mt-chip" aria-pressed={c.min_score === s} onClick={() => set({ min_score: s })}>{s ? `≥ ${s} điểm` : "Mọi mức"}</button>
-                ))}
-              </div>
+            <MultiSelect icon="factory" label="Ngành hàng" options={m.options.industries} value={c.industries} onChange={(v) => set({ industries: v })} placeholder="Gõ ngành hàng, vd: bao bì, nhựa…" allowCustom />
+            <MultiSelect icon="map" label="Khu vực" options={m.options.regions} value={c.regions} onChange={(v) => set({ regions: v })} placeholder="Gõ tỉnh/thành, miền, quốc tế…" allowCustom maxLength={80} />
+            <MultiSelect icon="users" label="Quy mô khách hàng" options={m.options.sizes} value={c.sizes} onChange={(v) => set({ sizes: v })} placeholder="Chọn quy mô…" />
+            <MultiSelect icon="layers" label="Loại cơ hội" options={m.options.sources} value={c.sources} onChange={(v) => set({ sources: v })} placeholder="Gõ loại cơ hội, vd: gói thầu…" />
+            <div className="mt-group">
+              <label className="mt-label" htmlFor="sr-score"><Icon name="gauge" />Điểm chất lượng tối thiểu</label>
+              <select id="sr-score" className="adm-input" value={c.min_score} onChange={(e) => set({ min_score: Number(e.target.value) })}>
+                {m.options.min_scores.map((s) => <option key={s} value={s}>{s ? `Từ ${s} điểm trở lên` : "Mọi mức điểm"}</option>)}
+              </select>
             </div>
           </aside>
         ) : (

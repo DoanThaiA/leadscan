@@ -99,6 +99,17 @@ header.scrolled{border-color:var(--line)}
 .list-top .btn{padding:6px 10px;font-size:12px}
 .score{font-weight:700;font-size:12px;padding:3px 8px;border-radius:99px}
 .s-hi{background:#DCFCE7;color:#15803D}.s-md{background:#FEF3C7;color:#B45309}
+.msx{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-height:30px;padding:3px 6px;border:1px solid #D5DADF;border-radius:6px;background:#fff;font-size:11.5px}
+.msx.open{border-color:var(--orange);box-shadow:0 0 0 2px rgba(250,83,32,.15)}
+.msx i{font-style:normal;padding:1px 6px;border-radius:4px;background:var(--orange-50);color:var(--orange-700);border:1px solid var(--orange-100);white-space:nowrap}
+.msx span{color:var(--soft)}
+.msx .caret{color:var(--ink)}
+.msx .icon{width:13px;height:13px;margin-left:auto;color:var(--soft)}
+.msx.sel{justify-content:space-between}
+.msx em{font-style:normal;color:var(--soft)}
+.msx-list{margin-top:4px;border:1px solid var(--line);border-radius:6px;box-shadow:0 6px 16px rgba(16,24,40,.1);padding:3px;display:grid;font-size:11.5px;background:#fff}
+.msx-list b,.msx-list span{padding:4px 7px;border-radius:4px;font-weight:400;color:var(--ink-2)}
+.msx-list b{background:var(--orange-50);color:var(--orange-700)}
 .req-box{border:1px solid #D5DADF;border-radius:6px;padding:9px 10px;color:var(--ink-2);font-size:12px;line-height:1.5;min-height:74px;background:#fff}
 .req-tags{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:9px 0 10px;font-size:11px;color:var(--soft)}
 .req-tags span{margin-right:2px}

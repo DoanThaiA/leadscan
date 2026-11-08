@@ -42,15 +42,16 @@ export default function Hero() {
                 <h4>Tiêu chí tìm kiếm</h4>
                 <div className="hint">Bỏ trống nhóm nào thì không giới hạn nhóm đó</div>
                 <div className="f-group"><div className="f-label"><svg className="icon"><use href="#i-factory" /></svg>Ngành hàng</div>
-                  <div className="chips"><span className="chip on">Bao bì &amp; in ấn</span><span className="chip on">Nhựa &amp; cao su</span><span className="chip">Điện tử</span></div></div>
+                  <div className="msx"><i>Bao bì &amp; in ấn ×</i><i>Nhựa &amp; cao su ×</i><svg className="icon"><use href="#i-search" /></svg></div></div>
                 <div className="f-group"><div className="f-label"><svg className="icon"><use href="#i-map" /></svg>Khu vực</div>
-                  <div className="chips"><span className="chip on">Bắc Ninh</span><span className="chip on">Hà Nội</span><span className="chip on">Quốc tế</span><span className="chip">Hải Phòng</span></div></div>
+                  <div className="msx open"><i>Bắc Ninh ×</i><i>Hà Nội ×</i><span className="caret">hải|</span></div>
+                  <div className="msx-list"><b>Hải Phòng</b><span>Hải Dương</span></div></div>
                 <div className="f-group"><div className="f-label"><svg className="icon"><use href="#i-users" /></svg>Quy mô khách hàng</div>
-                  <div className="chips"><span className="chip">50–200 nhân sự</span><span className="chip on">200+ nhân sự</span></div></div>
+                  <div className="msx"><i>200+ nhân sự ×</i><span>Chọn quy mô…</span></div></div>
                 <div className="f-group"><div className="f-label"><svg className="icon"><use href="#i-layers" /></svg>Loại cơ hội</div>
-                  <div className="chips"><span className="chip on">App đăng mua</span><span className="chip on">Dự án &amp; gói thầu</span><span className="chip">Nhà máy / FDI mới</span><span className="chip">Hội chợ</span></div></div>
+                  <div className="msx"><i>App đăng mua ×</i><i>Dự án &amp; gói thầu ×</i></div></div>
                 <div className="f-group"><div className="f-label"><svg className="icon"><use href="#i-gauge" /></svg>Điểm chất lượng tối thiểu</div>
-                  <div className="chips"><span className="chip">Mọi mức</span><span className="chip on">≥ 70 điểm</span><span className="chip">≥ 80 điểm</span></div></div>
+                  <div className="msx sel"><span style={{ color: "var(--ink-2)" }}>Từ 70 điểm trở lên</span><em>▾</em></div></div>
               </div>
               <div className="app-list">
                 <div className="list-top"><h4>Mô tả yêu cầu</h4></div>
