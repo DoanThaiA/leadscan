@@ -5,6 +5,7 @@
     python -m app.cli send-test-mail [--to a@b.vn]                      # gửi thử 1 email (mặc định tới NOTIFY_EMAIL)
     python -m app.cli import-legacy DIR                                 # nhập hồ sơ JSON từ bản PHP cũ
     python -m app.cli crawl-profit500 --chart 12 --year 2026            # quét PROFIT500 vào kho doanh nghiệp
+    python -m app.cli import-opportunities FILE.json [--publish]        # nhập cơ hội từ file JSON (mặc định: nháp)
 
 Mật khẩu lấy từ biến môi trường LEADSCAN_ADMIN_PASSWORD nếu có, nếu không sẽ hỏi khi chạy.
 """
@@ -163,6 +164,70 @@ def cmd_send_test_mail(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_import_opportunities(args) -> int:
+    """Nhập cơ hội từ file JSON (danh sách object theo đúng trường của form admin).
+
+    Kiểm tra bằng cùng schema với form admin (OppIn). Chạy lại không nhân đôi:
+    bỏ qua cơ hội đã có cùng tiêu đề + bên có nhu cầu. Mặc định lưu dạng nháp để admin
+    duyệt giá/điểm rồi mới mở bán; --publish để mở bán ngay.
+    """
+    from pydantic import ValidationError
+
+    from app.models import Opportunity
+    from app.routes.admin_commerce import _apply_opp, _next_opp_code
+    from app.schemas_commerce import OppIn
+
+    path = Path(args.file)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"Không đọc được {path}: {e}")
+        return 1
+    items = raw.get("opportunities") if isinstance(raw, dict) else raw
+    if not isinstance(items, list):
+        print('File phải là danh sách cơ hội hoặc {"opportunities": [...]}')
+        return 1
+
+    bodies: list[OppIn] = []
+    for i, it in enumerate(items, 1):
+        if not isinstance(it, dict):
+            print(f"#{i}: không phải object")
+            return 1
+        it = {k: v for k, v in it.items() if not k.startswith("_")}  # trường "_..." chỉ là ghi chú trong file
+        if args.publish:
+            it["status"] = "published"
+        try:
+            bodies.append(OppIn.model_validate(it))
+        except ValidationError as e:
+            print(f"#{i} {it.get('title', '')!r} không hợp lệ:")
+            for err in e.errors():
+                print(f"   - {'.'.join(str(x) for x in err['loc'])}: {err['msg']}")
+            return 1
+
+    added = skipped = 0
+    with new_session() as db:
+        admin_id = db.scalar(select(AdminUser.id).where(AdminUser.email == args.by)) if args.by else None
+        for b in bodies:
+            dup = db.scalar(select(Opportunity.code).where(Opportunity.title == b.title, Opportunity.buyer_name == b.buyer_name))
+            if dup:
+                print(f"  bỏ qua (đã có {dup}): {b.title}")
+                skipped += 1
+                continue
+            o = Opportunity(code=_next_opp_code(db), title=b.title, created_by_id=admin_id)
+            _apply_opp(o, b)
+            db.add(o)
+            db.flush()
+            print(f"  + {o.code} [{o.status}] {o.title}")
+            added += 1
+        if args.dry_run:
+            db.rollback()
+            print(f"Chạy thử: hợp lệ {len(bodies)} cơ hội, sẽ thêm {added}, bỏ qua {skipped}. Chưa lưu gì.")
+        else:
+            db.commit()
+            print(f"Đã thêm {added}, bỏ qua {skipped}.")
+    return 0
+
+
 def cmd_crawl_profit500(args) -> int:
     from app.services import profit500
 
@@ -194,6 +259,12 @@ def main(argv: list[str] | None = None) -> int:
     t = sub.add_parser("send-test-mail", help="Gửi thử 1 email để kiểm tra cấu hình Resend/SMTP")
     t.add_argument("--to", default="", help="Người nhận (mặc định LEADSCAN_NOTIFY_EMAIL)")
     t.set_defaults(fn=cmd_send_test_mail)
+    o = sub.add_parser("import-opportunities", help="Nhập cơ hội từ file JSON (mặc định lưu nháp)")
+    o.add_argument("file")
+    o.add_argument("--publish", action="store_true", help="Mở bán ngay thay vì lưu nháp")
+    o.add_argument("--dry-run", action="store_true", help="Chỉ kiểm tra, không lưu")
+    o.add_argument("--by", default="", help="Email quản trị ghi là người tạo (không bắt buộc)")
+    o.set_defaults(fn=cmd_import_opportunities)
     c = sub.add_parser("crawl-profit500", help="Quét doanh nghiệp từ bảng xếp hạng PROFIT500 vào kho doanh nghiệp")
     c.add_argument("--chart", type=int, default=12, help="12 = Top 500 lợi nhuận tốt nhất, 13 = Top 500 tư nhân, 17 = Top 50 xuất sắc")
     c.add_argument("--year", type=int, default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).year)

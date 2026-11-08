@@ -1,0 +1,129 @@
+{
+  "_note": "4 cơ hội hỏi hàng quốc tế nhận ngày 08/11/2026. Nhập: python -m app.cli import-opportunities data/opportunities/2026-11-08-hoi-hang-quoc-te.json. Giá = phiếu cơ bản 29.000đ (1 đầu mối, chưa enrich); điểm do LeadScan đánh giá thủ công, sửa trong admin trước khi mở bán nếu cần.",
+  "opportunities": [
+    {
+      "title": "Bunge mời tham gia Global RFQ bao PP dệt & FIBC (Trung Quốc, Brazil, Mỹ, Argentina)",
+      "summary": "Bunge chuẩn bị mở Global RFQ cho nhóm bao bì PP dệt và đang mở rộng danh sách nhà cung cấp trước đợt chào giá. Phạm vi ban đầu là nhu cầu của Bunge tại Trung Quốc, Brazil, Mỹ và Argentina; nhà cung cấp có thể chào cho một hoặc nhiều khu vực. Bunge so sánh theo cấu trúc chi phí chung và tổng chi phí giao tới nơi, có thể trao thầu theo quốc gia, khu vực và SKU.",
+      "industry": "Bao bì & in ấn",
+      "province": "Toàn cầu (Trung Quốc, Brazil, Mỹ, Argentina)",
+      "region": "Quốc tế",
+      "source_type": "Dự án & gói thầu",
+      "scale": "Global RFQ 4 thị trường; quy cách và khối lượng gửi sau khi xác nhận tham gia",
+      "estimated_value": "Chưa công bố (gói thầu toàn cầu)",
+      "deadline": null,
+      "score": 77,
+      "score_fit": 85,
+      "score_urgency": 65,
+      "score_trust": 80,
+      "enrich_round": 0,
+      "price": 29000,
+      "max_buyers": 3,
+      "buyer_name": "Bunge (Global Strategic Procurement – Woven Bags)",
+      "detail": "Người gửi: Mateo Suero, phụ trách Mua hàng chiến lược toàn cầu nhóm bao PP dệt (Woven Bags) của Bunge.\n\nBunge chuẩn bị mở Global RFQ cho nhóm bao bì PP dệt (woven polypropylene) và đang mở rộng danh sách nhà cung cấp trước đợt chào giá.\n- Phạm vi ban đầu: nhu cầu của Bunge tại Trung Quốc, Brazil, Mỹ và Argentina.\n- Mục tiêu: mua như một tài khoản toàn cầu, tạo cạnh tranh giữa các khu vực, tìm nhà cung cấp phục vụ được một hoặc nhiều khu vực.\n\nThông tin Bunge đề nghị nhà cung cấp gửi trước:\n1. Địa điểm nhà máy và quy mô mặt bằng sản xuất\n2. Năng lực sản xuất bao PP dệt và bao jumbo FIBC\n3. Công suất năm và công suất còn trống\n4. Thị trường xuất khẩu chính và kinh nghiệm xuất khẩu\n5. Năng lực bao bì cấp thực phẩm (food-grade) và bao đựng phân bón\n6. Chứng nhận chất lượng / an toàn thực phẩm liên quan\n7. MOQ thông thường và thời gian sản xuất\n8. Khu vực trong phạm vi (Trung Quốc / Brazil / Mỹ / Argentina) có thể chào giá và cung cấp\n9. Cách định giá / chỉ số hoá giá hạt nhựa PP đang áp dụng\n10. Khả năng bóc tách chi phí minh bạch: hạt nhựa PP, gia công, in / ghép màng, vật tư khác, lợi nhuận và logistics\n\nCách đánh giá: so sánh nhà cung cấp theo cấu trúc chi phí chung và tổng chi phí giao tới nơi (total landed cost); có thể trao thầu linh hoạt theo quốc gia, khu vực và SKU.\n\nBước tiếp theo: nhà cung cấp xác nhận quan tâm tham gia; sau đó Bunge gửi quy cách chi tiết và gói khối lượng của các khu vực liên quan trong quy trình RFQ.",
+      "source_url": "",
+      "status": "draft",
+      "contacts": [
+        {
+          "full_name": "Mateo Suero",
+          "title": "Global Procurement Manager - Packaging, Bunge",
+          "phone": "+54 3416 493852",
+          "email": "Mateo.suero@bunge.com",
+          "note": "Di động. LinkedIn: www.linkedin.com/in/mateo-francisco-suero"
+        }
+      ]
+    },
+    {
+      "title": "Đặt sản xuất túi tote canvas mini in logo – báo giá 1.000/3.000/5.000 chiếc (Los Angeles, Mỹ)",
+      "summary": "Crystal Wholesale Inc., nhà phân phối thực phẩm và bao bì tại Los Angeles (hơn 10 năm, cung cấp cho chuỗi nhượng quyền, siêu thị, café, nhà hàng ở Nam California), tìm nhà máy sản xuất trực tiếp túi tote canvas mini in logo cho một khách hàng. Cần báo giá FOB và CNF Los Angeles, mong phản hồi trong 2 tuần; nếu đơn đầu tốt sẽ đặt lặp lại và mở chương trình tương tự cho khách khác.",
+      "industry": "Dệt may & da giày",
+      "province": "Los Angeles, Mỹ",
+      "region": "Quốc tế",
+      "source_type": "Email hỏi hàng",
+      "scale": "Báo giá 3 mức: 1.000 / 3.000 / 5.000 chiếc",
+      "estimated_value": "Chưa xác định – chờ báo giá",
+      "deadline": null,
+      "score": 73,
+      "score_fit": 80,
+      "score_urgency": 70,
+      "score_trust": 70,
+      "enrich_round": 0,
+      "price": 29000,
+      "max_buyers": 3,
+      "buyer_name": "Crystal Wholesale Inc.",
+      "detail": "Người gửi: Thomas Lee, Crystal Wholesale Inc. (Los Angeles, California) – nhà phân phối thực phẩm và bao bì hơn 10 năm, cung cấp cho nhiều chuỗi nhượng quyền, siêu thị, café và nhà hàng ở Nam California, lượng khách lớn và ổn định.\n\nCần tìm đối tác nhà máy (sản xuất trực tiếp) làm túi tote canvas mini theo yêu cầu cho một khách hàng:\n- Kiểu dáng giống ảnh mẫu người mua đính kèm (ảnh không có trong dữ liệu này)\n- Kích thước khoảng 13\" dài x 11\" cao x 6\" rộng (33 x 28 x 15 cm)\n- Thân vải canvas màu tự nhiên, quai dài màu tương phản\n- In logo khách hàng mặt trước, 2–4 màu (file thiết kế gửi khi đặt hàng)\n\nNgười mua đề nghị gửi:\n1. Đơn giá cho 1.000 / 3.000 / 5.000 chiếc, cả giá FOB và CNF Los Angeles\n2. Có làm mẫu được không\n3. Xác nhận là nhà sản xuất (không phải công ty thương mại)\n\nThời hạn: mong nhận phản hồi trong 2 tuần kể từ ngày gửi thư. Chi tiết khác trao đổi sau khi có giá. Nếu đơn đầu tiên tốt, người mua dự kiến đặt lặp lại và triển khai chương trình tương tự cho các khách hàng khác.\n\nĐịa chỉ: 3155 Bandini Blvd, Vernon, CA 90058, USA.",
+      "source_url": "",
+      "status": "draft",
+      "contacts": [
+        {
+          "full_name": "Thomas Lee",
+          "title": "Đại diện Crystal Wholesale Inc.",
+          "phone": "",
+          "email": "thomas@crystalwholesaleinc.com",
+          "note": "Địa chỉ: 3155 Bandini Blvd, Vernon, CA 90058, USA"
+        }
+      ]
+    },
+    {
+      "title": "Hỏi giá sỉ bao PP không dệt loại 50 kg và 90 kg (Kenya)",
+      "summary": "Người mua tại Kenya hỏi giá bán buôn bao PP không dệt (PP non-woven bags) loại đựng 50 kg và 90 kg. Chưa nêu số lượng, quy cách vải, in ấn hay điều kiện giao hàng.",
+      "industry": "Bao bì & in ấn",
+      "province": "Kenya",
+      "region": "Quốc tế",
+      "source_type": "Email hỏi hàng",
+      "scale": "Bao loại 50 kg và 90 kg; số lượng chưa nêu",
+      "estimated_value": "Chưa xác định",
+      "deadline": null,
+      "score": 52,
+      "score_fit": 70,
+      "score_urgency": 40,
+      "score_trust": 45,
+      "enrich_round": 0,
+      "price": 29000,
+      "max_buyers": 3,
+      "buyer_name": "Ann Wairimu (người mua tại Kenya)",
+      "detail": "Người mua: Ann Wairimu (Kenya).\n\nNhu cầu: bao PP không dệt (PP non-woven bags) – cần giá bán buôn cho loại 50 kg và 90 kg.\n\nThông tin còn thiếu, nên hỏi lại khi liên hệ:\n- Số lượng mỗi loại và tần suất đặt hàng\n- Quy cách: kích thước, định lượng vải (gsm), màu, in ấn\n- Điều kiện giao hàng (FOB / CIF cảng Mombasa…) và thanh toán\n- Bao đựng 50–90 kg thường là bao PP dệt (woven); nên xác nhận người mua cần loại không dệt (non-woven) hay dệt\n\nNgười mua dùng email cá nhân (gmail), chưa có tên công ty.",
+      "source_url": "",
+      "status": "draft",
+      "contacts": [
+        {
+          "full_name": "Ann Wairimu",
+          "title": "Người mua",
+          "phone": "+2540717700465",
+          "email": "annmuthuita222@gmail.com",
+          "note": "SĐT ghi đúng như người mua gửi; số Kenya thường viết +254 717 700 465 (bỏ số 0 sau mã quốc gia)"
+        }
+      ]
+    },
+    {
+      "title": "Cung cấp giấy vệ sinh cuộn cho khách hàng Chính phủ Canada (yêu cầu sản xuất tại Canada)",
+      "summary": "Ennobin Inc tìm nhà sản xuất hoặc gia công giấy vệ sinh tại Canada cho một yêu cầu sắp tới của khách hàng Chính phủ Canada: cuộn tối thiểu 100 m, vừa hộp đựng sẵn có, tối thiểu 10% sợi tái chế, đục lỗ, gói từng cuộn, đóng thùng không quá 8 kg. Chỉ phù hợp doanh nghiệp có nhà máy hoặc đối tác gia công tại Canada.",
+      "industry": "Giấy & sản phẩm giấy",
+      "province": "Canada",
+      "region": "Quốc tế",
+      "source_type": "Dự án & gói thầu",
+      "scale": "Số lượng chưa nêu; đóng thùng tối đa 8 kg",
+      "estimated_value": "Chưa xác định",
+      "deadline": null,
+      "score": 43,
+      "score_fit": 20,
+      "score_urgency": 60,
+      "score_trust": 50,
+      "enrich_round": 0,
+      "price": 29000,
+      "max_buyers": 3,
+      "buyer_name": "Ennobin Inc (tìm nguồn cho khách hàng Chính phủ Canada)",
+      "detail": "Người gửi: Ryan Adamson, Ennobin Inc – đang tìm nguồn hàng cho một khách hàng Chính phủ Canada có yêu cầu sắp tới về giấy vệ sinh.\n\nQuy cách chính:\n- Cuộn dài tối thiểu 100 m\n- Đường kính cuộn không quá 4 3/8\" (~111 mm), chiều rộng không quá 4 1/2\" (~114 mm), để vừa hộp đựng đang dùng\n- Đường kính lõi từ 1 1/4\" đến 1 3/4\" (~32–44 mm)\n- Tối thiểu 10% sợi tái chế\n- Có đục lỗ, gói riêng từng cuộn, đóng thùng không quá 8 kg\n\nĐiều kiện: doanh nghiệp sản xuất hoặc gia công (convert) giấy vệ sinh theo quy cách trên TẠI CANADA. Doanh nghiệp Việt Nam chỉ phù hợp nếu có nhà máy hoặc đối tác gia công tại Canada.\n\nNgười mua đề nghị phản hồi: dòng sản phẩm, số lượng đặt tối thiểu (MOQ), khu vực phục vụ và thời gian giao hàng.",
+      "source_url": "",
+      "status": "draft",
+      "contacts": [
+        {
+          "full_name": "Ryan Adamson",
+          "title": "Ennobin Inc",
+          "phone": "877-236-6624",
+          "email": "ryan@ennobinmail.com",
+          "note": "Số 877 là tổng đài miễn cước Bắc Mỹ (+1 877-236-6624)"
+        }
+      ]
+    }
+  ]
+}

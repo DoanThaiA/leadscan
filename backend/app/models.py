@@ -182,6 +182,7 @@ OPP_SOURCES = [
     "Mạng xã hội & nhóm chat",
     "Website doanh nghiệp",
     "Nguồn chính thống",
+    "Email hỏi hàng",
 ]
 ENRICH_STATUSES = {"open": "Đang xử lý", "done": "Đã xong", "rejected": "Từ chối"}
 

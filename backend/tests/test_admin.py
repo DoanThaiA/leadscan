@@ -232,3 +232,27 @@ def test_cli_import_legacy(tmp_path):
         (c,) = db.scalars(select(Company)).unique().all()
         assert c.source == "landing-php" and c.contacts[0].email == "a@minhan.vn" and c.profile.offering
         assert c.created_at.hour == 4  # 11:57 giờ VN = 04:57 UTC
+
+
+def test_cli_import_opportunities(tmp_path):
+    from pathlib import Path
+
+    from app.models import Opportunity
+
+    data = Path(__file__).resolve().parents[1] / "data" / "opportunities" / "2026-11-08-hoi-hang-quoc-te.json"
+    assert cli_main(["import-opportunities", str(data), "--dry-run"]) == 0
+    with new_session() as db:
+        assert db.scalars(select(Opportunity)).first() is None  # chạy thử không lưu
+    assert cli_main(["import-opportunities", str(data)]) == 0
+    assert cli_main(["import-opportunities", str(data), "--publish"]) == 0  # chạy lại không nhân đôi
+    with new_session() as db:
+        rows = db.scalars(select(Opportunity).order_by(Opportunity.id)).unique().all()
+        assert len(rows) == 4 and {o.status for o in rows} == {"draft"}
+        assert [o.code for o in rows] == ["CH-000001", "CH-000002", "CH-000003", "CH-000004"]
+        bunge = rows[0]
+        assert bunge.source_type == "Dự án & gói thầu" and bunge.contacts[0].email == "Mateo.suero@bunge.com"
+        assert "\n" in bunge.detail
+
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps([{"title": "Thiếu nguồn hợp lệ", "source_type": "Không có"}]), encoding="utf-8")
+    assert cli_main(["import-opportunities", str(bad)]) == 1

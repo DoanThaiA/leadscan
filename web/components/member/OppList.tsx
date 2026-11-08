@@ -18,6 +18,7 @@ const SOURCE_BADGE: Record<string, [string, string, string]> = {
   "Mạng xã hội & nhóm chat": ["MX", "#9333EA", "#fff"],
   "Website doanh nghiệp": ["WB", "#475569", "#fff"],
   "Nguồn chính thống": ["CT", "#F59E0B", "#2B1B14"],
+  "Email hỏi hàng": ["EM", "#0F766E", "#fff"],
 };
 
 function badge(o: Opp): [string, string, string] {
