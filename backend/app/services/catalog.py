@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import utcnow
-from app.models import Activity, Company, MemberUser, Opportunity, Purchase
+from app.models import Activity, Company, MemberUser, Opportunity, Purchase, SavedOpportunity
 from app.schemas_commerce import OppFull, OppPreview
 from app.services import wallet
 
@@ -15,10 +15,11 @@ def membership_active(c: Company) -> bool:
     return bool(c.membership_expires_at and c.membership_expires_at > utcnow())
 
 
-def preview(o: Opportunity, purchased: bool = False) -> dict:
+def preview(o: Opportunity, purchased: bool = False, saved: bool = False) -> dict:
     p = OppPreview.model_validate(o)
     p.contact_count = len(o.contacts)
     p.purchased = purchased
+    p.saved = saved
     p.sold_out = o.sold_count >= o.max_buyers or o.status == "closed"
     return p.model_dump(mode="json")
 
@@ -37,6 +38,23 @@ def purchased_ids(db: Session, company_id: int, opp_ids: list[int]) -> set[int]:
     return set(
         db.scalars(select(Purchase.opportunity_id).where(Purchase.company_id == company_id, Purchase.opportunity_id.in_(opp_ids))).all()
     )
+
+
+def saved_ids(db: Session, company_id: int, opp_ids: list[int]) -> set[int]:
+    if not opp_ids:
+        return set()
+    return set(
+        db.scalars(
+            select(SavedOpportunity.opportunity_id).where(SavedOpportunity.company_id == company_id, SavedOpportunity.opportunity_id.in_(opp_ids))
+        ).all()
+    )
+
+
+def previews(db: Session, company_id: int, rows: list[Opportunity]) -> list[dict]:
+    """Xem trước kèm cờ đã mua / đã lưu của doanh nghiệp."""
+    ids = [o.id for o in rows]
+    owned, saved = purchased_ids(db, company_id, ids), saved_ids(db, company_id, ids)
+    return [preview(o, o.id in owned, o.id in saved) for o in rows]
 
 
 def buy(db: Session, member: MemberUser, opp_id: int) -> Purchase:

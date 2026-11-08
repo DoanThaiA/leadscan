@@ -351,3 +351,40 @@ def test_admin_tao_va_khoa_tai_khoan_thanh_vien(admin, client):
     assert TestClient(m.app).post("/api/member/auth/login", json={"email": "a@minhan.vn", "password": MEMBER_PW}).status_code == 403
     with new_session() as db:
         assert db.scalar(select(func.count()).select_from(MemberUser)) == 2
+
+
+def test_co_hoi_phu_hop_theo_tieu_chi(admin, member):
+    a = make_opp(admin, title="Carton Bắc Ninh", score=92, industry="Bao bì & in ấn", province="Bắc Ninh", source_type="App đăng mua")
+    make_opp(admin, title="Màng PE Hà Nội", score=65, industry="Bao bì & in ấn", province="Hà Nội", source_type="Mạng xã hội & nhóm chat")
+    make_opp(admin, title="Xe tải miền Nam", score=88, industry="Logistics & vận tải", province="Bình Dương", region="Miền Nam")
+
+    # ngành chọn lúc đăng ký đã được gợi ý sẵn
+    m = member.get("/api/member/match").json()
+    assert m["configured"] and "Bao bì & in ấn" in m["criteria"]["industries"]
+    assert "Bắc Ninh" in m["options"]["regions"] and m["options"]["sources"]
+
+    r = member.put("/api/member/match", json={"industries": ["Bao bì & in ấn"], "regions": ["Bắc Ninh", "Hà Nội"], "sizes": ["200+ nhân sự", "bừa"], "sources": [], "min_score": 70})
+    assert r.status_code == 200 and r.json()["criteria"]["sizes"] == ["200+ nhân sự"]
+    items = member.get("/api/member/matches").json()["items"]
+    assert [o["id"] for o in items] == [a]
+
+    member.put("/api/member/match", json={"regions": ["Miền Nam"]})
+    assert [o["title"] for o in member.get("/api/member/matches").json()["items"]] == ["Xe tải miền Nam"]
+
+    member.put("/api/member/match", json={})
+    assert member.get("/api/member/matches").json() == {"configured": False, "total": 0, "page": 1, "page_size": 10, "items": []}
+
+
+def test_them_vao_kho_cua_toi(admin, member):
+    a = make_opp(admin)
+    draft = make_opp(admin, status="draft")
+    assert member.post(f"/api/member/saved/{a}").status_code == 201
+    assert member.post(f"/api/member/saved/{a}").status_code == 201  # lưu lại không nhân đôi
+    assert member.post(f"/api/member/saved/{draft}").status_code == 404
+    saved = member.get("/api/member/saved").json()
+    assert saved["total"] == 1 and saved["items"][0]["saved"] is True and saved["items"][0]["saved_at"]
+    assert "buyer_name" not in saved["items"][0]  # chưa mua → vẫn ẩn thông tin
+    assert member.get(f"/api/member/opportunities/{a}").json()["opportunity"]["saved"] is True
+    assert member.get("/api/member/dashboard").json()["saved_count"] == 1
+    assert member.delete(f"/api/member/saved/{a}").status_code == 204
+    assert member.get("/api/member/saved").json()["total"] == 0

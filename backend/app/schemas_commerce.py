@@ -148,6 +148,7 @@ class OppPreview(Out):
     published_at: UtcDatetime | None
     contact_count: int = 0
     purchased: bool = False
+    saved: bool = False  # đã thêm vào kho của thành viên
     sold_out: bool = False
 
 

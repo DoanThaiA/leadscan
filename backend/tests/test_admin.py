@@ -221,7 +221,7 @@ def test_cli_create_admin(monkeypatch, capsys):
 
 
 def test_cli_import_legacy(tmp_path):
-    d, _ = normalize(valid_form())
+    d, _ = normalize(valid_form(offering="Thùng carton 5 lớp", target_regions=["Miền Bắc"]))
     (tmp_path / "LS-20261107-70C3.json").write_text(
         json.dumps({"code": "LS-20261107-70C3", "status": "synced", "created_at": "2026-11-07T11:57:21+07:00", "ip": "1.2.3.4", "data": d}, ensure_ascii=False),
         encoding="utf-8",

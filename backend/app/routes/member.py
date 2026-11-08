@@ -6,6 +6,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
@@ -23,10 +24,11 @@ from app.models import (
     PaymentOrder,
     Profile,
     Purchase,
+    SavedOpportunity,
     WalletTransaction,
 )
-from app.registration_form import REGIONS
-from app.schemas import LoginIn, PasswordChangeIn, ProfileIn, ProfileOut
+from app.registration_form import AREAS, CUSTOMER_SIZES, INDUSTRIES, REGIONS
+from app.schemas import LoginIn, PasswordChangeIn
 from app.schemas_commerce import EnrichIn, EnrichOut, InvoiceIn, OrderCreateIn, OrderOut, TxOut
 from app.security import DUMMY_HASH, add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
 from app.services import catalog, payments
@@ -151,7 +153,6 @@ def dashboard(user: MemberUser = Depends(current_member), db: Session = Depends(
     newest = db.scalars(
         select(Opportunity).options(selectinload(Opportunity.contacts)).where(Opportunity.status == "published").order_by(Opportunity.published_at.desc()).limit(6)
     ).unique().all()
-    owned = catalog.purchased_ids(db, cid, [o.id for o in newest])
     pending_orders = db.scalar(select(func.count()).select_from(PaymentOrder).where(PaymentOrder.company_id == cid, PaymentOrder.status == "pending", PaymentOrder.expires_at > utcnow())) or 0
     return {
         "me": _me(user),
@@ -159,7 +160,8 @@ def dashboard(user: MemberUser = Depends(current_member), db: Session = Depends(
         "points_spent": spent,
         "pending_orders": pending_orders,
         "recent_purchases": [{"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "opportunity": catalog.preview(p.opportunity, True)} for p in recent],
-        "new_opportunities": [catalog.preview(o, o.id in owned) for o in newest],
+        "new_opportunities": catalog.previews(db, cid, newest),
+        "saved_count": db.scalar(select(func.count()).select_from(SavedOpportunity).where(SavedOpportunity.company_id == cid)) or 0,
     }
 
 
@@ -211,7 +213,6 @@ def list_opportunities(
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.options(selectinload(Opportunity.contacts)).order_by(*order).offset((page - 1) * page_size).limit(page_size)).unique().all()
-    owned = catalog.purchased_ids(db, user.company_id, [o.id for o in rows])
     industries = db.scalars(
         select(Opportunity.industry).where(Opportunity.status == "published", Opportunity.industry != "").distinct().order_by(Opportunity.industry)
     ).all()
@@ -219,7 +220,7 @@ def list_opportunities(
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": [catalog.preview(o, o.id in owned) for o in rows],
+        "items": catalog.previews(db, user.company_id, rows),
         "facets": {"industries": industries, "regions": REGIONS, "sources": OPP_SOURCES},
     }
 
@@ -236,7 +237,8 @@ def _get_opp(db: Session, opp_id: int, company_id: int) -> tuple[Opportunity, Pu
 def get_opportunity(opp_id: int, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
     o, p = _get_opp(db, opp_id, user.company_id)
     if not p:
-        return {"opportunity": catalog.preview(o), "purchase": None}
+        saved = bool(catalog.saved_ids(db, user.company_id, [o.id]))
+        return {"opportunity": catalog.preview(o, saved=saved), "purchase": None}
     enrich = db.scalars(select(EnrichRequest).where(EnrichRequest.purchase_id == p.id).order_by(EnrichRequest.id.desc())).unique().all()
     return {
         "opportunity": catalog.full(o),
@@ -384,22 +386,148 @@ def request_invoice(code: str, body: InvoiceIn, user: MemberUser = Depends(curre
     return {"ok": True, "invoice_id": inv.id}
 
 
-# ================================================================== chân dung cơ hội
+# ================================================================== cơ hội phù hợp
 
 
-@router.get("/profile", response_model=ProfileOut | None)
-def get_profile(user: MemberUser = Depends(current_member)):
-    return user.company.profile
+def _norm_list(v: list[str], allowed: list[str] | None = None, limit: int = 20, max_len: int = 60) -> list[str]:
+    out: list[str] = []
+    for x in v:
+        x = " ".join(str(x).split())[:max_len]
+        if x and x not in out and (allowed is None or x in allowed):
+            out.append(x)
+    return out[:limit]
 
 
-@router.put("/profile", response_model=ProfileOut)
-def update_profile(body: ProfileIn, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+class MatchCriteria(BaseModel):
+    industries: list[str] = Field(default_factory=list, max_length=50)
+    regions: list[str] = Field(default_factory=list, max_length=50)
+    sizes: list[str] = Field(default_factory=list, max_length=10)
+    sources: list[str] = Field(default_factory=list, max_length=20)
+    min_score: int = Field(0, ge=0, le=100)
+
+    def cleaned(self) -> dict:
+        return {
+            "industries": _norm_list(self.industries),  # cho phép ngành tự nhập
+            "regions": _norm_list(self.regions),
+            "sizes": _norm_list(self.sizes, CUSTOMER_SIZES),
+            "sources": _norm_list(self.sources, OPP_SOURCES),
+            "min_score": self.min_score,
+        }
+
+
+def _criteria(user: MemberUser) -> dict:
+    raw = (user.company.profile.search if user.company.profile else None) or {}
+    try:
+        return MatchCriteria.model_validate(raw).cleaned()
+    except ValueError:
+        return MatchCriteria().cleaned()
+
+
+def _configured(c: dict) -> bool:
+    return bool(c["industries"] or c["regions"] or c["sources"])
+
+
+def _merge(*lists: list[str]) -> list[str]:
+    return list(dict.fromkeys(x for lst in lists for x in lst))
+
+
+@router.get("/match")
+def get_match(user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    c = _criteria(user)
+    opp_industries = db.scalars(
+        select(Opportunity.industry).where(Opportunity.status == "published", Opportunity.industry != "").distinct().order_by(Opportunity.industry)
+    ).all()
+    return {
+        "criteria": c,
+        "configured": _configured(c),
+        "options": {
+            "industries": _merge(c["industries"], INDUSTRIES, opp_industries),
+            "regions": _merge(AREAS, c["regions"]),
+            "sizes": CUSTOMER_SIZES,
+            "sources": OPP_SOURCES,
+            "min_scores": [0, 60, 70, 80, 90],
+        },
+    }
+
+
+@router.put("/match")
+def save_match(body: MatchCriteria, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
     c = user.company
     if c.profile is None:
         c.profile = Profile()
-    for k, v in body.model_dump().items():
-        setattr(c.profile, k, v)
-    db.add(Activity(company_id=c.id, kind="update", content=f"{user.full_name} cập nhật chân dung cơ hội"))
+    c.profile.search = body.cleaned()
+    db.add(Activity(company_id=c.id, kind="update", content=f"{user.full_name} cập nhật tiêu chí tìm cơ hội phù hợp"))
     db.commit()
-    db.refresh(c.profile)
-    return c.profile
+    return {"criteria": c.profile.search, "configured": _configured(c.profile.search)}
+
+
+@router.get("/matches")
+def list_matches(
+    sort: str = "score",  # score | new | price_asc
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=50),
+    user: MemberUser = Depends(current_member),
+    db: Session = Depends(get_db),
+):
+    """Cơ hội đang bán khớp tiêu chí đã lưu của thành viên."""
+    c = _criteria(user)
+    if not _configured(c):
+        return {"configured": False, "total": 0, "page": page, "page_size": page_size, "items": []}
+    stmt = select(Opportunity).where(Opportunity.status == "published")
+    if c["industries"]:
+        cols = (Opportunity.industry, Opportunity.title, Opportunity.summary)
+        stmt = stmt.where(or_(*[col.ilike(f"%{kw}%") for kw in c["industries"] for col in cols]))
+    if c["regions"] and "Toàn quốc" not in c["regions"]:
+        stmt = stmt.where(or_(Opportunity.province.in_(c["regions"]), Opportunity.region.in_(c["regions"])))
+    if c["sources"]:
+        stmt = stmt.where(Opportunity.source_type.in_(c["sources"]))
+    if c["min_score"]:
+        stmt = stmt.where(Opportunity.score >= c["min_score"])
+    order = {
+        "new": (Opportunity.published_at.desc(), Opportunity.id.desc()),
+        "price_asc": (Opportunity.price.asc(), Opportunity.id.desc()),
+    }.get(sort, (Opportunity.score.desc(), Opportunity.id.desc()))
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = db.scalars(
+        stmt.options(selectinload(Opportunity.contacts)).order_by(*order).offset((page - 1) * page_size).limit(page_size)
+    ).unique().all()
+    return {"configured": True, "total": total, "page": page, "page_size": page_size, "items": catalog.previews(db, user.company_id, rows)}
+
+
+# ================================================================== kho của tôi (cơ hội đã lưu)
+
+
+@router.get("/saved")
+def list_saved(
+    page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=50), user: MemberUser = Depends(current_member), db: Session = Depends(get_db)
+):
+    base = (
+        select(SavedOpportunity)
+        .join(Opportunity, Opportunity.id == SavedOpportunity.opportunity_id)
+        .where(SavedOpportunity.company_id == user.company_id, Opportunity.status != "draft")
+    )
+    total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
+    rows = db.scalars(base.order_by(SavedOpportunity.id.desc()).offset((page - 1) * page_size).limit(page_size)).unique().all()
+    items = catalog.previews(db, user.company_id, [r.opportunity for r in rows])
+    for it, r in zip(items, rows):
+        it["saved_at"] = _iso(r.created_at)
+    return {"total": total, "page": page, "page_size": page_size, "items": items}
+
+
+@router.post("/saved/{opp_id}", status_code=201)
+def save_opportunity(opp_id: int, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    o, _ = _get_opp(db, opp_id, user.company_id)
+    exists = db.scalar(select(SavedOpportunity.id).where(SavedOpportunity.company_id == user.company_id, SavedOpportunity.opportunity_id == o.id))
+    if not exists:
+        db.add(SavedOpportunity(company_id=user.company_id, opportunity_id=o.id, member_user_id=user.id))
+        try:
+            db.commit()
+        except IntegrityError:  # bấm 2 lần cùng lúc
+            db.rollback()
+    return {"ok": True, "saved": True}
+
+
+@router.delete("/saved/{opp_id}", status_code=204)
+def unsave_opportunity(opp_id: int, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    db.execute(delete(SavedOpportunity).where(SavedOpportunity.company_id == user.company_id, SavedOpportunity.opportunity_id == opp_id))
+    db.commit()

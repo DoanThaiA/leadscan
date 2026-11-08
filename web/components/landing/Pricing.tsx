@@ -26,13 +26,13 @@ export default function Pricing() {
               <h3>Quyền lợi thành viên</h3>
               <p className="desc">Mọi thứ bạn nhận được với gói thành viên 1 năm.</p>
               <ul>
-                <li><svg className="icon"><use href="#i-check" /></svg>Khảo sát & xây dựng chân dung cơ hội tốt không giới hạn</li>
+                <li><svg className="icon"><use href="#i-check" /></svg>Tìm cơ hội phù hợp theo tiêu chí riêng, sửa không giới hạn</li>
                 <li><svg className="icon"><use href="#i-check" /></svg>Truy cập kho cơ hội từ hơn 10 nhóm nguồn dữ liệu</li>
                 <li><svg className="icon"><use href="#i-check" /></svg>Xem trước tóm tắt & điểm chất lượng của mọi cơ hội</li>
                 <li><svg className="icon"><use href="#i-check" /></svg>Mua phiếu cơ hội từ 29.000đ, trừ thẳng vào số dư</li>
                 <li><svg className="icon"><use href="#i-check" /></svg>Yêu cầu AI enrich thêm đầu mối bất cứ lúc nào</li>
                 <li><svg className="icon"><use href="#i-check" /></svg>Nhận cơ hội từ đội trợ lý thực địa tại hội chợ</li>
-                <li><svg className="icon"><use href="#i-check" /></svg>Thông báo cơ hội mới khớp chân dung theo thời gian thực</li>
+                <li><svg className="icon"><use href="#i-check" /></svg>Thông báo cơ hội mới khớp tiêu chí theo thời gian thực</li>
                 <li><svg className="icon"><use href="#i-check" /></svg>Hỗ trợ tư vấn từ đội ngũ LeadScan</li>
               </ul>
               <a href="#faq" className="btn btn-outline">Xem câu hỏi thường gặp</a>

@@ -46,7 +46,22 @@ export default function OppDetailPage() {
     }
   }
 
-  if (error) return <div className="adm-card adm-empty">{error} <p style={{ marginTop: 12 }}><Link className="adm-btn" href="/thanh-vien/co-hoi">← Kho cơ hội</Link></p></div>;
+  const [saving, setSaving] = useState(false);
+  async function toggleSave() {
+    if (!d) return;
+    setSaving(true);
+    try {
+      if (d.opportunity.saved) await mapi.del(`/saved/${id}`);
+      else await mapi.post(`/saved/${id}`);
+      setD({ ...d, opportunity: { ...d.opportunity, saved: !d.opportunity.saved } });
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (error) return <div className="adm-card adm-empty">{error} <p style={{ marginTop: 12 }}><Link className="adm-btn" href="/thanh-vien/co-hoi">← Tất cả cơ hội</Link></p></div>;
   if (!d) return <div style={{ display: "grid", gap: 16 }}><Skeleton h={32} w="50%" /><Skeleton h={260} /></div>;
 
   const o = d.opportunity;
@@ -56,7 +71,7 @@ export default function OppDetailPage() {
   return (
     <>
       <Link href="/thanh-vien/co-hoi" className="muted" style={{ display: "inline-flex", gap: 6, alignItems: "center", marginBottom: 10 }}>
-        <Icon name="back" size={16} /> Kho cơ hội
+        <Icon name="back" size={16} /> Tất cả cơ hội
       </Link>
       <div className="adm-head">
         <div style={{ minWidth: 0 }}>
@@ -141,13 +156,19 @@ export default function OppDetailPage() {
                   <Icon name="ticket" size={16} /> Mua phiếu cơ hội
                 </button>
               )}
+              {!owned ? (
+                <button className={o.saved ? "adm-btn saved" : "adm-btn"} onClick={toggleSave} disabled={saving} aria-pressed={!!o.saved}
+                  style={o.saved ? { color: "var(--brand-600)", borderColor: "var(--brand-100)", background: "var(--brand-50)" } : undefined}>
+                  <Icon name="bookmark" size={16} /> {o.saved ? "Đã lưu trong kho" : "Thêm vào kho"}
+                </button>
+              ) : null}
               <p className="muted" style={{ fontSize: 12.5 }}>Số dư hiện tại: <b style={{ color: "var(--ink)" }}>{fmtPts(me.company.points_balance)}</b></p>
             </div>
           </section>
           <section className="adm-card">
             <div className="hd"><h2>Điểm chất lượng AI</h2><ScoreChip score={o.score} /></div>
             <div className="bd adm-meter">
-              {[["Khớp chân dung", o.score_fit], ["Độ cấp thiết", o.score_urgency], ["Độ tin cậy nguồn", o.score_trust]].map(([label, v]) => (
+              {[["Khớp nhu cầu", o.score_fit], ["Độ cấp thiết", o.score_urgency], ["Độ tin cậy nguồn", o.score_trust]].map(([label, v]) => (
                 <div key={label as string}>
                   <span>{label}</span>
                   <span className="track"><i style={{ width: `${v}%` }} /></span>

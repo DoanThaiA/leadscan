@@ -209,7 +209,7 @@ class CompanyOut(Out):
 class CompanyUpdateIn(BaseModel):
     name: Line | None = Field(None, min_length=1, max_length=150)
     tax_code: TaxCode | None = None
-    industry: Line | None = Field(None, min_length=1, max_length=100)
+    industry: Line | None = Field(None, min_length=1, max_length=300)
     company_size: str | None = None
     province: Line | None = Field(None, min_length=1, max_length=80)
     address: Line | None = Field(None, max_length=200)

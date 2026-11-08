@@ -84,6 +84,8 @@ export interface Opp {
   published_at: string | null;
   contact_count: number;
   purchased: boolean;
+  saved?: boolean; // đã thêm vào kho của thành viên
+  saved_at?: string;
   sold_out: boolean;
   // chỉ có sau khi mua (hoặc ở admin)
   buyer_name?: string;
@@ -93,6 +95,23 @@ export interface Opp {
   status?: "draft" | "published" | "closed";
   created_at?: string;
   updated_at?: string;
+}
+
+/** Tiêu chí "Cơ hội phù hợp" của thành viên */
+export interface Criteria {
+  industries: string[];
+  regions: string[];
+  sizes: string[];
+  sources: string[];
+  min_score: number;
+}
+
+export interface MatchList {
+  configured: boolean;
+  total: number;
+  page: number;
+  page_size: number;
+  items: Opp[];
 }
 
 export interface EnrichReq {

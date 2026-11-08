@@ -50,7 +50,7 @@ function Catalog() {
 
   const key = sp.toString();
   useEffect(() => {
-    document.title = "Kho cơ hội · LeadScan B2B";
+    document.title = "Tất cả cơ hội · LeadScan B2B";
     setData(null);
     mapi.get<ListResp>("/opportunities" + qs({ ...f, page_size: PAGE_SIZE })).then(setData, (e) => setError(errMsg(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -62,7 +62,7 @@ function Catalog() {
     <>
       <div className="adm-head">
         <div>
-          <h1>Kho cơ hội</h1>
+          <h1>Tất cả cơ hội</h1>
           <p>Xem trước tóm tắt & điểm chất lượng; mua phiếu để mở khoá bên có nhu cầu và đầu mối liên hệ.</p>
         </div>
       </div>

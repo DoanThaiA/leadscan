@@ -12,6 +12,33 @@ OPP_TYPES = [
     "Mạng xã hội & nhóm chat",
     "Nguồn chính thống (Trang vàng, Bộ Công Thương, Công báo)",
 ]
+# Ngành hàng gợi ý (form đăng ký chọn nhiều; tối đa MAX_INDUSTRIES)
+INDUSTRIES = [
+    "Sản xuất công nghiệp",
+    "Bao bì & in ấn",
+    "Nhựa & cao su",
+    "Điện tử & linh kiện",
+    "Cơ khí & máy móc",
+    "Hoá chất & vật tư",
+    "Dệt may & da giày",
+    "Xuất nhập khẩu",
+    "Thương mại & phân phối",
+    "Logistics & vận tải",
+    "Xây dựng & vật liệu",
+    "Thực phẩm & đồ uống",
+    "Nông sản & thuỷ sản",
+    "Dịch vụ B2B",
+    "Công nghệ thông tin",
+]
+MAX_INDUSTRIES = 8
+# Khu vực gợi ý cho "Tìm cơ hội phù hợp" (miền + tỉnh/thành hay có cơ hội)
+AREAS = [
+    "Toàn quốc", "Miền Bắc", "Miền Trung", "Miền Nam",
+    "Hà Nội", "TP. Hồ Chí Minh", "Hải Phòng", "Đà Nẵng", "Bắc Ninh", "Bắc Giang", "Hải Dương", "Hưng Yên",
+    "Vĩnh Phúc", "Thái Nguyên", "Quảng Ninh", "Đồng Nai", "Bình Dương", "Long An", "Bà Rịa - Vũng Tàu", "Cần Thơ",
+]
+# Quy mô khách hàng mục tiêu — lưu để AI chấm điểm "khớp nhu cầu", không dùng để lọc cứng
+CUSTOMER_SIZES = ["Dưới 50 nhân sự", "50–200 nhân sự", "200+ nhân sự", "Doanh nghiệp FDI"]
 SIZES = ["Dưới 10 nhân sự", "10–49 nhân sự", "50–199 nhân sự", "200–499 nhân sự", "Từ 500 nhân sự"]
 TICKETS = ["Dưới 50 phiếu", "50–200 phiếu", "200–1.000 phiếu", "Trên 1.000 phiếu", "Chưa xác định"]
 
@@ -39,6 +66,19 @@ def pick_list(v: object, allowed: list[str]) -> list[str]:
     return [a for a in allowed if a in given]
 
 
+def pick_industries(raw: dict) -> list[str]:
+    """Ngành hàng chọn nhiều: nhận list (mới) hoặc chuỗi cách nhau dấu phẩy (bản cũ); bỏ trùng, giữ thứ tự."""
+    v = raw.get("industries")
+    if not isinstance(v, list):
+        v = str(raw.get("industry") or "").split(",")
+    out: list[str] = []
+    for x in v:
+        x = clean1(x, 60)
+        if x and x.lower() not in {o.lower() for o in out}:
+            out.append(x)
+    return out[:MAX_INDUSTRIES]
+
+
 def _valid_url(url: str) -> bool:
     p = urlparse(url)
     return p.scheme in ("http", "https") and "." in (p.hostname or "") and " " not in url
@@ -49,7 +89,7 @@ def normalize(raw: dict) -> tuple[dict, dict[str, str]]:
     d = {
         "company_name": clean1(raw.get("company_name"), 150),
         "tax_code": re.sub(r"[^0-9\-]", "", clean(raw.get("tax_code"), 20)),
-        "industry": clean1(raw.get("industry"), 100),
+        "industries": pick_industries(raw),
         "company_size": clean1(raw.get("company_size"), 40),
         "province": clean1(raw.get("province"), 80),
         "address": clean1(raw.get("address"), 200),
@@ -66,18 +106,21 @@ def normalize(raw: dict) -> tuple[dict, dict[str, str]]:
         "notes": clean(raw.get("notes"), 1000),
     }
 
+    d["industry"] = ", ".join(d["industries"])[:300]
+
+    # Form đăng ký chỉ còn thông tin cơ bản; tiêu chí tìm cơ hội nhập trong cổng thành viên.
+    # offering/target_customers/... vẫn nhận nếu có (dữ liệu bản PHP cũ) nhưng không bắt buộc.
     errors: dict[str, str] = {}
     required = {
         "company_name": "Vui lòng nhập tên doanh nghiệp.",
-        "industry": "Vui lòng nhập ngành hàng.",
         "province": "Vui lòng nhập tỉnh/thành.",
         "contact_name": "Vui lòng nhập họ tên người liên hệ.",
-        "offering": "Vui lòng mô tả sản phẩm/dịch vụ của bạn.",
-        "target_customers": "Vui lòng mô tả khách hàng mục tiêu.",
     }
     for field, msg in required.items():
         if d[field] == "":
             errors[field] = msg
+    if not d["industries"]:
+        errors["industries"] = "Vui lòng chọn ít nhất 1 ngành hàng."
     if d["company_size"] not in SIZES:
         errors["company_size"] = "Vui lòng chọn quy mô."
     if not re.fullmatch(r"\d{10}(-?\d{3})?", d["tax_code"]):

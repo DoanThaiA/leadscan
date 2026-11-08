@@ -2,12 +2,13 @@
 
 Company            doanh nghiệp đăng ký / thành viên
   ├─ Contact        người liên hệ (1 người chính + người khác)
-  ├─ Profile        chân dung cơ hội muốn tìm (từ form đăng ký, sửa được)
+  ├─ Profile        tiêu chí tìm cơ hội phù hợp (thành viên chọn trong cổng)
   └─ Activity       lịch sử: tạo hồ sơ, đổi trạng thái, ghi chú chăm sóc
   ├─ MemberUser     tài khoản đăng nhập cổng thành viên
   ├─ WalletTransaction   sổ cái điểm (mỗi lần cộng/trừ 1 dòng, không sửa/xoá)
   ├─ PaymentOrder   đơn nạp tiền / phí thành viên (thanh toán qua InfoCMS)
   │    └─ InvoiceRequest  thông tin xuất hoá đơn (xuất thủ công)
+  ├─ SavedOpportunity   cơ hội thành viên thêm vào kho (xem/mua sau)
   └─ Purchase       phiếu cơ hội đã mua
        └─ EnrichRequest   yêu cầu tìm thêm đầu mối
 Opportunity        cơ hội kinh doanh (nhập tay; sau này do crawl + AI tạo)
@@ -75,7 +76,7 @@ class Company(Base):
     name: Mapped[str] = mapped_column(String(150))
     tax_code: Mapped[str] = mapped_column(String(20))
     tax_key: Mapped[str] = mapped_column(String(20), unique=True)  # chỉ chữ số, chống đăng ký trùng
-    industry: Mapped[str] = mapped_column(String(100))
+    industry: Mapped[str] = mapped_column(String(300))  # nhiều ngành, cách nhau ", "
     company_size: Mapped[str] = mapped_column(String(40))
     province: Mapped[str] = mapped_column(String(80))
     address: Mapped[str] = mapped_column(String(200), default="")
@@ -128,6 +129,9 @@ class Profile(Base):
     opp_types: Mapped[list] = mapped_column(JSON, default=list)
     expected_tickets: Mapped[str] = mapped_column(String(40), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+    # Tiêu chí "Tìm cơ hội phù hợp" thành viên chọn trong cổng:
+    # {"industries": [...], "regions": [...], "sizes": [...], "sources": [...], "min_score": 70}
+    search: Mapped[dict] = mapped_column(JSON, default=dict)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
     company: Mapped[Company] = relationship(back_populates="profile")
@@ -357,6 +361,22 @@ class Purchase(Base):
     opportunity: Mapped[Opportunity] = relationship(lazy="joined")
 
     __table_args__ = (UniqueConstraint("company_id", "opportunity_id", name="uq_purchase_once"),)
+
+
+class SavedOpportunity(Base):
+    """Cơ hội thành viên "thêm vào kho" để xem/mua sau."""
+
+    __tablename__ = "saved_opportunities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    opportunity_id: Mapped[int] = mapped_column(ForeignKey("opportunities.id", ondelete="CASCADE"), index=True)
+    member_user_id: Mapped[int | None] = mapped_column(ForeignKey("member_users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    opportunity: Mapped[Opportunity] = relationship(lazy="joined")
+
+    __table_args__ = (UniqueConstraint("company_id", "opportunity_id", name="uq_saved_once"),)
 
 
 class EnrichRequest(Base):

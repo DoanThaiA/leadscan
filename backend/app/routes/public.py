@@ -133,6 +133,8 @@ def _save(data: dict, ip: str, ua: str, cfg: Settings) -> tuple[int, str]:
                 Contact(full_name=d["contact_name"], position=d["position"], email=d["email"], phone=d["phone"], is_primary=True)
             )
             company.profile = Profile(
+                # ngành hàng đã chọn khi đăng ký → gợi ý sẵn cho "Tìm cơ hội phù hợp"
+                search={"industries": d["industries"]},
                 offering=d["offering"],
                 target_customers=d["target_customers"],
                 target_regions=d["target_regions"],

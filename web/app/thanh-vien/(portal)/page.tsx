@@ -3,17 +3,18 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { Skeleton } from "@/components/admin/ui";
+import { Icon, Skeleton } from "@/components/admin/ui";
 import { useMember } from "@/components/member/MemberContext";
-import { OppCard } from "@/components/member/OppCard";
+import { OppList } from "@/components/member/OppList";
 import { fmtDate, fromNow } from "@/lib/admin/format";
-import { fmtPts, type Opp } from "@/lib/commerce";
-import { errMsg, mapi } from "@/lib/member/api";
+import { fmtPts, type MatchList, type Opp } from "@/lib/commerce";
+import { errMsg, mapi, qs } from "@/lib/member/api";
 
 interface Dash {
   purchased_count: number;
   points_spent: number;
   pending_orders: number;
+  saved_count: number;
   recent_purchases: { id: number; price: number; created_at: string; opportunity: Opp }[];
   new_opportunities: Opp[];
 }
@@ -21,11 +22,13 @@ interface Dash {
 export default function MemberHome() {
   const { me } = useMember();
   const [d, setD] = useState<Dash | null>(null);
+  const [mt, setMt] = useState<MatchList | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     document.title = "Tổng quan · LeadScan B2B";
     mapi.get<Dash>("/dashboard").then(setD, (e) => setError(errMsg(e)));
+    mapi.get<MatchList>("/matches" + qs({ page_size: 5 })).then(setMt, (e) => setError(errMsg(e)));
   }, []);
 
   const c = me.company;
@@ -38,7 +41,7 @@ export default function MemberHome() {
         </div>
         <div className="adm-actions">
           <Link className="adm-btn" href="/thanh-vien/nap-tien">Nạp điểm</Link>
-          <Link className="adm-btn primary" href="/thanh-vien/co-hoi">Vào kho cơ hội</Link>
+          <Link className="adm-btn primary" href="/thanh-vien/phu-hop"><Icon name="scan" size={16} /> Tìm cơ hội phù hợp</Link>
         </div>
       </div>
       {error ? <div className="adm-alert" style={{ marginBottom: 16 }}>{error}</div> : null}
@@ -60,23 +63,30 @@ export default function MemberHome() {
           <span>Đã dùng {d ? fmtPts(d.points_spent) : "…"}</span>
         </div>
         <div className="adm-card adm-stat">
-          <small>Đơn chờ thanh toán</small>
-          <b>{d ? d.pending_orders : "…"}</b>
-          <span><Link href="/thanh-vien/vi" style={{ color: "var(--brand-600)" }}>Xem ví & đơn nạp</Link></span>
+          <small>Kho của tôi</small>
+          <b>{d ? d.saved_count.toLocaleString("vi-VN") : "…"}</b>
+          <span><Link href="/thanh-vien/kho" style={{ color: "var(--brand-600)" }}>Cơ hội đã lưu</Link>{d?.pending_orders ? ` · ${d.pending_orders} đơn chờ thanh toán` : ""}</span>
         </div>
       </div>
 
-      <section style={{ marginBottom: 20 }}>
-        <div className="adm-head" style={{ marginBottom: 12 }}>
-          <h2>Cơ hội mới nhất</h2>
-          <Link className="adm-btn sm" href="/thanh-vien/co-hoi">Xem tất cả</Link>
+      <section className="adm-card mt-list" style={{ marginBottom: 20 }}>
+        <div className="mt-top">
+          <h2>{mt?.configured ? <><span>{mt.total.toLocaleString("vi-VN")}</span> cơ hội phù hợp</> : "Cơ hội phù hợp"}</h2>
+          <Link className="adm-btn sm" href="/thanh-vien/phu-hop">{mt?.configured ? "Xem tất cả & sửa tiêu chí" : "Nhập tiêu chí"}</Link>
         </div>
-        {!d ? (
-          <div className="adm-opps">{[1, 2, 3].map((i) => <Skeleton key={i} h={190} />)}</div>
-        ) : d.new_opportunities.length ? (
-          <div className="adm-opps">{d.new_opportunities.map((o) => <OppCard key={o.id} o={o} />)}</div>
+        {!mt ? (
+          <div style={{ display: "grid", gap: 10 }}>{[1, 2, 3].map((i) => <Skeleton key={i} h={56} />)}</div>
+        ) : !mt.configured ? (
+          <div className="mt-empty">
+            <Icon name="scan" />
+            <b style={{ color: "var(--ink)" }}>Cho LeadScan biết bạn muốn tìm cơ hội nào</b>
+            <span>Chọn ngành hàng, khu vực, loại cơ hội — AI lọc và chấm điểm cơ hội phù hợp cho bạn.</span>
+            <Link className="adm-btn primary" href="/thanh-vien/phu-hop">Nhập tiêu chí tìm cơ hội</Link>
+          </div>
+        ) : mt.items.length ? (
+          <OppList items={mt.items} onChange={(o) => setMt({ ...mt, items: mt.items.map((x) => (x.id === o.id ? o : x)) })} />
         ) : (
-          <div className="adm-card adm-empty">Chưa có cơ hội nào đang mở bán. Hệ thống sẽ cập nhật liên tục.</div>
+          <div className="mt-empty">Chưa có cơ hội khớp tiêu chí. <Link href="/thanh-vien/phu-hop" style={{ color: "var(--brand-600)" }}>Điều chỉnh tiêu chí</Link></div>
         )}
       </section>
 

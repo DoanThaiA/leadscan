@@ -9,7 +9,7 @@ export default function Footer() {
           <div className="foot-grid">
             <div>
               <a href="#top" className="logo" aria-label="LeadScan – về đầu trang"><Logo height={30} /></a>
-              <p>Nền tảng scan cơ hội kinh doanh B2B bằng AI: khảo sát nhu cầu, thu thập đa nguồn, làm giàu & chấm điểm, bán phiếu cơ hội theo chất lượng.</p>
+              <p>Nền tảng scan cơ hội kinh doanh B2B bằng AI: chọn tiêu chí cơ hội, thu thập đa nguồn, làm giàu & chấm điểm, bán phiếu cơ hội theo chất lượng.</p>
               <a href="#dang-ky" className="btn btn-primary btn-sm">Đăng ký thành viên</a>
             </div>
             <div><h4>Sản phẩm</h4><ul><li><a href="#quy-trinh">Quy trình</a></li><li><a href="#phieu-co-hoi">Phiếu cơ hội</a></li><li><a href="#bang-gia">Bảng giá</a></li></ul></div>

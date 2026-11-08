@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: "LeadScan B2B – Scan cơ hội kinh doanh cho doanh nghiệp bằng AI",
   description:
-    "LeadScanB2B.com: làm khảo sát nhu cầu, AI quét hơn 10 nhóm nguồn dữ liệu, làm giàu và chấm điểm từng cơ hội kinh doanh. Phiếu cơ hội chỉ từ 29.000đ.",
+    "LeadScanB2B.com: chọn tiêu chí cơ hội bạn muốn tìm, AI quét hơn 10 nhóm nguồn dữ liệu, làm giàu và chấm điểm từng cơ hội kinh doanh. Phiếu cơ hội chỉ từ 29.000đ.",
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     siteName: "LeadScan B2B",
     url: "/",
     title: "LeadScan B2B – Scan cơ hội kinh doanh cho doanh nghiệp bằng AI",
-    description: "Khảo sát nhu cầu → AI thu thập đa nguồn → Enrich & Scoring → mua phiếu cơ hội từ 29.000đ.",
+    description: "Chọn tiêu chí → AI thu thập đa nguồn → Enrich & Scoring → mua phiếu cơ hội từ 29.000đ.",
   },
   twitter: { card: "summary_large_image" },
 };

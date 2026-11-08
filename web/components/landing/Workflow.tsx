@@ -8,39 +8,38 @@ export default function Workflow() {
         <div className="container">
           <div className="section-head reveal">
             <span className="pill-tag">Quy trình khép kín</span>
-            <h2 className="h-display h2">Từ khảo sát đến <b>phiếu cơ hội trong tay</b></h2>
+            <h2 className="h-display h2">Từ tiêu chí đến <b>phiếu cơ hội trong tay</b></h2>
             <p>Bốn bước: bạn mô tả cơ hội mình muốn, AI tìm, làm giàu và chấm điểm, còn bạn chọn mua đúng phiếu mình cần.</p>
           </div>
         </div>
         <div className="wf-tabs">
           <div className="container">
-            <a href="#b1" className="wf-tab active"><svg className="icon"><use href="#i-clipboard" /></svg>1. Khảo sát</a>
+            <a href="#b1" className="wf-tab active"><svg className="icon"><use href="#i-filter" /></svg>1. Chọn tiêu chí</a>
             <a href="#b2" className="wf-tab"><svg className="icon"><use href="#i-bot" /></svg>2. AI thu thập</a>
             <a href="#b3" className="wf-tab"><svg className="icon"><use href="#i-spark" /></svg>3. Enrich & Scoring</a>
-            <a href="#b4" className="wf-tab"><svg className="icon"><use href="#i-ticket" /></svg>4. Chọn & mua phiếu</a>
+            <a href="#b4" className="wf-tab"><svg className="icon"><use href="#i-ticket" /></svg>4. Mua hoặc lưu kho</a>
           </div>
         </div>
         <div className="container">
           {/* B1 */}
           <div className="step reveal" id="b1">
             <div>
-              <span className="pill-tag">Bước 1 · Khảo sát</span>
-              <h3 style={{ marginTop: "14px" }}>Làm khảo sát, <b>vẽ chân dung cơ hội tốt</b></h3>
-              <p>Bạn trả lời vài câu hỏi về sản phẩm, khách hàng mục tiêu, khu vực và ngân sách. Từ đó hệ thống xây dựng “chân dung cơ hội tốt” riêng cho doanh nghiệp bạn — đây chính là bộ lọc cho AI.</p>
-              <div className="feat"><h4><svg className="icon"><use href="#i-clipboard" /></svg>Khảo sát thông minh</h4><p>Câu hỏi được gợi ý theo ngành hàng, hoàn thành trong khoảng 5 phút.</p></div>
-              <div className="feat"><h4><svg className="icon"><use href="#i-filter" /></svg>Bộ lọc riêng cho bạn</h4><p>Chân dung cơ hội tốt được dùng để lọc và chấm điểm mọi dữ liệu thu về.</p></div>
+              <span className="pill-tag">Bước 1 · Chọn tiêu chí</span>
+              <h3 style={{ marginTop: "14px" }}>Chọn tiêu chí, <b>AI lọc cơ hội phù hợp</b></h3>
+              <p>Đăng ký chỉ cần thông tin cơ bản. Vào cổng thành viên, mục “Cơ hội phù hợp”, bạn chọn ngành hàng, khu vực, quy mô khách hàng, loại cơ hội và điểm tối thiểu — đây chính là bộ lọc cho AI.</p>
+              <div className="feat"><h4><svg className="icon"><use href="#i-clipboard" /></svg>Chọn bằng vài cú bấm</h4><p>Tiêu chí dạng chip chọn nhiều, ngành hàng lúc đăng ký được điền sẵn. Sửa lại bất cứ lúc nào.</p></div>
+              <div className="feat"><h4><svg className="icon"><use href="#i-filter" /></svg>Bộ lọc riêng cho bạn</h4><p>Tiêu chí của bạn được dùng để lọc và chấm điểm mọi dữ liệu thu về.</p></div>
               <a href="#dang-ky" className="link-arrow" style={{ marginTop: "10px" }}>Đăng ký để bắt đầu <svg className="icon"><use href="#i-arrow" /></svg></a>
             </div>
             <div className="visual">
               <div className="card">
-                <h5>Khảo sát nhu cầu <span className="pill-tag">Câu 3/8</span></h5>
-                <div className="q"><label>Bạn đang cung cấp sản phẩm/dịch vụ gì?</label><div className="opts"><span className="opt on">Bao bì carton</span><span className="opt on">Màng PE</span><span className="opt">Khay nhựa</span></div></div>
-                <div className="q"><label>Khách hàng lý tưởng của bạn là ai?</label><div className="opts"><span className="opt on">Nhà máy điện tử</span><span className="opt">Thực phẩm</span><span className="opt on">Doanh nghiệp FDI</span></div></div>
-                <div className="q"><label>Khu vực ưu tiên</label><div className="opts"><span className="opt on">Miền Bắc</span><span className="opt">Miền Trung</span><span className="opt">Miền Nam</span></div></div>
-                <div className="progress-row"><div className="bar"><i style={{ width: "38%" }}></i></div>38%</div>
+                <h5>Tìm cơ hội phù hợp <span className="pill-tag">5 tiêu chí</span></h5>
+                <div className="q"><label>Ngành hàng</label><div className="opts"><span className="opt on">Bao bì &amp; in ấn</span><span className="opt on">Nhựa &amp; cao su</span><span className="opt">Điện tử</span></div></div>
+                <div className="q"><label>Quy mô khách hàng</label><div className="opts"><span className="opt">50–200 nhân sự</span><span className="opt on">200+ nhân sự</span><span className="opt on">Doanh nghiệp FDI</span></div></div>
+                <div className="q"><label>Khu vực</label><div className="opts"><span className="opt on">Bắc Ninh</span><span className="opt on">Hà Nội</span><span className="opt">Hải Phòng</span></div></div>
               </div>
               <div className="card">
-                <div className="persona"><span className="ic"><svg className="icon"><use href="#i-users" /></svg></span><div><b>Chân dung cơ hội tốt</b>Nhà máy điện tử/FDI tại miền Bắc, quy mô 200+ nhân sự, đang cần bao bì carton & màng PE số lượng lớn.</div></div>
+                <div className="persona"><span className="ic"><svg className="icon"><use href="#i-users" /></svg></span><div><b>128 cơ hội phù hợp</b>Bao bì & nhựa tại Bắc Ninh, Hà Nội — khách hàng 200+ nhân sự/FDI, điểm từ 70. Mua ngay hoặc thêm vào kho.</div></div>
               </div>
             </div>
           </div>
@@ -50,7 +49,7 @@ export default function Workflow() {
             <div>
               <span className="pill-tag">Bước 2 · AI thu thập</span>
               <h3 style={{ marginTop: "14px" }}>Hệ thống Crawl AI <b>quét mọi nguồn dữ liệu</b></h3>
-              <p>Dựa trên bộ lọc từ khảo sát, hệ thống Crawl AI liên tục thu thập tín hiệu kinh doanh từ web, mạng xã hội, hội nhóm, cổng thông tin nhà nước và đội trợ lý thực địa — sau đó lưu vào cơ sở dữ liệu cơ hội.</p>
+              <p>Dựa trên tiêu chí bạn chọn, hệ thống Crawl AI liên tục thu thập tín hiệu kinh doanh từ web, mạng xã hội, hội nhóm, cổng thông tin nhà nước và đội trợ lý thực địa — sau đó lưu vào cơ sở dữ liệu cơ hội.</p>
               <div className="feat"><h4><svg className="icon"><use href="#i-globe" /></svg>Hơn 10 nhóm nguồn dữ liệu</h4><p>Web trả phí, mạng xã hội, nhóm chat, trang vàng, Bộ Công Thương, công báo, dự án thầu…</p></div>
               <div className="feat"><h4><svg className="icon"><use href="#i-db" /></svg>Cơ sở dữ liệu cơ hội</h4><p>Dữ liệu được chuẩn hoá, loại trùng và cập nhật liên tục, hai chiều với hệ thống AI.</p></div>
             </div>
@@ -77,7 +76,7 @@ export default function Workflow() {
             <div>
               <span className="pill-tag">Bước 3 · Enrich & Scoring</span>
               <h3 style={{ marginTop: "14px" }}>AI làm giàu dữ liệu <b>và chấm điểm từng cơ hội</b></h3>
-              <p>Mỗi cơ hội trong cơ sở dữ liệu được AI bổ sung thông tin doanh nghiệp, người liên hệ, mức độ cấp thiết — rồi chấm điểm chất lượng dựa trên mức độ khớp với chân dung cơ hội tốt của bạn.</p>
+              <p>Mỗi cơ hội trong cơ sở dữ liệu được AI bổ sung thông tin doanh nghiệp, người liên hệ, mức độ cấp thiết — rồi chấm điểm chất lượng dựa trên mức độ khớp với tiêu chí của bạn.</p>
               <div className="feat"><h4><svg className="icon"><use href="#i-spark" /></svg>AI Enrich nhiều vòng</h4><p>Mỗi vòng enrich bổ sung thêm thông tin và đầu mối liên hệ có giá trị hơn.</p></div>
               <div className="feat"><h4><svg className="icon"><use href="#i-gauge" /></svg>AI Quality Scoring</h4><p>Điểm 0–100 giúp bạn biết cơ hội nào đáng ưu tiên trước.</p></div>
             </div>
@@ -94,7 +93,7 @@ export default function Workflow() {
                 <div className="gauge">
                   <div className="ring" style={{ "--p": "88" } as CSSProperties}><div>88<small>/100</small></div></div>
                   <div className="crit">
-                    <div><span>Khớp chân dung</span><b>95</b></div><div className="bar"><i style={{ width: "95%" }}></i></div>
+                    <div><span>Khớp nhu cầu</span><b>95</b></div><div className="bar"><i style={{ width: "95%" }}></i></div>
                     <div><span>Độ cấp thiết</span><b>86</b></div><div className="bar"><i style={{ width: "86%" }}></i></div>
                     <div><span>Độ tin cậy nguồn</span><b>82</b></div><div className="bar"><i style={{ width: "82%" }}></i></div>
                   </div>
@@ -106,9 +105,9 @@ export default function Workflow() {
           {/* B4 */}
           <div className="step rev reveal" id="b4">
             <div>
-              <span className="pill-tag">Bước 4 · Chọn & mua</span>
+              <span className="pill-tag">Bước 4 · Mua hoặc lưu</span>
               <h3 style={{ marginTop: "14px" }}>Chọn, định giá <b>và mua phiếu cơ hội</b></h3>
-              <p>Bạn xem trước thông tin tóm tắt của từng cơ hội, chọn những cơ hội phù hợp và mua phiếu để mở khoá đầy đủ đầu mối liên hệ. Giá trả theo chất lượng từng cơ hội — tiền được trừ dần vào số dư thành viên.</p>
+              <p>Bạn xem trước thông tin tóm tắt của từng cơ hội, mua phiếu để mở khoá đầy đủ đầu mối liên hệ, hoặc thêm vào kho để xem lại sau. Giá trả theo chất lượng từng cơ hội — tiền được trừ dần vào số dư thành viên.</p>
               <div className="feat"><h4><svg className="icon"><use href="#i-ticket" /></svg>Trả theo chất lượng từng cơ hội</h4><p>Giá phiếu từ 29.000đ, tăng dần theo mỗi vòng enrich.</p></div>
               <div className="feat"><h4><svg className="icon"><use href="#i-plus" /></svg>Yêu cầu enrich thêm bất cứ lúc nào</h4><p>Cần thêm đầu mối? Bấm “Enrich” để AI tìm tiếp cho bạn.</p></div>
               <a href="#phieu-co-hoi" className="link-arrow" style={{ marginTop: "10px" }}>Xem chi tiết phiếu cơ hội <svg className="icon"><use href="#i-arrow" /></svg></a>

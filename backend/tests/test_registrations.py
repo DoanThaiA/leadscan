@@ -22,7 +22,8 @@ def test_dang_ky_hop_le_luu_doanh_nghiep_lien_he_chan_dung(client):
         assert c.website == "https://minhan.vn" and c.tax_key == "0101234567"
         (contact,) = c.contacts
         assert contact.is_primary and contact.email == "a@minhan.vn" and contact.phone == "0901234567"
-        assert c.profile.target_regions == ["Miền Bắc"] and c.profile.opp_types == ["Dự án & gói thầu"]
+        assert c.industry == "Bao bì & in ấn, Nhựa & cao su"
+        assert c.profile.search == {"industries": ["Bao bì & in ấn", "Nhựa & cao su"]}  # gợi ý sẵn cho "Cơ hội phù hợp"
         assert [a.kind for a in c.activities] == ["created"]
 
 
@@ -31,6 +32,16 @@ def test_loi_kiem_tra_tra_ve_theo_truong(client):
     assert r.status_code == 422
     assert set(r.json()["fields"]) == {"tax_code", "email", "phone", "agree", "company_size"}
     assert _companies() == []
+
+
+def test_bat_buoc_chon_nganh_hang(client):
+    r = client.post("/api/registrations", json=valid_form(industries=[]))
+    assert r.status_code == 422 and set(r.json()["fields"]) == {"industries"}
+    # bản cũ gửi chuỗi "industry" vẫn nhận, tách theo dấu phẩy
+    r = client.post("/api/registrations", json={**valid_form(industries=None), "industry": "Bao bì, Logistics, bao bì"})
+    assert r.status_code == 200
+    with new_session() as db:
+        assert db.scalar(select(Company.industry)) == "Bao bì, Logistics"
 
 
 def test_json_khong_hop_le(client):

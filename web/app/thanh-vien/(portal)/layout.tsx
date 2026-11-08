@@ -10,14 +10,17 @@ import { fmtPts } from "@/lib/commerce";
 import { mapi } from "@/lib/member/api";
 import { Logo } from "@/components/brand/Logo";
 
+// Giữ khớp với ảnh minh hoạ dashboard ở trang chủ (components/landing/Hero.tsx)
 const NAV = [
   { href: "/thanh-vien", label: "Tổng quan", icon: "home", exact: true },
-  { href: "/thanh-vien/co-hoi", label: "Kho cơ hội", icon: "grid" },
+  { href: "/thanh-vien/phu-hop", label: "Cơ hội phù hợp", icon: "scan" },
+  { href: "/thanh-vien/kho", label: "Kho của tôi", icon: "bookmark" },
   { href: "/thanh-vien/phieu", label: "Phiếu đã mua", icon: "ticket" },
-  { href: "/thanh-vien/vi", label: "Ví & nạp tiền", icon: "wallet" },
-  { href: "/thanh-vien/chan-dung", label: "Chân dung cơ hội", icon: "target" },
+  { href: "/thanh-vien/co-hoi", label: "Tất cả cơ hội", icon: "grid" },
+  { href: "/thanh-vien/vi", label: "Số dư tài khoản", icon: "wallet" },
   { href: "/thanh-vien/tai-khoan", label: "Tài khoản", icon: "user" },
 ];
+const MEMBERSHIP_POINTS = 10_000_000;
 
 function Shell({ children }: { children: ReactNode }) {
   const { me } = useMember();
@@ -44,15 +47,6 @@ function Shell({ children }: { children: ReactNode }) {
         <Link href="/thanh-vien" className="adm-logo">
           <Logo height={24} />
         </Link>
-        <Link href="/thanh-vien/vi" className="adm-card" style={{ padding: 12, margin: "0 2px 10px", display: "grid", gap: 2 }}>
-          <span className="muted" style={{ fontSize: 12 }}>Số dư điểm</span>
-          <b style={{ font: "700 20px/1.2 var(--head)", color: "var(--ink)", fontVariantNumeric: "tabular-nums" }}>
-            {me.company.points_balance.toLocaleString("vi-VN")}
-          </b>
-          <span style={{ fontSize: 12, color: me.company.membership_active ? "var(--ok)" : "var(--danger)" }}>
-            {me.company.membership_active ? "Thành viên đang hiệu lực" : "Chưa kích hoạt thành viên"}
-          </span>
-        </Link>
         <nav className="adm-nav" aria-label="Cổng thành viên">
           {NAV.map((n) => {
             const on = n.exact ? path === n.href : path.startsWith(n.href);
@@ -64,6 +58,14 @@ function Shell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
+        <Link href="/thanh-vien/vi" className="mt-credit">
+          <small>Số dư thành viên còn lại</small>
+          <b>{fmtPts(me.company.points_balance)}</b>
+          <span className="bar"><i style={{ width: `${Math.min(100, Math.round((me.company.points_balance / MEMBERSHIP_POINTS) * 100))}%` }} /></span>
+          <span style={{ fontSize: 12, color: me.company.membership_active ? "var(--ok)" : "var(--danger)" }}>
+            {me.company.membership_active ? "Thành viên đang hiệu lực" : "Chưa kích hoạt thành viên"}
+          </span>
+        </Link>
         <div className="adm-side-foot">
           <div className="adm-me">
             <span className="adm-avatar">{initials(me.full_name)}</span>

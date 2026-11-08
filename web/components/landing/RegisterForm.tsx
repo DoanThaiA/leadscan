@@ -6,17 +6,32 @@ type Errors = Record<string, string>;
 
 const REQUIRED: Record<string, string> = {
   company_name: "Vui lòng nhập tên doanh nghiệp.",
-  industry: "Vui lòng nhập ngành hàng.",
   province: "Vui lòng nhập tỉnh/thành.",
   contact_name: "Vui lòng nhập họ tên người liên hệ.",
-  offering: "Vui lòng mô tả sản phẩm/dịch vụ của bạn.",
-  target_customers: "Vui lòng mô tả khách hàng mục tiêu.",
 };
 // Thứ tự dùng để cuộn tới lỗi đầu tiên
 const FIELDS = [
-  "company_name", "tax_code", "industry", "company_size", "province", "website",
-  "contact_name", "email", "phone", "password", "password_confirm", "offering", "target_customers", "agree",
+  "company_name", "tax_code", "industries", "company_size", "province", "website",
+  "contact_name", "email", "phone", "password", "password_confirm", "agree",
 ];
+// Ngành hàng gợi ý — khớp INDUSTRIES ở backend/app/registration_form.py
+const INDUSTRIES = [
+  "Sản xuất công nghiệp", "Bao bì & in ấn", "Nhựa & cao su", "Điện tử & linh kiện", "Cơ khí & máy móc",
+  "Hoá chất & vật tư", "Dệt may & da giày", "Xuất nhập khẩu", "Thương mại & phân phối", "Logistics & vận tải",
+  "Xây dựng & vật liệu", "Thực phẩm & đồ uống", "Nông sản & thuỷ sản", "Dịch vụ B2B", "Công nghệ thông tin",
+];
+const MAX_INDUSTRIES = 8;
+
+/** Ngành đã tích + ngành tự nhập (cách nhau dấu phẩy), bỏ trùng */
+function pickIndustries(form: HTMLFormElement): string[] {
+  const { val, all } = readForm(form);
+  const out: string[] = [];
+  for (const x of [...all("industries"), ...val("industry_other").split(",")]) {
+    const v = x.trim();
+    if (v && !out.some((o) => o.toLowerCase() === v.toLowerCase())) out.push(v);
+  }
+  return out;
+}
 
 function readForm(form: HTMLFormElement) {
   const fd = new FormData(form);
@@ -29,6 +44,9 @@ function validate(form: HTMLFormElement): Errors {
   const { val, agree } = readForm(form);
   const er: Errors = {};
   for (const [n, msg] of Object.entries(REQUIRED)) if (!val(n)) er[n] = msg;
+  const inds = pickIndustries(form);
+  if (!inds.length) er.industries = "Vui lòng chọn ít nhất 1 ngành hàng.";
+  else if (inds.length > MAX_INDUSTRIES) er.industries = `Chọn tối đa ${MAX_INDUSTRIES} ngành hàng.`;
   if (!val("company_size")) er.company_size = "Vui lòng chọn quy mô.";
   if (!/^\d{10}(-?\d{3})?$/.test(val("tax_code").replace(/[^\d-]/g, ""))) er.tax_code = "Mã số thuế gồm 10 hoặc 13 chữ số.";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(val("email"))) er.email = "Email chưa đúng định dạng.";
@@ -80,7 +98,8 @@ export default function RegisterForm() {
 
   // Xoá lỗi của ô khi người dùng sửa
   function clearError(e: FormEvent<HTMLFormElement>) {
-    const name = (e.target as HTMLInputElement).name;
+    let name = (e.target as HTMLInputElement).name;
+    if (name === "industry_other") name = "industries";
     if (name && errors[name]) setErrors(({ [name]: _, ...rest }) => rest);
   }
 
@@ -90,14 +109,12 @@ export default function RegisterForm() {
     setBanner("");
     if (showErrors(validate(form))) return;
 
-    const { val, all } = readForm(form);
+    const { val } = readForm(form);
     const body = {
-      company_name: val("company_name"), tax_code: val("tax_code"), industry: val("industry"),
+      company_name: val("company_name"), tax_code: val("tax_code"), industries: pickIndustries(form),
       company_size: val("company_size"), province: val("province"), address: val("address"),
       website: val("website"), contact_name: val("contact_name"), position: val("position"),
-      email: val("email"), phone: val("phone"), offering: val("offering"),
-      target_customers: val("target_customers"), target_regions: all("target_regions"),
-      opp_types: all("opp_types"), expected_tickets: val("expected_tickets"), notes: val("notes"),
+      email: val("email"), phone: val("phone"),
       agree: true, website_url: val("website_url"), elapsed_ms: Date.now() - startedAt.current,
       password: String(new FormData(form).get("password") ?? ""),
       password_confirm: String(new FormData(form).get("password_confirm") ?? ""),
@@ -170,12 +187,18 @@ export default function RegisterForm() {
               <div className="fgrid">
                 <div className="fld full"><label htmlFor="company_name">Tên doanh nghiệp <span className="req">*</span></label><input type="text" id="company_name" name="company_name" maxLength={150} autoComplete="organization" placeholder="Công ty TNHH ABC" {...inv("company_name")} />{err("company_name")}</div>
                 <div className="fld"><label htmlFor="tax_code">Mã số thuế <span className="req">*</span></label><input type="text" id="tax_code" name="tax_code" inputMode="numeric" maxLength={14} placeholder="10 hoặc 13 chữ số" {...inv("tax_code")} />{err("tax_code")}</div>
-                <div className="fld"><label htmlFor="industry">Ngành hàng <span className="req">*</span></label><input type="text" id="industry" name="industry" maxLength={100} placeholder="Ví dụ: Bao bì, Điện tử, Logistics" list="industryList" {...inv("industry")} />{err("industry")}
-                  <datalist id="industryList"><option value="Sản xuất công nghiệp" /><option value="Bao bì & in ấn" /><option value="Điện tử & linh kiện" /><option value="Xuất nhập khẩu" /><option value="Thương mại & phân phối" /><option value="Logistics & vận tải" /><option value="Xây dựng & vật liệu" /><option value="Thực phẩm & đồ uống" /><option value="Dịch vụ B2B" /><option value="Công nghệ thông tin" /></datalist></div>
                 <div className="fld"><label htmlFor="company_size">Quy mô nhân sự <span className="req">*</span></label>
                   <select id="company_size" name="company_size" {...inv("company_size")}><option value="">Chọn quy mô…</option><option>Dưới 10 nhân sự</option><option>10–49 nhân sự</option><option>50–199 nhân sự</option><option>200–499 nhân sự</option><option>Từ 500 nhân sự</option></select>{err("company_size")}</div>
                 <div className="fld"><label htmlFor="province">Tỉnh/thành <span className="req">*</span></label><input type="text" id="province" name="province" maxLength={80} autoComplete="address-level1" placeholder="Hà Nội" list="provinceList" {...inv("province")} />{err("province")}
                   <datalist id="provinceList"><option value="Hà Nội" /><option value="TP. Hồ Chí Minh" /><option value="Hải Phòng" /><option value="Đà Nẵng" /><option value="Cần Thơ" /><option value="Bắc Ninh" /><option value="Bắc Giang" /><option value="Hải Dương" /><option value="Hưng Yên" /><option value="Vĩnh Phúc" /><option value="Thái Nguyên" /><option value="Quảng Ninh" /><option value="Đồng Nai" /><option value="Bình Dương" /><option value="Long An" /><option value="Bà Rịa - Vũng Tàu" /></datalist></div>
+                <div className="fld full"><span className="lbl" id="l_industries">Ngành hàng <span className="req">*</span> <span className="opt-t">(chọn nhiều)</span></span>
+                  <div className="checks" role="group" aria-labelledby="l_industries" {...(errors.industries ? { "aria-describedby": "e_industries" } : {})}>
+                    {INDUSTRIES.map((x, i) => (
+                      <label key={x}><input type="checkbox" name="industries" value={x} {...(i === 0 ? { id: "industries" } : {})} /><span>{x}</span></label>
+                    ))}
+                  </div>
+                  <input type="text" id="industry_other" name="industry_other" maxLength={120} placeholder="Ngành khác (nếu có), cách nhau dấu phẩy" aria-label="Ngành hàng khác" style={{ marginTop: 4 }} />
+                  {err("industries")}</div>
                 <div className="fld full"><label htmlFor="address">Địa chỉ <span className="opt-t">(không bắt buộc)</span></label><input type="text" id="address" name="address" maxLength={200} autoComplete="street-address" placeholder="Số nhà, đường, quận/huyện" /></div>
                 <div className="fld full"><label htmlFor="website">Website <span className="opt-t">(không bắt buộc)</span></label><input type="url" id="website" name="website" maxLength={200} autoComplete="url" placeholder="congtyabc.vn" {...inv("website")} />{err("website")}</div>
               </div>
@@ -193,34 +216,6 @@ export default function RegisterForm() {
               </div>
             </fieldset>
 
-            <fieldset className="fs">
-              <legend><i>3</i>Chân dung cơ hội bạn muốn tìm</legend>
-              <div className="fgrid">
-                <div className="fld full"><label htmlFor="offering">Bạn cung cấp sản phẩm/dịch vụ gì? <span className="req">*</span></label><textarea id="offering" name="offering" maxLength={1000} placeholder="Ví dụ: Thùng carton 5 lớp, màng PE, in bao bì theo yêu cầu…" {...inv("offering")}></textarea>{err("offering")}</div>
-                <div className="fld full"><label htmlFor="target_customers">Khách hàng lý tưởng của bạn là ai? <span className="req">*</span></label><textarea id="target_customers" name="target_customers" maxLength={1000} placeholder="Ví dụ: Nhà máy điện tử, doanh nghiệp FDI, quy mô trên 200 nhân sự…" {...inv("target_customers")}></textarea>{err("target_customers")}</div>
-                <div className="fld full"><span className="lbl">Khu vực ưu tiên <span className="opt-t">(chọn nhiều)</span></span>
-                  <div className="checks" role="group" aria-label="Khu vực ưu tiên">
-                    <label><input type="checkbox" name="target_regions" value="Miền Bắc" /><span>Miền Bắc</span></label>
-                    <label><input type="checkbox" name="target_regions" value="Miền Trung" /><span>Miền Trung</span></label>
-                    <label><input type="checkbox" name="target_regions" value="Miền Nam" /><span>Miền Nam</span></label>
-                    <label><input type="checkbox" name="target_regions" value="Toàn quốc" /><span>Toàn quốc</span></label>
-                    <label><input type="checkbox" name="target_regions" value="Quốc tế" /><span>Quốc tế</span></label>
-                  </div></div>
-                <div className="fld full"><span className="lbl">Loại cơ hội quan tâm <span className="opt-t">(chọn nhiều)</span></span>
-                  <div className="checks" role="group" aria-label="Loại cơ hội quan tâm">
-                    <label><input type="checkbox" name="opp_types" value="Đăng mua (App đăng mua)" /><span>Đăng mua</span></label>
-                    <label><input type="checkbox" name="opp_types" value="Dự án & gói thầu" /><span>Dự án & gói thầu</span></label>
-                    <label><input type="checkbox" name="opp_types" value="Nhà máy / dự án FDI mới" /><span>Nhà máy / FDI mới</span></label>
-                    <label><input type="checkbox" name="opp_types" value="Hội chợ & triển lãm" /><span>Hội chợ & triển lãm</span></label>
-                    <label><input type="checkbox" name="opp_types" value="Mạng xã hội & nhóm chat" /><span>Mạng xã hội & nhóm chat</span></label>
-                    <label><input type="checkbox" name="opp_types" value="Nguồn chính thống (Trang vàng, Bộ Công Thương, Công báo)" /><span>Nguồn chính thống</span></label>
-                  </div></div>
-                <div className="fld"><label htmlFor="expected_tickets">Dự kiến số phiếu mua/năm</label>
-                  <select id="expected_tickets" name="expected_tickets"><option value="">Chưa chọn</option><option>Dưới 50 phiếu</option><option>50–200 phiếu</option><option>200–1.000 phiếu</option><option>Trên 1.000 phiếu</option><option>Chưa xác định</option></select></div>
-                <div className="fld"><label htmlFor="notes">Ghi chú thêm <span className="opt-t">(không bắt buộc)</span></label><input type="text" id="notes" name="notes" maxLength={500} placeholder="Yêu cầu đặc biệt nếu có" /></div>
-              </div>
-            </fieldset>
-
             <div className="hp" aria-hidden="true"><label>Để trống<input type="text" name="website_url" tabIndex={-1} autoComplete="off" /></label></div>
 
             <label className="agree"><input type="checkbox" id="agree" name="agree" {...inv("agree")} /><span>Tôi đồng ý với <a href="#">Điều khoản sử dụng</a> và <a href="#">Chính sách bảo mật</a> của LeadScan B2B, và đồng ý để LeadScan liên hệ về dịch vụ.</span></label>
@@ -230,7 +225,7 @@ export default function RegisterForm() {
             <span className="spin" aria-hidden="true"></span>
             <span id="regLabel">{busy ? "Đang gửi…" : "Gửi đăng ký thành viên"}</span>
           </button>
-          <small>Gửi đăng ký chưa phát sinh chi phí. LeadScan sẽ liên hệ xác nhận và hướng dẫn thanh toán phí thành viên.</small>
+          <small>Gửi đăng ký chưa phát sinh chi phí. Sau khi đăng nhập, bạn nhập tiêu chí trong mục <b>Cơ hội phù hợp</b> để AI lọc cơ hội cho doanh nghiệp mình.</small>
         </div>
       </form>
 
