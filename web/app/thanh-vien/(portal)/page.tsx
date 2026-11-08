@@ -5,10 +5,10 @@ import { useEffect, useState } from "react";
 
 import { Icon, Skeleton } from "@/components/admin/ui";
 import { useMember } from "@/components/member/MemberContext";
-import { OppList } from "@/components/member/OppList";
+import { SearchReqList } from "@/components/member/SearchReqList";
 import { fmtDate, fromNow } from "@/lib/admin/format";
-import { fmtPts, type MatchList, type Opp } from "@/lib/commerce";
-import { errMsg, mapi, qs } from "@/lib/member/api";
+import { fmtPts, type Opp, type SearchReq } from "@/lib/commerce";
+import { errMsg, mapi } from "@/lib/member/api";
 
 interface Dash {
   purchased_count: number;
@@ -22,13 +22,13 @@ interface Dash {
 export default function MemberHome() {
   const { me } = useMember();
   const [d, setD] = useState<Dash | null>(null);
-  const [mt, setMt] = useState<MatchList | null>(null);
+  const [reqs, setReqs] = useState<SearchReq[] | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     document.title = "Tổng quan · LeadScan B2B";
     mapi.get<Dash>("/dashboard").then(setD, (e) => setError(errMsg(e)));
-    mapi.get<MatchList>("/matches" + qs({ page_size: 5 })).then(setMt, (e) => setError(errMsg(e)));
+    mapi.get<{ items: SearchReq[] }>("/search-requests?limit=3").then((r) => setReqs(r.items), (e) => setError(errMsg(e)));
   }, []);
 
   const c = me.company;
@@ -71,22 +71,23 @@ export default function MemberHome() {
 
       <section className="adm-card mt-list" style={{ marginBottom: 20 }}>
         <div className="mt-top">
-          <h2>{mt?.configured ? <><span>{mt.total.toLocaleString("vi-VN")}</span> cơ hội phù hợp</> : "Cơ hội phù hợp"}</h2>
-          <Link className="adm-btn sm" href="/thanh-vien/phu-hop">{mt?.configured ? "Xem tất cả & sửa tiêu chí" : "Nhập tiêu chí"}</Link>
+          <h2>Yêu cầu tìm cơ hội</h2>
+          <Link className="adm-btn sm primary" href="/thanh-vien/phu-hop"><Icon name="spark" size={14} /> Gửi yêu cầu mới</Link>
         </div>
-        {!mt ? (
-          <div style={{ display: "grid", gap: 10 }}>{[1, 2, 3].map((i) => <Skeleton key={i} h={56} />)}</div>
-        ) : !mt.configured ? (
+        {!reqs ? (
+          <Skeleton h={80} />
+        ) : reqs.length ? (
+          <>
+            <SearchReqList items={reqs} />
+            <div className="mt-foot"><span /><Link href="/thanh-vien/phu-hop" style={{ color: "var(--brand-600)" }}>Xem tất cả yêu cầu →</Link></div>
+          </>
+        ) : (
           <div className="mt-empty">
             <Icon name="scan" />
             <b style={{ color: "var(--ink)" }}>Cho LeadScan biết bạn muốn tìm cơ hội nào</b>
-            <span>Chọn ngành hàng, khu vực, loại cơ hội — AI lọc và chấm điểm cơ hội phù hợp cho bạn.</span>
-            <Link className="adm-btn primary" href="/thanh-vien/phu-hop">Nhập tiêu chí tìm cơ hội</Link>
+            <span>Chọn ngành hàng, khu vực, loại cơ hội và mô tả nhu cầu — đội ngũ LeadScan sẽ tìm và enrich cơ hội cho bạn.</span>
+            <Link className="adm-btn primary" href="/thanh-vien/phu-hop">Enrich tìm kiếm cơ hội</Link>
           </div>
-        ) : mt.items.length ? (
-          <OppList items={mt.items} onChange={(o) => setMt({ ...mt, items: mt.items.map((x) => (x.id === o.id ? o : x)) })} />
-        ) : (
-          <div className="mt-empty">Chưa có cơ hội khớp tiêu chí. <Link href="/thanh-vien/phu-hop" style={{ color: "var(--brand-600)" }}>Điều chỉnh tiêu chí</Link></div>
         )}
       </section>
 

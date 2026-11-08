@@ -25,6 +25,7 @@ from app.models import (
     Profile,
     Purchase,
     SavedOpportunity,
+    SearchRequest,
     WalletTransaction,
 )
 from app.registration_form import AREAS, CUSTOMER_SIZES, INDUSTRIES, REGIONS
@@ -32,7 +33,7 @@ from app.schemas import LoginIn, PasswordChangeIn
 from app.schemas_commerce import EnrichIn, EnrichOut, InvoiceIn, OrderCreateIn, OrderOut, TxOut
 from app.security import DUMMY_HASH, add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
 from app.services import catalog, payments
-from app.worker import enqueue, send_invoice_request_task, send_password_reset_task
+from app.worker import enqueue, send_invoice_request_task, send_password_reset_task, send_search_request_task
 
 router = APIRouter(prefix="/api/member")
 
@@ -450,48 +451,58 @@ def get_match(user: MemberUser = Depends(current_member), db: Session = Depends(
     }
 
 
-@router.put("/match")
-def save_match(body: MatchCriteria, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+# ================================================================== yêu cầu enrich tìm kiếm cơ hội
+
+SEARCH_REQUESTS_PER_DAY = 10
+
+
+class SearchRequestIn(MatchCriteria):
+    note: str = Field(max_length=3000)
+
+
+def _search_out(r: SearchRequest) -> dict:
+    return {
+        "id": r.id,
+        "criteria": r.criteria or {},
+        "note": r.note,
+        "status": r.status,
+        "reply": r.reply,
+        "created_at": _iso(r.created_at),
+        "resolved_at": _iso(r.resolved_at),
+    }
+
+
+@router.get("/search-requests")
+def list_search_requests(limit: int = Query(30, ge=1, le=100), user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    rows = db.scalars(
+        select(SearchRequest).where(SearchRequest.company_id == user.company_id).order_by(SearchRequest.id.desc()).limit(limit)
+    ).unique().all()
+    return {"items": [_search_out(r) for r in rows]}
+
+
+@router.post("/search-requests", status_code=201)
+def create_search_request(body: SearchRequestIn, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    note = body.note.strip()
+    if len(note) < 10:
+        raise HTTPException(422, "Vui lòng mô tả rõ yêu cầu (ít nhất 10 ký tự).")
     c = user.company
+    recent = db.scalar(
+        select(func.count()).select_from(SearchRequest).where(SearchRequest.company_id == c.id, SearchRequest.created_at > utcnow() - timedelta(days=1))
+    )
+    if (recent or 0) >= SEARCH_REQUESTS_PER_DAY:
+        raise HTTPException(429, f"Mỗi ngày gửi tối đa {SEARCH_REQUESTS_PER_DAY} yêu cầu. Vui lòng thử lại sau.")
+    criteria = body.cleaned()
+    r = SearchRequest(company_id=c.id, member_user_id=user.id, criteria=criteria, note=note)
+    db.add(r)
+    # nhớ tiêu chí để điền sẵn cho lần sau
     if c.profile is None:
         c.profile = Profile()
-    c.profile.search = body.cleaned()
-    db.add(Activity(company_id=c.id, kind="update", content=f"{user.full_name} cập nhật tiêu chí tìm cơ hội phù hợp"))
+    c.profile.search = criteria
+    db.add(Activity(company_id=c.id, kind="update", content=f"{user.full_name} gửi yêu cầu tìm cơ hội: {note[:200]}"))
     db.commit()
-    return {"criteria": c.profile.search, "configured": _configured(c.profile.search)}
-
-
-@router.get("/matches")
-def list_matches(
-    sort: str = "score",  # score | new | price_asc
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=50),
-    user: MemberUser = Depends(current_member),
-    db: Session = Depends(get_db),
-):
-    """Cơ hội đang bán khớp tiêu chí đã lưu của thành viên."""
-    c = _criteria(user)
-    if not _configured(c):
-        return {"configured": False, "total": 0, "page": page, "page_size": page_size, "items": []}
-    stmt = select(Opportunity).where(Opportunity.status == "published")
-    if c["industries"]:
-        cols = (Opportunity.industry, Opportunity.title, Opportunity.summary)
-        stmt = stmt.where(or_(*[col.ilike(f"%{kw}%") for kw in c["industries"] for col in cols]))
-    if c["regions"] and "Toàn quốc" not in c["regions"]:
-        stmt = stmt.where(or_(Opportunity.province.in_(c["regions"]), Opportunity.region.in_(c["regions"])))
-    if c["sources"]:
-        stmt = stmt.where(Opportunity.source_type.in_(c["sources"]))
-    if c["min_score"]:
-        stmt = stmt.where(Opportunity.score >= c["min_score"])
-    order = {
-        "new": (Opportunity.published_at.desc(), Opportunity.id.desc()),
-        "price_asc": (Opportunity.price.asc(), Opportunity.id.desc()),
-    }.get(sort, (Opportunity.score.desc(), Opportunity.id.desc()))
-    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    rows = db.scalars(
-        stmt.options(selectinload(Opportunity.contacts)).order_by(*order).offset((page - 1) * page_size).limit(page_size)
-    ).unique().all()
-    return {"configured": True, "total": total, "page": page, "page_size": page_size, "items": catalog.previews(db, user.company_id, rows)}
+    db.refresh(r)
+    enqueue(send_search_request_task, r.id)
+    return _search_out(r)
 
 
 # ================================================================== kho của tôi (cơ hội đã lưu)

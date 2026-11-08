@@ -214,7 +214,7 @@ body:has(.adm) { margin: 0; background: #f6f7f9; }
 .adm-tag { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: var(--line-2); color: var(--ink-2); }
 .adm-price { font: 700 16px/1.2 var(--head); color: var(--ink); font-variant-numeric: tabular-nums; }
 .adm-price small { display: block; font: 500 11.5px Inter, sans-serif; color: var(--muted); }
-.adm-score { flex: none; min-width: 44px; text-align: center; padding: 4px 8px; border-radius: 6px; font: 700 15px/1.2 var(--head); font-variant-numeric: tabular-nums; }
+.adm-score { display: inline-block; vertical-align: middle; flex: none; min-width: 44px; text-align: center; padding: 4px 8px; border-radius: 6px; font: 700 15px/1.2 var(--head); font-variant-numeric: tabular-nums; }
 .adm-score small { display: block; font: 500 10px Inter, sans-serif; opacity: 0.8; }
 .adm-score.sc-hi { background: #e6f6ec; color: #157f3b; }
 .adm-score.sc-md { background: #fff4e0; color: #a15c00; }
@@ -317,3 +317,19 @@ body:has(.adm) { margin: 0; background: #f6f7f9; }
   .mt-row .mt-p { grid-column: 2; min-width: 0; text-align: left; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   .mt-row .mt-act { grid-column: 2; }
 }
+
+/* ---------- Yêu cầu Enrich tìm kiếm cơ hội ---------- */
+.sr-form { display: grid; gap: 10px; }
+.sr-form textarea { min-height: 150px; resize: vertical; line-height: 1.55; padding: 10px 12px; height: auto; }
+.sr-count { font-size: 12px; text-align: right; margin-top: -6px; }
+.sr-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.sr-submit { height: 44px; font-size: 15px; justify-self: start; padding: 0 22px; }
+.sr-list { display: grid; gap: 10px; }
+.sr-item { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px; background: #fff; }
+.sr-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sr-head b { color: var(--ink); }
+.sr-head .muted { font-size: 12.5px; }
+.sr-head .adm-badge { margin-left: auto; }
+.sr-note { white-space: pre-wrap; color: var(--ink-2); font-size: 13.5px; }
+.sr-reply { background: #e8f5ec; border: 1px solid #bfe3cb; color: #14532d; border-radius: 6px; padding: 8px 10px; font-size: 13px; white-space: pre-wrap; }
+@media (max-width: 560px) { .sr-submit { justify-self: stretch; } }

@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -16,6 +17,7 @@ from app.models import (
     OPP_STATUSES,
     ORDER_KINDS,
     ORDER_STATUSES,
+    SEARCH_STATUSES,
     TX_KINDS,
     Activity,
     AdminUser,
@@ -28,6 +30,7 @@ from app.models import (
     OpportunityContact,
     PaymentOrder,
     Purchase,
+    SearchRequest,
     WalletTransaction,
 )
 from app.schemas_commerce import (
@@ -46,7 +49,7 @@ from app.schemas_commerce import (
 )
 from app.security import hash_password
 from app.services import catalog, payments, wallet
-from app.worker import enqueue, send_invoice_request_task
+from app.worker import enqueue, send_invoice_request_task, send_search_request_task
 
 router = APIRouter(prefix="/api/admin")
 
@@ -69,6 +72,7 @@ def commerce_meta(_: AdminUser = Depends(current_user)):
         "order_statuses": ORDER_STATUSES,
         "invoice_statuses": INVOICE_STATUSES,
         "enrich_statuses": ENRICH_STATUSES,
+        "search_statuses": SEARCH_STATUSES,
         "tx_kinds": TX_KINDS,
         "payment_provider": cfg.payment_provider,
         "invoice_email": cfg.invoice_email,
@@ -86,6 +90,7 @@ def commerce_stats(_: AdminUser = Depends(current_user), db: Session = Depends(g
         "pending_orders": db.scalar(select(func.count()).select_from(PaymentOrder).where(PaymentOrder.status == "pending", PaymentOrder.expires_at > utcnow())) or 0,
         "pending_invoices": db.scalar(select(func.count()).select_from(InvoiceRequest).where(InvoiceRequest.status == "pending")) or 0,
         "open_enrich": db.scalar(select(func.count()).select_from(EnrichRequest).where(EnrichRequest.status == "open")) or 0,
+        "open_search": db.scalar(select(func.count()).select_from(SearchRequest).where(SearchRequest.status == "open")) or 0,
         "published_opportunities": db.scalar(select(func.count()).select_from(Opportunity).where(Opportunity.status == "published")) or 0,
     }
 
@@ -320,6 +325,66 @@ def update_enrich(req_id: int, body: EnrichAdminIn, _: AdminUser = Depends(curre
     db.commit()
     db.refresh(e)
     return _enrich_out(e)
+
+
+# ================================================================== yêu cầu enrich tìm kiếm cơ hội
+
+
+class SearchAdminIn(BaseModel):
+    status: str
+    reply: str = Field("", max_length=4000)
+
+    @field_validator("status")
+    @classmethod
+    def _st(cls, v: str) -> str:
+        if v not in SEARCH_STATUSES:
+            raise ValueError("Trạng thái không hợp lệ.")
+        return v
+
+
+def _search_admin_out(r: SearchRequest) -> dict:
+    return {
+        "id": r.id,
+        "criteria": r.criteria or {},
+        "note": r.note,
+        "status": r.status,
+        "reply": r.reply,
+        "email_sent_at": _iso(r.email_sent_at),
+        "created_at": _iso(r.created_at),
+        "resolved_at": _iso(r.resolved_at),
+        "company": _company_ref(r.company),
+        "member": {"full_name": r.member_user.full_name, "email": r.member_user.email} if r.member_user else None,
+    }
+
+
+@router.get("/search-requests")
+def list_search_requests(status: str = "", _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    stmt = select(SearchRequest)
+    if status:
+        stmt = stmt.where(SearchRequest.status == status)
+    rows = db.scalars(stmt.order_by(SearchRequest.id.desc()).limit(200)).unique().all()
+    return {"items": [_search_admin_out(r) for r in rows]}
+
+
+@router.patch("/search-requests/{req_id}")
+def update_search_request(req_id: int, body: SearchAdminIn, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    r = db.get(SearchRequest, req_id)
+    if not r:
+        raise HTTPException(404, "Không tìm thấy yêu cầu.")
+    r.status, r.reply = body.status, body.reply.strip()
+    r.resolved_at = utcnow() if body.status != "open" else None
+    db.add(Activity(company_id=r.company_id, kind="update", actor_id=user.id, content=f"Yêu cầu tìm cơ hội #{r.id}: {SEARCH_STATUSES[r.status]}"))
+    db.commit()
+    db.refresh(r)
+    return _search_admin_out(r)
+
+
+@router.post("/search-requests/{req_id}/resend-email")
+def resend_search_email(req_id: int, _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    if not db.get(SearchRequest, req_id):
+        raise HTTPException(404, "Không tìm thấy yêu cầu.")
+    enqueue(send_search_request_task, req_id)
+    return {"ok": True}
 
 
 # ================================================================== ví & tài khoản thành viên của 1 khách hàng

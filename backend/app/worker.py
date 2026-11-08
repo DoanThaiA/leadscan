@@ -120,6 +120,20 @@ def notify_payment_task(order_id: int) -> None:
         notify_payment_admin(cfg, o)
 
 
+@celery_app.task(name="leadscan.send_search_request")
+def send_search_request_task(req_id: int) -> None:
+    """Thành viên gửi yêu cầu Enrich tìm kiếm cơ hội → email báo quản trị."""
+    from app.db import new_session, utcnow
+    from app.models import SearchRequest
+    from app.services.notify import notify_search_request
+
+    with new_session() as db:
+        r = db.get(SearchRequest, req_id)
+        if r and notify_search_request(get_settings(), r):
+            r.email_sent_at = utcnow()
+            db.commit()
+
+
 def enqueue(task, *args) -> None:
     """Đưa việc vào hàng đợi; Redis lỗi thì chỉ ghi log (dữ liệu chính đã nằm trong DB)."""
     try:

@@ -353,28 +353,6 @@ def test_admin_tao_va_khoa_tai_khoan_thanh_vien(admin, client):
         assert db.scalar(select(func.count()).select_from(MemberUser)) == 2
 
 
-def test_co_hoi_phu_hop_theo_tieu_chi(admin, member):
-    a = make_opp(admin, title="Carton Bắc Ninh", score=92, industry="Bao bì & in ấn", province="Bắc Ninh", source_type="App đăng mua")
-    make_opp(admin, title="Màng PE Hà Nội", score=65, industry="Bao bì & in ấn", province="Hà Nội", source_type="Mạng xã hội & nhóm chat")
-    make_opp(admin, title="Xe tải miền Nam", score=88, industry="Logistics & vận tải", province="Bình Dương", region="Miền Nam")
-
-    # ngành chọn lúc đăng ký đã được gợi ý sẵn
-    m = member.get("/api/member/match").json()
-    assert m["configured"] and "Bao bì & in ấn" in m["criteria"]["industries"]
-    assert "Bắc Ninh" in m["options"]["regions"] and m["options"]["sources"]
-
-    r = member.put("/api/member/match", json={"industries": ["Bao bì & in ấn"], "regions": ["Bắc Ninh", "Hà Nội"], "sizes": ["200+ nhân sự", "bừa"], "sources": [], "min_score": 70})
-    assert r.status_code == 200 and r.json()["criteria"]["sizes"] == ["200+ nhân sự"]
-    items = member.get("/api/member/matches").json()["items"]
-    assert [o["id"] for o in items] == [a]
-
-    member.put("/api/member/match", json={"regions": ["Miền Nam"]})
-    assert [o["title"] for o in member.get("/api/member/matches").json()["items"]] == ["Xe tải miền Nam"]
-
-    member.put("/api/member/match", json={})
-    assert member.get("/api/member/matches").json() == {"configured": False, "total": 0, "page": 1, "page_size": 10, "items": []}
-
-
 def test_them_vao_kho_cua_toi(admin, member):
     a = make_opp(admin)
     draft = make_opp(admin, status="draft")
@@ -388,3 +366,56 @@ def test_them_vao_kho_cua_toi(admin, member):
     assert member.get("/api/member/dashboard").json()["saved_count"] == 1
     assert member.delete(f"/api/member/saved/{a}").status_code == 204
     assert member.get("/api/member/saved").json()["total"] == 0
+
+
+def test_gui_yeu_cau_tim_co_hoi_bao_admin(member, admin, monkeypatch):
+    from sqlalchemy import select
+
+    from app.db import new_session
+    from app.models import Activity, SearchRequest
+    from app.services import notify
+
+    sent = []
+    monkeypatch.setattr(notify, "send_mail", lambda cfg, subject, body, to=None: sent.append((subject, body)) or True)
+
+    m = member.get("/api/member/match").json()
+    assert "Quốc tế" in m["options"]["regions"] and "Bao bì & in ấn" in m["criteria"]["industries"]  # ngành lúc đăng ký
+
+    assert member.post("/api/member/search-requests", json={"note": "ngắn"}).status_code == 422
+    body = {
+        "industries": ["Bao bì & in ấn"], "regions": ["Quốc tế", "Hà Nội"], "sizes": ["200+ nhân sự", "bừa"],
+        "sources": ["Dự án & gói thầu"], "min_score": 70,
+        "note": "Cần tìm nhà nhập khẩu bao PP dệt tại châu Phi, đơn hàng từ 1 container/tháng.",
+    }
+    r = member.post("/api/member/search-requests", json=body)
+    assert r.status_code == 201, r.text
+    out = r.json()
+    assert out["status"] == "open" and out["criteria"]["sizes"] == ["200+ nhân sự"]
+
+    # email báo admin có tiêu chí + mô tả
+    (subject, mail) = sent[-1]
+    assert f"#{out['id']}" in subject and "Quốc tế, Hà Nội" in mail and "châu Phi" in mail and "≥ 70" in mail
+    with new_session() as db:
+        req = db.get(SearchRequest, out["id"])
+        assert req.email_sent_at is not None
+        assert db.scalar(select(Activity).where(Activity.content.like("%gửi yêu cầu tìm cơ hội%")))
+    # tiêu chí được nhớ để điền sẵn lần sau
+    assert member.get("/api/member/match").json()["criteria"]["regions"] == ["Quốc tế", "Hà Nội"]
+    assert member.get("/api/member/search-requests").json()["items"][0]["id"] == out["id"]
+
+    # admin xem, trả lời
+    items = admin.get("/api/admin/search-requests?status=open").json()["items"]
+    assert items[0]["id"] == out["id"] and items[0]["member"]["email"] and items[0]["email_sent_at"]
+    r = admin.patch(f"/api/admin/search-requests/{out['id']}", json={"status": "done", "reply": "Đã thêm 3 cơ hội vào kho."})
+    assert r.status_code == 200 and r.json()["resolved_at"]
+    mine = member.get("/api/member/search-requests").json()["items"][0]
+    assert mine["status"] == "done" and mine["reply"] == "Đã thêm 3 cơ hội vào kho."
+    assert admin.get("/api/admin/commerce-stats").json()["open_search"] == 0
+    assert admin.post(f"/api/admin/search-requests/{out['id']}/resend-email").status_code == 200
+
+
+def test_gioi_han_so_yeu_cau_tim_co_hoi_moi_ngay(member):
+    for i in range(10):
+        assert member.post("/api/member/search-requests", json={"note": f"Yêu cầu số {i} để thử giới hạn"}).status_code == 201
+    assert member.post("/api/member/search-requests", json={"note": "Yêu cầu thứ mười một"}).status_code == 429
+

@@ -33,7 +33,7 @@ INDUSTRIES = [
 MAX_INDUSTRIES = 8
 # Khu vực gợi ý cho "Tìm cơ hội phù hợp" (miền + tỉnh/thành hay có cơ hội)
 AREAS = [
-    "Toàn quốc", "Miền Bắc", "Miền Trung", "Miền Nam",
+    "Toàn quốc", "Miền Bắc", "Miền Trung", "Miền Nam", "Quốc tế",
     "Hà Nội", "TP. Hồ Chí Minh", "Hải Phòng", "Đà Nẵng", "Bắc Ninh", "Bắc Giang", "Hải Dương", "Hưng Yên",
     "Vĩnh Phúc", "Thái Nguyên", "Quảng Ninh", "Đồng Nai", "Bình Dương", "Long An", "Bà Rịa - Vũng Tàu", "Cần Thơ",
 ]

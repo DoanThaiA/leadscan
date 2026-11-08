@@ -26,7 +26,7 @@ export default function Pricing() {
               <h3>Quyền lợi thành viên</h3>
               <p className="desc">Mọi thứ bạn nhận được với gói thành viên 1 năm.</p>
               <ul>
-                <li><svg className="icon"><use href="#i-check" /></svg>Tìm cơ hội phù hợp theo tiêu chí riêng, sửa không giới hạn</li>
+                <li><svg className="icon"><use href="#i-check" /></svg>Gửi yêu cầu Enrich tìm kiếm cơ hội theo nhu cầu riêng</li>
                 <li><svg className="icon"><use href="#i-check" /></svg>Truy cập kho cơ hội từ hơn 10 nhóm nguồn dữ liệu</li>
                 <li><svg className="icon"><use href="#i-check" /></svg>Xem trước tóm tắt & điểm chất lượng của mọi cơ hội</li>
                 <li><svg className="icon"><use href="#i-check" /></svg>Mua phiếu cơ hội từ 29.000đ, trừ thẳng vào số dư</li>

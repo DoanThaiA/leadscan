@@ -203,3 +203,44 @@ def notify_payment_admin(cfg: Settings, order) -> bool:
     )
     kind = "phí thành viên" if order.kind == "membership" else "nạp điểm"
     return send_mail(cfg, f"[LeadScan] Đã nhận thanh toán {kind}: {c.name} — {_vnd(order.paid_amount or order.amount)}", body)
+
+
+def _criteria_lines(c: dict) -> list[str]:
+    join = lambda v: ", ".join(v) if v else "(không giới hạn)"  # noqa: E731
+    return [
+        f"Ngành hàng        : {join(c.get('industries') or [])}",
+        f"Khu vực           : {join(c.get('regions') or [])}",
+        f"Quy mô khách hàng : {join(c.get('sizes') or [])}",
+        f"Loại cơ hội       : {join(c.get('sources') or [])}",
+        f"Điểm tối thiểu    : {('≥ ' + str(c['min_score'])) if c.get('min_score') else 'Mọi mức'}",
+    ]
+
+
+def notify_search_request(cfg: Settings, req) -> bool:
+    """Báo quản trị (LEADSCAN_NOTIFY_EMAIL) khi thành viên gửi yêu cầu Enrich tìm kiếm cơ hội."""
+    c = req.company
+    u = req.member_user
+    contact = next((x for x in c.contacts if x.is_primary), c.contacts[0] if c.contacts else None)
+    lines = [
+        "YÊU CẦU ENRICH TÌM KIẾM CƠ HỘI — LeadScan B2B",
+        "==============================================",
+        "",
+        f"Khách hàng        : {c.name} ({c.code})",
+        f"Ngành của khách   : {c.industry or '—'} · {c.province or '—'}",
+        f"Người gửi         : {u.full_name + ' <' + u.email + '>' if u else '—'}",
+    ]
+    if contact:
+        lines.append(f"Liên hệ chính     : {contact.full_name} · {contact.phone or '—'} · {contact.email or '—'}")
+    lines += [
+        f"Gửi lúc           : {_vn(req.created_at)}",
+        "",
+        "TIÊU CHÍ",
+        *_criteria_lines(req.criteria or {}),
+        "",
+        "MÔ TẢ YÊU CẦU",
+        req.note or "—",
+        "",
+        f"Xử lý và trả lời khách: {cfg.admin_url.rstrip('/')}/yeu-cau-tim-co-hoi",
+        f"Hồ sơ khách hàng      : {cfg.admin_url.rstrip('/')}/khach-hang/{c.id}",
+    ]
+    return send_mail(cfg, f"[LeadScan] Yêu cầu tìm cơ hội #{req.id}: {c.name}", "\n".join(lines) + "\n")

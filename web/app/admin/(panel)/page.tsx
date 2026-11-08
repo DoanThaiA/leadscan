@@ -18,6 +18,7 @@ interface CommerceStats {
   pending_orders: number;
   pending_invoices: number;
   open_enrich: number;
+  open_search: number;
   published_opportunities: number;
 }
 
@@ -79,7 +80,7 @@ export default function DashboardPage() {
           { label: "Doanh thu 30 ngày", value: cs ? fmtVnd(cs.revenue_30d) : "…", hint: "Đơn đã thanh toán", href: "/admin/thanh-toan" },
           { label: "Phiếu bán 30 ngày", value: cs ? fmtNum(cs.tickets_sold_30d) : "…", hint: `${cs?.published_opportunities ?? "…"} cơ hội đang bán`, href: "/admin/co-hoi" },
           { label: "Hoá đơn chờ xuất", value: cs ? fmtNum(cs.pending_invoices) : "…", hint: "Cần kế toán xử lý", href: "/admin/hoa-don" },
-          { label: "Yêu cầu enrich mở", value: cs ? fmtNum(cs.open_enrich) : "…", hint: `${cs?.pending_orders ?? "…"} đơn chờ thanh toán`, href: "/admin/enrich" },
+          { label: "Yêu cầu tìm cơ hội mới", value: cs ? fmtNum(cs.open_search) : "…", hint: `${cs?.open_enrich ?? "…"} yêu cầu enrich phiếu · ${cs?.pending_orders ?? "…"} đơn chờ`, href: "/admin/yeu-cau-tim-co-hoi" },
         ].map((t) => (
           <Link className="adm-card adm-stat" key={t.label} href={t.href}>
             <small>{t.label}</small>

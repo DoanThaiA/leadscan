@@ -9,11 +9,11 @@ export default function Register() {
           <div className="reg-side reveal">
             <span className="pill-tag">Đăng ký thành viên</span>
             <h2 className="h-display" style={{ marginTop: "16px" }}>Bắt đầu với <b>một biểu mẫu ngắn</b></h2>
-            <p>Chỉ cần thông tin cơ bản của doanh nghiệp và người liên hệ. Tiêu chí tìm cơ hội (ngành hàng, khu vực, loại cơ hội…) bạn nhập ngay trong cổng thành viên, AI lọc và chấm điểm cơ hội theo đó.</p>
+            <p>Chỉ cần thông tin cơ bản của doanh nghiệp và người liên hệ. Nhu cầu tìm cơ hội (tiêu chí + mô tả) bạn gửi ngay trong cổng thành viên, LeadScan tìm và enrich cơ hội theo đó.</p>
             <ol className="reg-next">
               <li><b>Gửi đăng ký</b>Điền biểu mẫu bên cạnh, mất khoảng 1 phút.</li>
-              <li><b>Nhập tiêu chí trong cổng thành viên</b>Vào mục “Cơ hội phù hợp”, chọn ngành hàng, khu vực, loại cơ hội và điểm tối thiểu.</li>
-              <li><b>Mua hoặc lưu vào kho</b>Mua phiếu để mở khoá đầu mối, hoặc thêm vào kho để xem lại sau.</li>
+              <li><b>Gửi yêu cầu tìm cơ hội</b>Vào mục “Cơ hội phù hợp”, chọn tiêu chí, mô tả nhu cầu và bấm “Enrich tìm kiếm cơ hội”.</li>
+              <li><b>Nhận cơ hội, mua phiếu</b>LeadScan tìm và enrich cơ hội theo yêu cầu; bạn mua phiếu để mở khoá đầu mối hoặc lưu vào kho.</li>
             </ol>
             <div className="reg-trust">
               <span><svg className="icon"><use href="#i-shield" /></svg>Thông tin chỉ dùng để thiết lập dịch vụ</span>

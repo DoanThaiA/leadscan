@@ -2,12 +2,13 @@
 
 Company            doanh nghiệp đăng ký / thành viên
   ├─ Contact        người liên hệ (1 người chính + người khác)
-  ├─ Profile        tiêu chí tìm cơ hội phù hợp (thành viên chọn trong cổng)
+  ├─ Profile        tiêu chí tìm cơ hội gần nhất (điền sẵn cho lần gửi yêu cầu sau)
   └─ Activity       lịch sử: tạo hồ sơ, đổi trạng thái, ghi chú chăm sóc
   ├─ MemberUser     tài khoản đăng nhập cổng thành viên
   ├─ WalletTransaction   sổ cái điểm (mỗi lần cộng/trừ 1 dòng, không sửa/xoá)
   ├─ PaymentOrder   đơn nạp tiền / phí thành viên (thanh toán qua InfoCMS)
   │    └─ InvoiceRequest  thông tin xuất hoá đơn (xuất thủ công)
+  ├─ SearchRequest      yêu cầu "Enrich tìm kiếm cơ hội" (tiêu chí + mô tả, email báo admin)
   ├─ SavedOpportunity   cơ hội thành viên thêm vào kho (xem/mua sau)
   └─ Purchase       phiếu cơ hội đã mua
        └─ EnrichRequest   yêu cầu tìm thêm đầu mối
@@ -185,6 +186,7 @@ OPP_SOURCES = [
     "Email hỏi hàng",
 ]
 ENRICH_STATUSES = {"open": "Đang xử lý", "done": "Đã xong", "rejected": "Từ chối"}
+SEARCH_STATUSES = {"open": "Đang tìm", "done": "Đã có kết quả", "rejected": "Từ chối"}
 
 
 class MemberUser(Base):
@@ -362,6 +364,27 @@ class Purchase(Base):
     opportunity: Mapped[Opportunity] = relationship(lazy="joined")
 
     __table_args__ = (UniqueConstraint("company_id", "opportunity_id", name="uq_purchase_once"),)
+
+
+class SearchRequest(Base):
+    """Yêu cầu "Enrich tìm kiếm cơ hội": thành viên gửi tiêu chí + mô tả, admin nhận email và tìm cơ hội."""
+
+    __tablename__ = "search_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    member_user_id: Mapped[int | None] = mapped_column(ForeignKey("member_users.id", ondelete="SET NULL"))
+    # {"industries": [...], "regions": [...], "sizes": [...], "sources": [...], "min_score": 70}
+    criteria: Mapped[dict] = mapped_column(JSON, default=dict)
+    note: Mapped[str] = mapped_column(Text, default="")  # mô tả yêu cầu khách tự viết
+    status: Mapped[str] = mapped_column(String(16), default="open", index=True)
+    reply: Mapped[str] = mapped_column(Text, default="")  # phản hồi của LeadScan, khách thấy trong cổng
+    email_sent_at: Mapped[datetime | None] = mapped_column(DateTime)  # đã gửi email báo admin
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    company: Mapped[Company] = relationship(lazy="joined")
+    member_user: Mapped["MemberUser | None"] = relationship(lazy="joined")
 
 
 class SavedOpportunity(Base):

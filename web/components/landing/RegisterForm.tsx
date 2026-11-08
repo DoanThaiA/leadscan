@@ -225,7 +225,7 @@ export default function RegisterForm() {
             <span className="spin" aria-hidden="true"></span>
             <span id="regLabel">{busy ? "Đang gửi…" : "Gửi đăng ký thành viên"}</span>
           </button>
-          <small>Gửi đăng ký chưa phát sinh chi phí. Sau khi đăng nhập, bạn nhập tiêu chí trong mục <b>Cơ hội phù hợp</b> để AI lọc cơ hội cho doanh nghiệp mình.</small>
+          <small>Gửi đăng ký chưa phát sinh chi phí. Sau khi đăng nhập, vào mục <b>Cơ hội phù hợp</b> để gửi yêu cầu tìm cơ hội cho doanh nghiệp mình.</small>
         </div>
       </form>
 

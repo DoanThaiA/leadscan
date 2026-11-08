@@ -106,12 +106,29 @@ export interface Criteria {
   min_score: number;
 }
 
-export interface MatchList {
-  configured: boolean;
-  total: number;
-  page: number;
-  page_size: number;
-  items: Opp[];
+/** Yêu cầu "Enrich tìm kiếm cơ hội" thành viên gửi cho LeadScan */
+export interface SearchReq {
+  id: number;
+  criteria: Partial<Criteria>;
+  note: string;
+  status: "open" | "done" | "rejected";
+  reply: string;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export const SEARCH_STATUS: Record<SearchReq["status"], string> = { open: "Đang tìm", done: "Đã có kết quả", rejected: "Từ chối" };
+export const SEARCH_STATUS_CLASS: Record<SearchReq["status"], string> = { open: "s-contacted", done: "s-active", rejected: "s-suspended" };
+
+/** Tóm tắt tiêu chí thành danh sách nhãn ngắn để hiển thị */
+export function criteriaTags(c: Partial<Criteria>): string[] {
+  return [
+    ...(c.industries ?? []),
+    ...(c.regions ?? []),
+    ...(c.sizes ?? []),
+    ...(c.sources ?? []),
+    ...(c.min_score ? [`≥ ${c.min_score} điểm`] : []),
+  ];
 }
 
 export interface EnrichReq {
