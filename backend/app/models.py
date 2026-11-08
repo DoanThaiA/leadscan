@@ -184,6 +184,7 @@ OPP_SOURCES = [
     "Website doanh nghiệp",
     "Nguồn chính thống",
     "Email hỏi hàng",
+    "Kết nối giao thương",
 ]
 ENRICH_STATUSES = {"open": "Đang xử lý", "done": "Đã xong", "rejected": "Từ chối"}
 SEARCH_STATUSES = {"open": "Đang tìm", "done": "Đã có kết quả", "rejected": "Từ chối"}

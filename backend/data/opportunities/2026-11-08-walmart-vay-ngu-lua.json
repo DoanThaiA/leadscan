@@ -1,0 +1,36 @@
+{
+  "_note": "1 cơ hội nhận ngày 08/11/2026 (tin đăng nhu cầu mua). Nhập: python -m app.cli import-opportunities data/opportunities/2026-11-08-walmart-vay-ngu-lua.json. Giá = phiếu cơ bản 29.000đ (1 đầu mối, chưa enrich); điểm do LeadScan đánh giá thủ công. Nguồn tin và khu vực tin đăng không ghi – tạm đặt 'Mạng xã hội & nhóm chat' / 'Toàn quốc', sửa trong admin nếu biết rõ hơn.",
+  "opportunities": [
+    {
+      "title": "Nhà bán hàng Walmart cần xưởng gia công váy ngủ lụa nữ theo thiết kế (MOQ 100 chiếc/đơn)",
+      "summary": "Một nhà bán hàng trên Walmart cần xưởng, nhà máy gia công váy ngủ lụa nữ theo thiết kế riêng của người mua. Số lượng đặt tối thiểu 100 chiếc mỗi lần đặt hàng; đang mời xưởng, nhà máy chào giá.",
+      "industry": "Dệt may & da giày",
+      "province": "",
+      "region": "Toàn quốc",
+      "source_type": "Mạng xã hội & nhóm chat",
+      "scale": "MOQ 100 chiếc/lần đặt hàng",
+      "estimated_value": "Chưa xác định – chờ báo giá",
+      "deadline": null,
+      "score": 63,
+      "score_fit": 75,
+      "score_urgency": 60,
+      "score_trust": 55,
+      "enrich_round": 0,
+      "price": 29000,
+      "max_buyers": 3,
+      "buyer_name": "Nhà bán hàng Walmart (Mr Mikele)",
+      "detail": "Bên mua: nhà bán hàng (seller) trên Walmart – người liên hệ Mr Mikele. Tin đăng chưa nêu tên công ty.\n\nNhu cầu MUA (nguyên văn tin đăng):\n“Nhà bán hàng Walmart cần gia công váy ngủ lụa nữ thiết kế theo yêu cầu. MOQ: 100/ lần đặt hàng. Cần xưởng, nhà máy chào giá.”\n\nTóm tắt:\n- Sản phẩm: váy ngủ lụa nữ, thiết kế theo yêu cầu của người mua (gia công)\n- Số lượng đặt tối thiểu (MOQ): 100 chiếc mỗi lần đặt hàng\n- Đối tượng cần tìm: xưởng, nhà máy may chào giá\n\nNên hỏi lại khi liên hệ:\n- Đã có thiết kế / tech pack, bảng size, số mẫu và số màu chưa\n- Chất liệu: lụa tơ tằm thật hay satin / lụa polyester; định lượng vải; ai cung cấp vải\n- Đơn giá mục tiêu, tần suất đặt lại (bán trên Walmart thường đặt lặp theo đợt)\n- Điều kiện giao hàng: giao tại Việt Nam, FOB hay giao về kho tại Mỹ\n- Yêu cầu nhãn mác, đóng gói, mã vạch; có yêu cầu audit nhà máy hoặc chứng nhận không\n- Có làm mẫu trước không, thời gian sản xuất mong muốn",
+      "source_url": "",
+      "status": "draft",
+      "contacts": [
+        {
+          "full_name": "Mikele",
+          "title": "Nhà bán hàng trên Walmart",
+          "phone": "0935618888",
+          "email": "",
+          "note": "Danh xưng trong tin đăng: Mr Mikele. Chưa có email, tên công ty."
+        }
+      ]
+    }
+  ]
+}

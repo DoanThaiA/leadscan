@@ -8,7 +8,7 @@ import type { Opp, OppContact } from "@/lib/commerce";
 import { Field, Icon } from "./ui";
 
 const REGIONS = ["Miền Bắc", "Miền Trung", "Miền Nam", "Toàn quốc", "Quốc tế"];
-const SOURCES = ["App đăng mua", "Dự án & gói thầu", "Nhà máy / FDI mới", "Hội chợ & triển lãm", "Mạng xã hội & nhóm chat", "Website doanh nghiệp", "Nguồn chính thống", "Email hỏi hàng"];
+const SOURCES = ["App đăng mua", "Dự án & gói thầu", "Nhà máy / FDI mới", "Hội chợ & triển lãm", "Mạng xã hội & nhóm chat", "Website doanh nghiệp", "Nguồn chính thống", "Email hỏi hàng", "Kết nối giao thương"];
 
 type ContactDraft = Omit<OppContact, "id">;
 const emptyContact = (): ContactDraft => ({ full_name: "", title: "", phone: "", email: "", note: "" });

@@ -19,6 +19,7 @@ const SOURCE_BADGE: Record<string, [string, string, string]> = {
   "Website doanh nghiệp": ["WB", "#475569", "#fff"],
   "Nguồn chính thống": ["CT", "#F59E0B", "#2B1B14"],
   "Email hỏi hàng": ["EM", "#0F766E", "#fff"],
+  "Kết nối giao thương": ["KN", "#B45309", "#fff"],
 };
 
 function badge(o: Opp): [string, string, string] {

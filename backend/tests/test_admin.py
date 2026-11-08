@@ -256,3 +256,20 @@ def test_cli_import_opportunities(tmp_path):
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps([{"title": "Thiếu nguồn hợp lệ", "source_type": "Không có"}]), encoding="utf-8")
     assert cli_main(["import-opportunities", str(bad)]) == 1
+
+
+def test_tasco_clb_ceo_89_opportunities_valid():
+    """File cơ hội HST Tasco (CLB CEO 89): 39 nhu cầu mua, nhập được, đúng nguồn & đầu mối."""
+    from pathlib import Path
+
+    from app.models import Opportunity
+
+    data = Path(__file__).resolve().parents[1] / "data" / "opportunities" / "2026-11-08-tasco-clb-ceo-89.json"
+    assert cli_main(["import-opportunities", str(data)]) == 0
+    with new_session() as db:
+        rows = db.scalars(select(Opportunity).order_by(Opportunity.id)).unique().all()
+        assert len(rows) == 39 and {o.status for o in rows} == {"draft"}
+        assert {o.source_type for o in rows} == {"Kết nối giao thương"}
+        assert all(len(o.contacts) == 1 and o.contacts[0].phone for o in rows)
+        gift = next(o for o in rows if "10.000 hộp" in o.title)
+        assert gift.contacts[0].email == "thu.dm@tascopharma.com" and gift.score_urgency == 90
