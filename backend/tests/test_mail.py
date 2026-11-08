@@ -62,3 +62,94 @@ def test_hoa_don_gui_qua_resend_va_ghi_nhan_da_gui(client, monkeypatch):
     assert sent["to"] == ["vylyy9999@gmail.com"] and code in sent["subject"] and "0101234567" in sent["text"]
     with new_session() as db:
         assert db.scalar(select(InvoiceRequest)).email_sent_at is not None
+
+
+def _env_mail(monkeypatch, **extra):
+    env = {
+        "resend_api_key": "re_test_key",
+        "notify_email": "quantri@gmail.com",
+        "notify_from": "no-reply@leadscan.net",
+        "mail_from_name": "LeadScan",
+        "admin_url": "https://leadscan.net/admin",
+        "member_url": "https://leadscan.net/thanh-vien",
+    }
+    return _cfg(monkeypatch, **{**env, **extra})
+
+
+def _sent(route, since: int = 0) -> dict:
+    """{người nhận: body JSON} của các email gửi qua Resend (từ lần gọi thứ `since`)."""
+    out = {}
+    for call in list(route.calls)[since:]:
+        b = json.loads(call.request.content)
+        out[b["to"][0]] = b
+    return out
+
+
+def test_dang_ky_moi_bao_quan_tri_va_chao_mung_khach(client, monkeypatch):
+    """Luồng thật: khách gửi form → worker gửi 2 email: báo quản trị + chào mừng khách."""
+    from tests.conftest import valid_form
+
+    _env_mail(monkeypatch)
+    with respx.mock(assert_all_called=True) as m:
+        route = m.post("https://api.resend.com/emails").respond(200, json={"id": "email_1"})
+        r = client.post("/api/registrations", json=valid_form())
+        assert r.status_code == 200, r.text
+    code = r.json()["code"]
+    sent = _sent(route)
+    assert set(sent) == {"quantri@gmail.com", "a@minhan.vn"}
+
+    admin = sent["quantri@gmail.com"]
+    assert admin["from"] == "LeadScan <no-reply@leadscan.net>"
+    assert admin["subject"].startswith("[LeadScan] Đăng ký mới: Công ty TNHH Bao Bì Minh An")
+    assert "MST: 0101234567" in admin["text"]
+    assert "Nguyễn Văn A - 0901234567 - a@minhan.vn" in admin["text"]
+    assert "https://leadscan.net/admin/khach-hang/" in admin["text"]
+
+    welcome = sent["a@minhan.vn"]
+    assert welcome["subject"] == "[LeadScan] Chào mừng Công ty TNHH Bao Bì Minh An — đăng ký thành công"
+    assert "Chào Nguyễn Văn A" in welcome["text"] and code in welcome["text"]
+    assert "https://leadscan.net/thanh-vien/dang-nhap" in welcome["text"]
+    assert "10.000.000đ/năm" in welcome["text"] and "10.000.000 điểm" in welcome["text"]
+    assert "matkhau" not in welcome["text"].lower().replace(" ", "")  # không bao giờ gửi mật khẩu qua email
+
+
+def test_dang_ky_khong_co_email_quan_tri_van_chao_mung_khach(client, monkeypatch):
+    from tests.conftest import valid_form
+
+    _env_mail(monkeypatch, notify_email="")
+    with respx.mock(assert_all_called=False) as m:
+        route = m.post("https://api.resend.com/emails").respond(200, json={"id": "x"})
+        assert client.post("/api/registrations", json=valid_form()).status_code == 200
+    assert set(_sent(route)) == {"a@minhan.vn"}
+
+
+def test_thanh_toan_gui_email_thanh_vien_va_bao_quan_tri(client, monkeypatch):
+    """Đơn phí thành viên được ghi nhận → email "Kích hoạt thành viên" cho khách + báo quản trị."""
+    from tests.conftest import MEMBER_PW, valid_form
+
+    _env_mail(monkeypatch)
+    with respx.mock(assert_all_called=False) as m:
+        route = m.post("https://api.resend.com/emails").respond(200, json={"id": "x"})
+        assert client.post("/api/registrations", json=valid_form()).status_code == 200
+        client.post("/api/member/auth/login", json={"email": "a@minhan.vn", "password": MEMBER_PW})
+        code = client.post("/api/member/orders", json={"kind": "membership"}).json()["order"]["code"]
+        before = route.call_count
+        assert client.post(f"/api/member/orders/{code}/simulate-paid").status_code == 200
+        sent = _sent(route, before)
+        assert set(sent) == {"quantri@gmail.com", "a@minhan.vn"}
+
+        member = sent["a@minhan.vn"]
+        assert member["subject"] == "[LeadScan] Kích hoạt thành viên thành công"
+        assert code in member["text"] and "10.000.000đ" in member["text"]
+        assert "Số dư hiện tại    : 10.000.000 điểm" in member["text"]
+        assert "Thành viên đến" in member["text"]
+        assert f"https://leadscan.net/thanh-vien/nap-tien/{code}" in member["text"]
+
+        admin = sent["quantri@gmail.com"]
+        assert admin["subject"].startswith("[LeadScan] Đã nhận thanh toán phí thành viên: Công ty TNHH Bao Bì Minh An")
+        assert "(tự động)" in admin["text"] and "/admin/khach-hang/" in admin["text"]
+
+        # Gọi lại không cộng điểm lần 2 → không gửi email lần 2
+        before = route.call_count
+        assert client.post(f"/api/member/orders/{code}/simulate-paid").status_code == 409
+        assert route.call_count == before

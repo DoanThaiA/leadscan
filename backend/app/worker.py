@@ -80,6 +80,46 @@ def send_password_reset_task(email: str, name: str, token: str) -> None:
     send_password_reset(get_settings(), email, name, token)
 
 
+@celery_app.task(name="leadscan.send_welcome")
+def send_welcome_task(company_id: int) -> None:
+    """Email chào mừng tới tài khoản thành viên vừa tạo khi đăng ký."""
+    from sqlalchemy import select
+
+    from app.db import new_session
+    from app.models import Company, MemberUser
+    from app.services.notify import send_welcome
+
+    with new_session() as db:
+        c = db.get(Company, company_id)
+        u = db.scalar(select(MemberUser).where(MemberUser.company_id == company_id).order_by(MemberUser.id))
+        if c and u:
+            send_welcome(get_settings(), c, u.email, u.full_name)
+
+
+@celery_app.task(name="leadscan.notify_payment")
+def notify_payment_task(order_id: int) -> None:
+    """Đơn vừa được ghi nhận đã thanh toán → email cho thành viên + báo quản trị."""
+    from sqlalchemy import select
+
+    from app.db import new_session
+    from app.models import MemberUser, PaymentOrder
+    from app.services.notify import notify_payment_admin, send_payment_success
+
+    cfg = get_settings()
+    with new_session() as db:
+        o = db.get(PaymentOrder, order_id)
+        if not o or o.status != "paid":
+            return
+        u = db.get(MemberUser, o.created_by_id) if o.created_by_id else None
+        if not u or not u.is_active:
+            u = db.scalar(
+                select(MemberUser).where(MemberUser.company_id == o.company_id, MemberUser.is_active).order_by(MemberUser.id)
+            )
+        if u:
+            send_payment_success(cfg, o, u.email, u.full_name)
+        notify_payment_admin(cfg, o)
+
+
 def enqueue(task, *args) -> None:
     """Đưa việc vào hàng đợi; Redis lỗi thì chỉ ghi log (dữ liệu chính đã nằm trong DB)."""
     try:
@@ -89,8 +129,6 @@ def enqueue(task, *args) -> None:
 
 
 def enqueue_new_registration(company_id: int) -> None:
-    """Redis lỗi cũng không sao: hồ sơ đã lưu trong DB, chỉ mất email báo."""
-    try:
-        notify_new_registration_task.apply_async((company_id,), retry=False)
-    except Exception as e:  # noqa: BLE001
-        log.warning("Không đưa được việc báo email cho khách hàng %s vào hàng đợi: %s", company_id, e)
+    """Báo quản trị + chào mừng khách. Redis lỗi cũng không sao: hồ sơ đã lưu trong DB, chỉ mất email."""
+    enqueue(notify_new_registration_task, company_id)
+    enqueue(send_welcome_task, company_id)

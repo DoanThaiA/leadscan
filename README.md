@@ -75,7 +75,16 @@ Khi InfoCMS gửi tài liệu (định dạng webhook, cách ký), chỉ cần c
 
 ## Gửi email (Resend)
 
-Email (yêu cầu xuất hoá đơn → kế toán, đặt lại mật khẩu, báo đăng ký mới) gửi qua [Resend](https://resend.com) bằng HTTP API.
+Các email hệ thống gửi:
+
+| Khi nào | Gửi tới |
+|---|---|
+| Khách gửi form đăng ký | Quản trị (`LEADSCAN_NOTIFY_EMAIL`): báo đăng ký mới · Khách: email chào mừng + link đăng nhập, bước tiếp theo |
+| Đơn phí thành viên / nạp điểm được ghi nhận (webhook, admin xác nhận tay) | Khách: kích hoạt thành viên / nạp điểm thành công, số dư, link xuất hoá đơn · Quản trị: đã nhận thanh toán |
+| Khách gửi thông tin xuất hoá đơn | Kế toán (`LEADSCAN_INVOICE_EMAIL`) |
+| Khách bấm "Quên mật khẩu" | Khách: link đặt lại mật khẩu (60 phút) |
+
+Email gửi qua [Resend](https://resend.com) bằng HTTP API.
 Cấu hình `LEADSCAN_RESEND_API_KEY`, `LEADSCAN_NOTIFY_FROM` (vd `no-reply@mcv.network` — tên miền phải được xác minh trong Resend) và `LEADSCAN_MAIL_FROM_NAME`.
 Không có Resend thì hệ thống dùng SMTP (`LEADSCAN_SMTP_*`). Gửi lỗi không làm hỏng thao tác của khách; admin thấy "Chưa gửi được" ở trang Hoá đơn và bấm gửi lại.
 
@@ -155,6 +164,7 @@ Cập nhật phiên bản mới: `git pull && docker compose up -d --build` (kh�
 | Việc | Lệnh |
 |---|---|
 | Tạo / đặt lại mật khẩu quản trị | `docker compose exec api python -m app.cli create-admin --email ...` |
+| Gửi thử 1 email (kiểm tra Resend/SMTP) | `docker compose exec api python -m app.cli send-test-mail --to ban@gmail.com` |
 | Chẩn đoán DB, Redis, email (Resend/SMTP) | `docker compose exec api python -m app.cli diagnose` |
 | Quét PROFIT500 vào kho doanh nghiệp | `docker compose exec api python -m app.cli crawl-profit500 --chart 12 --year 2026` (thêm `--limit 20` để thử, `--update` để làm mới bản ghi đã có) |
 | Nhập hồ sơ JSON từ bản PHP cũ | copy thư mục `storage/submissions` vào container rồi `python -m app.cli import-legacy <thư mục>` |

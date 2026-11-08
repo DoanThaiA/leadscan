@@ -124,6 +124,9 @@ def mark_paid(
         )
     )
     db.commit()
+    from app.worker import enqueue, notify_payment_task  # import muộn: tránh vòng import khi khởi động
+
+    enqueue(notify_payment_task, order.id)  # email cho thành viên + báo quản trị (chạy nền)
     return True
 
 

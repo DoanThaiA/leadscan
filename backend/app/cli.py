@@ -2,6 +2,7 @@
 
     python -m app.cli create-admin --email a@b.vn --name "Nguyễn Văn A"   # tạo/đặt lại tài khoản quản trị
     python -m app.cli diagnose                                          # kiểm tra DB, Redis, SMTP
+    python -m app.cli send-test-mail [--to a@b.vn]                      # gửi thử 1 email (mặc định tới NOTIFY_EMAIL)
     python -m app.cli import-legacy DIR                                 # nhập hồ sơ JSON từ bản PHP cũ
     python -m app.cli crawl-profit500 --chart 12 --year 2026            # quét PROFIT500 vào kho doanh nghiệp
 
@@ -144,6 +145,24 @@ def cmd_import_legacy(args) -> int:
     return 0
 
 
+def cmd_send_test_mail(args) -> int:
+    from app.services.notify import mail_provider, send_mail
+
+    cfg = get_settings()
+    to = (args.to or cfg.notify_email).strip()
+    prov = mail_provider(cfg)
+    if not prov:
+        print("Chưa cấu hình gửi email: đặt LEADSCAN_RESEND_API_KEY (hoặc LEADSCAN_SMTP_*) trong .env")
+        return 1
+    if not to:
+        print("Chưa có người nhận: thêm --to email@... hoặc đặt LEADSCAN_NOTIFY_EMAIL trong .env")
+        return 1
+    print(f"Gửi thử qua {prov}, từ {cfg.mail_from_name} <{cfg.notify_from}> tới {to} ...")
+    ok = send_mail(cfg, "[LeadScan] Email thử", "Đây là email thử từ hệ thống LeadScan. Nhận được email này nghĩa là cấu hình gửi mail đã đúng.", to=to)
+    print("Đã gửi — kiểm tra hộp thư (cả mục Spam/Quảng cáo)." if ok else "Gửi KHÔNG thành công — xem lý do ở dòng log phía trên.")
+    return 0 if ok else 1
+
+
 def cmd_crawl_profit500(args) -> int:
     from app.services import profit500
 
@@ -172,6 +191,9 @@ def main(argv: list[str] | None = None) -> int:
     i = sub.add_parser("import-legacy", help="Nhập hồ sơ JSON từ bản PHP cũ")
     i.add_argument("dir")
     i.set_defaults(fn=cmd_import_legacy)
+    t = sub.add_parser("send-test-mail", help="Gửi thử 1 email để kiểm tra cấu hình Resend/SMTP")
+    t.add_argument("--to", default="", help="Người nhận (mặc định LEADSCAN_NOTIFY_EMAIL)")
+    t.set_defaults(fn=cmd_send_test_mail)
     c = sub.add_parser("crawl-profit500", help="Quét doanh nghiệp từ bảng xếp hạng PROFIT500 vào kho doanh nghiệp")
     c.add_argument("--chart", type=int, default=12, help="12 = Top 500 lợi nhuận tốt nhất, 13 = Top 500 tư nhân, 17 = Top 50 xuất sắc")
     c.add_argument("--year", type=int, default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).year)

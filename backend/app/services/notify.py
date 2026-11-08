@@ -133,3 +133,73 @@ def send_password_reset(cfg: Settings, email: str, name: str, token: str) -> boo
         "Nếu không phải bạn, hãy bỏ qua email này — mật khẩu hiện tại vẫn giữ nguyên.\n"
     )
     return send_mail(cfg, "[LeadScan] Đặt lại mật khẩu", body, to=email)
+
+
+def _member_base(cfg: Settings) -> str:
+    return cfg.member_url.rstrip("/")
+
+
+def send_welcome(cfg: Settings, c: Company, email: str, name: str) -> bool:
+    """Gửi khách vừa đăng ký: xác nhận đã nhận hồ sơ + bước tiếp theo."""
+    base = _member_base(cfg)
+    body = (
+        f"Chào {name},\n\n"
+        f"Cảm ơn bạn đã đăng ký LeadScan cho {c.name}.\n"
+        f"Mã đăng ký: {c.code}\n\n"
+        "Tài khoản thành viên của bạn đã được tạo:\n"
+        f"  • Đăng nhập: {base}/dang-nhap\n"
+        f"  • Email đăng nhập: {email}\n"
+        "  • Mật khẩu: mật khẩu bạn đã đặt khi đăng ký\n\n"
+        "Bước tiếp theo:\n"
+        f"  1. Thanh toán phí thành viên {_vnd(cfg.membership_fee)}/năm trong cổng thành viên ({base}/nap-tien).\n"
+        f"     Toàn bộ số tiền được cộng thành {cfg.membership_points:,} điểm để mua phiếu cơ hội.\n".replace(",", ".")
+        + "  2. Cập nhật chân dung cơ hội để AI tìm đúng khách hàng bạn cần.\n"
+        "  3. Đội ngũ LeadScan sẽ liên hệ xác nhận và hỗ trợ bạn bắt đầu.\n\n"
+        f"Quên mật khẩu? Đặt lại tại {base}/quen-mat-khau\n\n"
+        "Trân trọng,\nĐội ngũ LeadScan\n"
+    )
+    return send_mail(cfg, f"[LeadScan] Chào mừng {c.name} — đăng ký thành công", body, to=email)
+
+
+def send_payment_success(cfg: Settings, order, email: str, name: str) -> bool:
+    """Gửi thành viên khi đơn thanh toán được ghi nhận (phí thành viên hoặc nạp điểm)."""
+    c = order.company
+    base = _member_base(cfg)
+    is_membership = order.kind == "membership"
+    lines = [
+        f"Chào {name},\n",
+        f"LeadScan đã nhận thanh toán {'phí thành viên' if is_membership else 'nạp điểm'} của {c.name}.\n",
+        f"Mã đơn            : {order.code}",
+        f"Số tiền           : {_vnd(order.paid_amount or order.amount)}",
+        f"Thời gian         : {_vn(order.paid_at)}",
+        f"Điểm được cộng    : {order.points:,}".replace(",", "."),
+        f"Số dư hiện tại    : {c.points_balance:,} điểm".replace(",", "."),
+    ]
+    if c.membership_expires_at:
+        lines.append(f"Thành viên đến    : {_vn(c.membership_expires_at)[:10]}")
+    lines += [
+        "",
+        f"Bắt đầu xem kho cơ hội: {base}/co-hoi",
+        f"Cần xuất hoá đơn? Nhập thông tin tại: {base}/nap-tien/{order.code}",
+        "",
+        "Trân trọng,\nĐội ngũ LeadScan",
+    ]
+    subject = "[LeadScan] Kích hoạt thành viên thành công" if is_membership else f"[LeadScan] Nạp điểm thành công — {order.code}"
+    return send_mail(cfg, subject, "\n".join(lines) + "\n", to=email)
+
+
+def notify_payment_admin(cfg: Settings, order) -> bool:
+    """Báo quản trị (LEADSCAN_NOTIFY_EMAIL) khi có thanh toán được ghi nhận."""
+    c = order.company
+    how = f"xác nhận thủ công bởi {order.confirmed_by.full_name}" if order.confirmed_by else "tự động"
+    body = (
+        f"Khách hàng   : {c.name} ({c.code})\n"
+        f"Loại         : {'Phí thành viên' if order.kind == 'membership' else 'Nạp điểm'}\n"
+        f"Mã đơn       : {order.code}\n"
+        f"Số tiền      : {_vnd(order.paid_amount or order.amount)}\n"
+        f"Ghi nhận     : {_vn(order.paid_at)} ({how})\n"
+        f"Số dư sau    : {c.points_balance:,} điểm\n".replace(",", ".")
+        + f"\nXem khách hàng: {cfg.admin_url.rstrip('/')}/khach-hang/{c.id}\n"
+    )
+    kind = "phí thành viên" if order.kind == "membership" else "nạp điểm"
+    return send_mail(cfg, f"[LeadScan] Đã nhận thanh toán {kind}: {c.name} — {_vnd(order.paid_amount or order.amount)}", body)
