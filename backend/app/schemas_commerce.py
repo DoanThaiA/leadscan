@@ -185,6 +185,9 @@ class OppIn(BaseModel):
     source_url: Line = Field("", max_length=500)
     status: str = "draft"
     contacts: list[OppContactIn] = Field(default_factory=list, max_length=20)
+    # Ảnh & tài liệu (phần mở khoá sau khi mua), đúng thứ tự hiển thị. None = giữ nguyên tệp đang có.
+    attachment_ids: list[int] | None = Field(None, max_length=50)
+    attachment_captions: dict[int, str] | None = None  # {id tệp: chú thích} — lưu cùng lúc với phiếu
 
     @field_validator("status")
     @classmethod

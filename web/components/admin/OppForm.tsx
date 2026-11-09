@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 import { errFields, errMsg } from "@/lib/admin/api";
 import type { Opp, OppContact } from "@/lib/commerce";
 
+import { type AttachItem, AttachmentsEditor } from "./AttachmentsEditor";
 import { Field, Icon } from "./ui";
 
 const REGIONS = ["Miền Bắc", "Miền Trung", "Miền Nam", "Toàn quốc", "Quốc tế"];
@@ -18,10 +19,17 @@ export function OppForm({ initial, onSubmit, submitLabel }: { initial?: Opp; onS
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [files, setFiles] = useState<AttachItem[]>([]);
   const o = initial;
+  const uploading = files.some((f) => !f.att && !f.error);
+  const failed = files.filter((f) => f.error).length;
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (uploading) {
+      setMsg("Đang tải tệp đính kèm lên — vui lòng đợi xong rồi lưu.");
+      return;
+    }
     const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
     const num = (k: string) => Number(String(f[k] ?? "").replace(/\D/g, "") || 0);
     const body = {
@@ -31,6 +39,8 @@ export function OppForm({ initial, onSubmit, submitLabel }: { initial?: Opp; onS
       price: num("price"),
       max_buyers: num("max_buyers"),
       contacts: contacts.filter((c) => Object.values(c).some((v) => v.trim())),
+      attachment_ids: files.filter((x) => x.att).map((x) => x.att!.id), // đúng thứ tự hiển thị
+      attachment_captions: Object.fromEntries(files.filter((x) => x.att).map((x) => [x.att!.id, x.caption.trim()])),
     };
     setBusy(true);
     setErrors({});
@@ -81,6 +91,13 @@ export function OppForm({ initial, onSubmit, submitLabel }: { initial?: Opp; onS
               <Field label="Bên có nhu cầu (tên đơn vị)" error={errors.buyer_name} full htmlFor="o-buyer"><input id="o-buyer" className="adm-input" name="buyer_name" defaultValue={o?.buyer_name} maxLength={200} /></Field>
               <Field label="Mô tả chi tiết" error={errors.detail} full htmlFor="o-detail"><textarea id="o-detail" className="adm-input" name="detail" defaultValue={o?.detail} maxLength={10000} style={{ minHeight: 120 }} /></Field>
               <Field label="Link nguồn" error={errors.source_url} full htmlFor="o-url"><input id="o-url" className="adm-input" name="source_url" defaultValue={o?.source_url} maxLength={500} /></Field>
+              <div className="full at-field">
+                <div className="at-label">
+                  <span>Ảnh &amp; tài liệu</span>
+                  <small className="muted">Ảnh chụp yêu cầu, bản vẽ, báo giá, hồ sơ thầu… — người mua xem và tải sau khi mua phiếu</small>
+                </div>
+                <AttachmentsEditor initial={o?.attachments ?? []} onChange={setFiles} />
+              </div>
             </div>
           </section>
 
@@ -131,7 +148,8 @@ export function OppForm({ initial, onSubmit, submitLabel }: { initial?: Opp; onS
               {o ? <p style={{ fontSize: 13 }}>Hiện khớp <b>{o.match_count ?? 0}</b> khách hàng.</p> : <p className="muted" style={{ fontSize: 12.5 }}>Sau khi lưu ở trạng thái “Đang bán”, phiếu tự được so khớp với các phiếu tìm cơ hội đang có.</p>}
             </div>
           </section>
-          <button className="adm-btn primary" style={{ height: 42 }} disabled={busy}>{busy ? "Đang lưu…" : submitLabel}</button>
+          {failed ? <p className="muted" style={{ fontSize: 12.5 }}>{failed} tệp tải lỗi sẽ không được lưu — bấm “Thử lại” hoặc bỏ tệp đó.</p> : null}
+          <button className="adm-btn primary" style={{ height: 42 }} disabled={busy || uploading}>{busy ? "Đang lưu…" : uploading ? "Đang tải tệp lên…" : submitLabel}</button>
         </div>
       </div>
     </form>

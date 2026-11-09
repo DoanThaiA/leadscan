@@ -61,6 +61,34 @@ export interface OppContact {
   note: string;
 }
 
+/** Ảnh / tài liệu của phiếu cơ hội (lưu trên Cloudflare R2; link xem/tải ký sẵn, hết hạn sau ~15 phút) */
+export interface Attachment {
+  id: number;
+  filename: string;
+  content_type: string;
+  size: number;
+  kind: "image" | "file";
+  width: number | null;
+  height: number | null;
+  caption: string;
+  status: "pending" | "ready";
+  url: string | null; // ảnh: xem trực tiếp
+  thumb_url: string | null; // ảnh nhỏ
+  download_url: string | null; // tải về
+}
+
+export interface AttachConfig {
+  configured: boolean;
+  max_files: number;
+  image_max_mb: number;
+  file_max_mb: number;
+  image_exts: string[];
+  file_exts: string[];
+}
+
+export const fmtBytes = (n: number) =>
+  n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0).replace(".", ",")} MB`;
+
 export interface Opp {
   id: number;
   code: string;
@@ -95,6 +123,7 @@ export interface Opp {
   detail?: string;
   source_url?: string;
   contacts?: OppContact[];
+  attachments?: Attachment[]; // chỉ ở admin (phiếu đầy đủ)
   status?: "draft" | "published" | "closed";
   created_at?: string;
   updated_at?: string;

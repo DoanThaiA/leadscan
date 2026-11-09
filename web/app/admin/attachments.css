@@ -1,0 +1,62 @@
+/* Ảnh & tài liệu của phiếu cơ hội — form admin (soạn) + cổng thành viên (xem sau khi mua) */
+
+/* ---------- Form admin ---------- */
+.at-field { display: grid; gap: 8px; }
+.at-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.at-label span { font-weight: 600; color: var(--ink); font-size: 13.5px; }
+.at-label small { font-size: 12px; }
+.at-editor { display: grid; gap: 12px; }
+.at-off { display: flex; gap: 8px; align-items: flex-start; padding: 12px 14px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--muted); font-size: 13px; background: var(--line-2); }
+.at-off code { font-size: 12px; }
+.at-drop { display: flex; gap: 12px; align-items: center; padding: 16px 18px; border: 1.5px dashed #cfd4d9; border-radius: 10px; background: #fafbfc; color: var(--ink-2); font-size: 13.5px; transition: border-color 0.15s, background 0.15s; }
+.at-drop > .icon { flex: none; width: 36px; height: 36px; padding: 8px; border-radius: 50%; background: var(--brand-50); color: var(--brand-600); }
+.at-drop small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+.at-drop.on { border-color: var(--brand); background: var(--brand-50); }
+.at-pick { border: 0; background: none; padding: 0; color: var(--brand-600); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.at-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px; }
+.at-tile { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; overflow: hidden; display: grid; align-content: start; }
+.at-tile.err { border-color: #f3c0c0; }
+.at-media { position: relative; aspect-ratio: 4 / 3; background: var(--line-2); display: grid; place-items: center; overflow: hidden; }
+.at-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.at-ext { display: grid; place-items: center; min-width: 56px; height: 64px; padding: 0 10px; border-radius: 8px; background: #fff; border: 1px solid var(--line); color: var(--brand-600); font: 700 14px var(--head); letter-spacing: 0.02em; }
+.at-ext.sm { min-width: 44px; height: 44px; font-size: 11.5px; flex: none; }
+.at-progress { position: absolute; inset: auto 0 0 0; padding: 8px; background: linear-gradient(transparent, rgba(0, 0, 0, 0.55)); color: #fff; font-size: 12px; display: grid; gap: 4px; }
+.at-progress i { display: block; height: 4px; border-radius: 99px; background: var(--brand); transition: width 0.2s; }
+.at-fail { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; padding: 10px; text-align: center; background: rgba(253, 236, 236, 0.95); color: var(--danger); font-size: 12px; }
+.at-first { position: absolute; top: 6px; left: 6px; padding: 1px 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 11px; font-weight: 600; }
+.at-info { display: grid; gap: 1px; padding: 8px 10px 0; min-width: 0; }
+.at-name { font-size: 12.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.at-info .muted { font-size: 11.5px; }
+.at-cap { margin: 6px 10px 0; width: calc(100% - 20px); height: 30px; font-size: 12.5px; }
+.at-act { display: flex; gap: 2px; padding: 6px 6px 8px; }
+.at-act .adm-btn.sm { height: 28px; min-width: 30px; padding: 0 8px; }
+.at-act .danger { margin-left: auto; }
+
+/* ---------- Cổng thành viên: xem sau khi mua ---------- */
+.at-view { display: grid; gap: 14px; }
+.at-thumbs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.at-thumbs li { display: grid; gap: 4px; align-content: start; }
+.at-thumbs button { display: block; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--line-2); aspect-ratio: 4 / 3; cursor: zoom-in; }
+.at-thumbs button:hover { border-color: var(--brand-100); box-shadow: 0 2px 10px rgba(16, 24, 40, 0.08); }
+.at-thumbs button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.at-thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.at-cap-view { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.at-files { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.at-files li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); }
+.at-file-main { display: grid; min-width: 0; flex: 1; }
+.at-file-main b { color: var(--ink); font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.at-file-main .muted { font-size: 12px; }
+.at-lightbox { position: fixed; inset: 0; z-index: 100; background: rgba(15, 18, 22, 0.92); display: grid; grid-template-rows: auto 1fr; place-items: center; padding: 12px 56px 24px; }
+.at-lightbox > img { max-width: 100%; max-height: calc(100vh - 90px); object-fit: contain; border-radius: 4px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); }
+.at-lb-bar { justify-self: stretch; display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #fff; font-size: 13px; padding-bottom: 10px; }
+.at-lb-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.at-lb-nav { position: fixed; top: 50%; transform: translateY(-50%); width: 42px; height: 42px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.14); color: #fff; font-size: 26px; line-height: 1; cursor: pointer; }
+.at-lb-nav:hover { background: rgba(255, 255, 255, 0.26); }
+.at-lb-nav.prev { left: 8px; }
+.at-lb-nav.next { right: 8px; }
+@media (max-width: 560px) {
+  .at-drop { align-items: flex-start; }
+  .at-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .at-lightbox { padding: 10px 10px 20px; }
+  .at-lb-nav { top: auto; bottom: 16px; transform: none; }
+}

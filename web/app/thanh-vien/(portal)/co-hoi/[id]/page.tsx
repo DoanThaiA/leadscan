@@ -7,12 +7,15 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Dialog, Icon, ScoreChip, Skeleton } from "@/components/admin/ui";
 import { useMember } from "@/components/member/MemberContext";
 import { fmtDate, fmtDateTime, fromNow } from "@/lib/admin/format";
-import { ENRICH_STATUS, type EnrichReq, fmtPts, type Opp } from "@/lib/commerce";
+import { AttachmentGallery } from "@/components/member/AttachmentGallery";
+import { type Attachment, ENRICH_STATUS, type EnrichReq, fmtPts, type Opp } from "@/lib/commerce";
 import { ApiError, errMsg, mapi } from "@/lib/member/api";
 
 interface Resp {
   opportunity: Opp;
   purchase: { id: number; price: number; created_at: string; enrich_requests: EnrichReq[] } | null;
+  attachments?: Attachment[]; // chỉ khi đã mua — link xem/tải ký sẵn ngắn hạn
+  attachment_counts?: { images: number; files: number }; // chưa mua: chỉ biết số lượng
 }
 
 export default function OppDetailPage() {
@@ -126,13 +129,17 @@ export default function OppDetailPage() {
                   )) : <p className="muted" style={{ padding: "12px 0" }}>Chưa có đầu mối — gửi yêu cầu enrich để LeadScan tìm thêm.</p>}
                 </div>
               </section>
+              {d.attachments?.length ? <AttachmentGallery items={d.attachments} onExpired={load} /> : null}
               <EnrichBox purchaseId={d.purchase!.id} requests={d.purchase!.enrich_requests} onDone={load} />
             </>
           ) : (
             <section className="adm-card">
               <div className="bd adm-locked">
                 <Icon name="lock" />
-                <span>Tên bên có nhu cầu, mô tả chi tiết và <b>{o.contact_count} đầu mối liên hệ</b> sẽ mở khoá sau khi mua phiếu.</span>
+                <span>
+                  Tên bên có nhu cầu, mô tả chi tiết và <b>{o.contact_count} đầu mối liên hệ</b>
+                  {lockedFiles(d.attachment_counts) ? <>, kèm <b>{lockedFiles(d.attachment_counts)}</b></> : null} sẽ mở khoá sau khi mua phiếu.
+                </span>
               </div>
             </section>
           )}
@@ -271,4 +278,11 @@ function EnrichBox({ purchaseId, requests, onDone }: { purchaseId: number; reque
       </div>
     </section>
   );
+}
+
+/** "3 ảnh và 2 tài liệu" — số tệp đính kèm mở khoá sau khi mua */
+function lockedFiles(c?: { images: number; files: number }): string {
+  if (!c) return "";
+  const parts = [c.images ? `${c.images} ảnh` : "", c.files ? `${c.files} tài liệu` : ""].filter(Boolean);
+  return parts.join(" và ");
 }

@@ -35,7 +35,7 @@ from app.registration_form import AREAS, CUSTOMER_SIZES, INDUSTRIES, REGIONS
 from app.schemas import LoginIn, PasswordChangeIn
 from app.schemas_commerce import EnrichIn, EnrichOut, InvoiceIn, OrderCreateIn, OrderOut, TxOut
 from app.security import DUMMY_HASH, add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
-from app.services import catalog, payments
+from app.services import attachments, catalog, payments
 from app.worker import enqueue, match_request_now, send_invoice_request_task, send_password_reset_task, send_search_request_task
 
 router = APIRouter(prefix="/api/member")
@@ -263,10 +263,12 @@ def get_opportunity(opp_id: int, user: MemberUser = Depends(current_member), db:
     o, p, u = _get_opp(db, opp_id, user.company_id)
     if not p:
         saved = bool(catalog.saved_ids(db, user.company_id, [o.id]))
-        return {"opportunity": catalog.preview(o, saved=saved, match=u), "purchase": None}
+        # chưa mua: chỉ cho biết có bao nhiêu ảnh / tài liệu (mở khoá sau khi mua)
+        return {"opportunity": catalog.preview(o, saved=saved, match=u), "purchase": None, "attachment_counts": attachments.counts(db, o.id)}
     enrich = db.scalars(select(EnrichRequest).where(EnrichRequest.purchase_id == p.id).order_by(EnrichRequest.id.desc())).unique().all()
     return {
         "opportunity": catalog.full(o, u),
+        "attachments": [attachments.out(a) for a in attachments.for_opportunity(db, o.id)],  # link ký ngắn hạn
         "purchase": {"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "enrich_requests": [EnrichOut.model_validate(e).model_dump(mode="json") for e in enrich]},
     }
 

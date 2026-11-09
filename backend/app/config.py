@@ -87,6 +87,18 @@ class Settings(BaseSettings):
     cohere_cos_low: float = 0.20
     cohere_cos_high: float = 0.60
 
+    # Ảnh & tài liệu của phiếu cơ hội: Cloudflare R2 (S3-compatible). Bucket để riêng tư — trình duyệt upload
+    # thẳng bằng link ký sẵn, xem/tải bằng link ký ngắn hạn. Để trống = tắt tính năng gắn tệp.
+    r2_account_id: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket: str = ""
+    r2_endpoint: str = ""  # mặc định https://<account_id>.r2.cloudflarestorage.com
+    attach_max_files: int = 20  # số tệp tối đa mỗi phiếu
+    attach_image_max_mb: int = 10
+    attach_file_max_mb: int = 25
+    attach_url_ttl: int = 900  # giây — hạn của link xem/tải
+
     # Hàng đợi việc nền (Celery + Redis)
     redis_url: str = "redis://localhost:6379/0"
     celery_eager: bool = False  # True = chạy task ngay trong tiến trình (dùng cho test)

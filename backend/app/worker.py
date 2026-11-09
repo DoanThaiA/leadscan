@@ -45,9 +45,44 @@ def notify_new_registration_task(company_id: int) -> None:
             notify_new_registration(get_settings(), c)
 
 
+@celery_app.task(name="leadscan.purge_files", bind=True, max_retries=5)
+def purge_files_task(self, keys: list[str]) -> None:
+    """Xoá tệp trên Cloudflare R2 (tệp bị bỏ khỏi phiếu, phiếu bị xoá, tệp upload bỏ dở)."""
+    from app.services import storage
+
+    keys = [k for k in keys if k]
+    if not keys or not storage.configured():
+        return
+    try:
+        storage.backend().delete(keys)
+    except Exception as e:  # noqa: BLE001 — R2 lỗi tạm: thử lại sau
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=e, countdown=60 * 2**self.request.retries) from e
+        log.exception("Không xoá được %s tệp trên R2", len(keys))
+
+
+def _cleanup_orphan_attachments(db) -> list[str]:
+    """Tệp admin tải lên nhưng không lưu vào phiếu nào sau 24 giờ → xoá trên R2 và trong DB."""
+    from sqlalchemy import select
+
+    from app.db import utcnow
+    from app.models import OpportunityAttachment
+    from app.services.attachments import ORPHAN_HOURS
+
+    old = db.scalars(
+        select(OpportunityAttachment).where(
+            OpportunityAttachment.opportunity_id.is_(None), OpportunityAttachment.created_at < utcnow() - timedelta(hours=ORPHAN_HOURS)
+        )
+    ).all()
+    keys = [k for a in old for k in (a.key, a.thumb_key) if k]
+    for a in old:
+        db.delete(a)
+    return keys  # xoá trên R2 sau khi DB đã commit
+
+
 @celery_app.task(name="leadscan.cleanup")
 def cleanup_task() -> None:
-    """Xoá phiên đăng nhập hết hạn và lượt đếm rate limit cũ."""
+    """Xoá phiên đăng nhập hết hạn, lượt đếm rate limit cũ, tệp đính kèm upload bỏ dở."""
     from app.db import new_session, utcnow
     from app.models import AdminSession, MemberSession, PaymentOrder, RateHit
 
@@ -58,8 +93,11 @@ def cleanup_task() -> None:
             {"status": "expired"}, synchronize_session=False
         )
         r = db.execute(delete(RateHit).where(RateHit.created_at < utcnow() - timedelta(days=1))).rowcount
+        orphan_keys = _cleanup_orphan_attachments(db)
         db.commit()
-    log.info("Dọn dẹp: %s phiên hết hạn, %s lượt rate limit cũ", s, r)
+    if orphan_keys:
+        purge_files_task.apply(args=[orphan_keys])
+    log.info("Dọn dẹp: %s phiên hết hạn, %s lượt rate limit cũ, %s tệp đính kèm bỏ dở", s, r, len(orphan_keys))
 
 
 @celery_app.task(name="leadscan.send_invoice_request")

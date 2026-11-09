@@ -16,6 +16,8 @@ dependencies = [
     "beautifulsoup4>=4.15.0",
     "cryptography>=50.0.2",
     "pgvector>=0.4",
+    "boto3>=1.35",
+    "pillow>=11",
 ]
 
 [dependency-groups]

@@ -251,6 +251,39 @@ nano .env
 > Khi khách gửi phiếu tìm cơ hội, **worker** (Celery) nhúng mô tả bằng Cohere, lấy ứng viên gần nhất bằng pgvector rồi chấm điểm hybrid. Worker dừng thì phiếu sẽ đứng ở trạng thái "đang tìm".
 > Lần đầu thêm khoá (hoặc sau khi đổi model): `docker compose exec api python -m app.cli rematch` để nhúng và so khớp lại toàn bộ.
 
+### Ảnh & tài liệu của phiếu cơ hội (Cloudflare R2)
+
+Admin gắn ảnh/tài liệu vào phiếu ngay trong form tạo/sửa phiếu (khối "Phần mở khoá sau khi mua"); thành viên chỉ xem/tải được **sau khi mua**. Tệp không đi qua VPS: trình duyệt upload thẳng lên R2 bằng link ký sẵn, xem/tải bằng link ký hết hạn sau 15 phút. Không cấu hình thì tính năng tự tắt, phần còn lại vẫn chạy.
+
+1. Cloudflare Dashboard → **R2 Object Storage** → **Create bucket**, tên ví dụ `leadscan-files`. **Không** bật "Public access" / r2.dev / custom domain (bucket phải riêng tư).
+2. R2 → **Manage API tokens** → **Create API token**: quyền **Object Read & Write**, áp dụng **chỉ bucket `leadscan-files`**. Lưu lại *Access Key ID* và *Secret Access Key* (chỉ hiện 1 lần). *Account ID* nằm ở trang tổng quan R2.
+3. Bucket → **Settings** → **CORS policy** → dán:
+
+   ```json
+   [
+     {
+       "AllowedOrigins": ["https://leadscan.net", "https://www.leadscan.net"],
+       "AllowedMethods": ["PUT", "GET", "HEAD"],
+       "AllowedHeaders": ["Content-Type"],
+       "MaxAgeSeconds": 3600
+     }
+   ]
+   ```
+
+   (Chạy thử trên máy thì thêm `"http://localhost:3000"` vào `AllowedOrigins`.)
+4. Điền vào `.env`:
+
+| Biến | Điền gì |
+|---|---|
+| `LEADSCAN_R2_ACCOUNT_ID` | Account ID của Cloudflare |
+| `LEADSCAN_R2_ACCESS_KEY_ID` / `LEADSCAN_R2_SECRET_ACCESS_KEY` | Khoá của API token ở bước 2 |
+| `LEADSCAN_R2_BUCKET` | Tên bucket, vd `leadscan-files` |
+
+5. `docker compose up -d` để nạp biến mới. Kiểm tra: vào admin → Thêm cơ hội → khối "Ảnh & tài liệu" phải hiện ô kéo thả (không còn "Chưa cấu hình lưu trữ"); thử kéo 1 ảnh vào.
+
+> Giới hạn mặc định: 20 tệp/phiếu; ảnh jpg/png/webp/gif ≤ 10 MB (tự xoá EXIF/GPS và tạo ảnh nhỏ); tài liệu pdf/doc(x)/xls(x)/ppt(x)/csv/txt/zip ≤ 25 MB (luôn tải về, không mở trong trình duyệt). Chặn svg/html.
+> Tệp upload nhưng không lưu vào phiếu nào tự xoá sau 24 giờ (việc dọn dẹp hằng giờ của **beat**); xoá phiếu / bỏ tệp khỏi phiếu thì **worker** xoá tệp trên R2.
+
 ### Biến tuỳ chọn
 
 | Biến | Mặc định | Khi nào đổi |

@@ -27,6 +27,7 @@ from app.models import (
     MemberSession,
     MemberUser,
     Opportunity,
+    OpportunityAttachment,
     OpportunityContact,
     PaymentOrder,
     Purchase,
@@ -50,8 +51,15 @@ from app.schemas_commerce import (
     TxOut,
 )
 from app.security import hash_password
-from app.services import catalog, payments, usage, wallet
-from app.worker import enqueue, match_opportunity_task, match_request_task, send_invoice_request_task, send_search_request_task
+from app.services import attachments, catalog, payments, usage, wallet
+from app.worker import (
+    enqueue,
+    match_opportunity_task,
+    match_request_task,
+    purge_files_task,
+    send_invoice_request_task,
+    send_search_request_task,
+)
 
 router = APIRouter(prefix="/api/admin")
 
@@ -137,7 +145,7 @@ def _next_opp_code(db: Session) -> str:
 
 
 def _apply_opp(o: Opportunity, body: OppIn) -> None:
-    data = body.model_dump(exclude={"contacts"})
+    data = body.model_dump(exclude={"contacts", "attachment_ids"})
     if data["status"] == "published" and not o.published_at:
         o.published_at = utcnow()
     for k, v in data.items():
@@ -167,15 +175,30 @@ def list_opps(
     return {"total": total, "page": page, "page_size": page_size, "items": [_opp_out(o, matches.get(o.id, 0)) for o in rows], "counts": counts}
 
 
+def _purge(keys: list[str]) -> None:
+    """Xoá tệp trên R2 ở việc nền (Redis lỗi thì xoá luôn)."""
+    if keys:
+        _queue(purge_files_task, keys)
+
+
+def _opp_detail(db: Session, o: Opportunity) -> dict:
+    d = _opp_out(o, _match_counts(db, [o.id]).get(o.id, 0))
+    d["attachments"] = [attachments.out(a) for a in attachments.for_opportunity(db, o.id)]
+    return d
+
+
 @router.post("/opportunities", status_code=201)
 def create_opp(body: OppIn, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
     o = Opportunity(code=_next_opp_code(db), title=body.title, created_by_id=user.id)
     _apply_opp(o, body)
     db.add(o)
+    db.flush()
+    purge = attachments.link(db, o, body.attachment_ids, user, body.attachment_captions) if body.attachment_ids is not None else []
     db.commit()
+    _purge(purge)
     _queue(match_opportunity_task, o.id)  # phiếu không mang điểm; việc nền chấm điểm riêng cho từng doanh nghiệp phù hợp
     db.refresh(o)
-    return _opp_out(o, _match_counts(db, [o.id]).get(o.id, 0))
+    return _opp_detail(db, o)
 
 
 def _get_opp(db: Session, opp_id: int) -> Opportunity:
@@ -190,21 +213,23 @@ def get_opp(opp_id: int, _: AdminUser = Depends(current_user), db: Session = Dep
     o = _get_opp(db, opp_id)
     buyers = db.scalars(select(Purchase).where(Purchase.opportunity_id == o.id).order_by(Purchase.id.desc())).unique().all()
     return {
-        "opportunity": _opp_out(o, _match_counts(db, [o.id]).get(o.id, 0)),
+        "opportunity": _opp_detail(db, o),
         "purchases": [{"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "company": _company_ref(p.company)} for p in buyers],
     }
 
 
 @router.put("/opportunities/{opp_id}")
-def update_opp(opp_id: int, body: OppIn, _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+def update_opp(opp_id: int, body: OppIn, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
     o = _get_opp(db, opp_id)
     if body.max_buyers < o.sold_count:
         raise HTTPException(400, f"Đã bán {o.sold_count} phiếu, số lượt bán tối đa không được nhỏ hơn.")
     _apply_opp(o, body)
+    purge = attachments.link(db, o, body.attachment_ids, user, body.attachment_captions) if body.attachment_ids is not None else []
     db.commit()
+    _purge(purge)
     _queue(match_opportunity_task, o.id)  # nội dung/trạng thái đổi → so khớp lại (nhúng lại chỉ khi nội dung đổi)
     db.refresh(o)
-    return _opp_out(o, _match_counts(db, [o.id]).get(o.id, 0))
+    return _opp_detail(db, o)
 
 
 @router.delete("/opportunities/{opp_id}", status_code=204)
@@ -212,8 +237,72 @@ def delete_opp(opp_id: int, _: AdminUser = Depends(require_admin), db: Session =
     o = _get_opp(db, opp_id)
     if o.sold_count:
         raise HTTPException(400, "Cơ hội đã có người mua — hãy chuyển sang “Đã đóng” thay vì xoá.")
+    keys = attachments.keys_of(db, o.id)
     db.delete(o)
     db.commit()
+    _purge(keys)
+
+
+# ================================================================== ảnh & tài liệu của phiếu cơ hội (Cloudflare R2)
+
+
+class AttachInitIn(BaseModel):
+    filename: str = Field(min_length=1, max_length=300)
+    size: int = Field(gt=0)
+
+
+class AttachPatchIn(BaseModel):
+    caption: str = Field("", max_length=300)
+
+
+def _get_attachment(db: Session, att_id: int) -> OpportunityAttachment:
+    a = db.get(OpportunityAttachment, att_id)
+    if not a:
+        raise HTTPException(404, "Không tìm thấy tệp.")
+    return a
+
+
+@router.get("/attachments/config")
+def attachment_config(_: AdminUser = Depends(current_user)):
+    return attachments.limits()
+
+
+@router.post("/attachments/init", status_code=201)
+def attachment_init(body: AttachInitIn, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    """Bước 1: khai báo tệp → link PUT ký sẵn để trình duyệt tải thẳng lên R2 (gửi kèm header Content-Type trả về)."""
+    a, url = attachments.init_upload(db, user, body.filename, body.size)
+    return {"attachment": attachments.out(a, signed=False), "upload_url": url, "content_type": a.content_type, "expires_in": 600}
+
+
+@router.post("/attachments/{att_id}/complete")
+def attachment_complete(att_id: int, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    """Bước 3: trình duyệt đã PUT xong → kiểm tra tệp trên R2, ảnh thì bỏ EXIF + tạo ảnh nhỏ."""
+    a = _get_attachment(db, att_id)
+    if a.opportunity_id is None and a.uploaded_by_id != user.id:
+        raise HTTPException(404, "Không tìm thấy tệp.")
+    return attachments.out(attachments.complete_upload(db, a))
+
+
+@router.patch("/attachments/{att_id}")
+def attachment_patch(att_id: int, body: AttachPatchIn, _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    a = _get_attachment(db, att_id)
+    attachments.update_caption(a, body.caption)
+    db.commit()
+    return attachments.out(a)
+
+
+@router.delete("/attachments/{att_id}", status_code=204)
+def attachment_delete(att_id: int, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    """Huỷ tệp vừa tải lên nhưng chưa lưu vào phiếu. Tệp đã thuộc phiếu thì bỏ khỏi danh sách rồi lưu phiếu."""
+    a = _get_attachment(db, att_id)
+    if a.opportunity_id is not None:
+        raise HTTPException(400, "Tệp đã thuộc phiếu — hãy bỏ tệp trong form rồi bấm lưu phiếu.")
+    if a.uploaded_by_id != user.id:
+        raise HTTPException(404, "Không tìm thấy tệp.")
+    keys = [k for k in (a.key, a.thumb_key) if k]
+    db.delete(a)
+    db.commit()
+    _purge(keys)
 
 
 # ================================================================== đơn thanh toán

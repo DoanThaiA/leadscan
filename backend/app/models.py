@@ -374,6 +374,33 @@ class OpportunityContact(Base):
     opportunity: Mapped[Opportunity] = relationship(back_populates="contacts")
 
 
+class OpportunityAttachment(Base):
+    """Ảnh / tài liệu admin gắn vào phiếu cơ hội — nằm ở "Phần mở khoá sau khi mua" (chỉ người đã mua thấy).
+
+    Tệp lưu trên Cloudflare R2 (bucket riêng tư). Admin upload khi đang soạn phiếu nên opportunity_id còn trống
+    cho tới khi bấm lưu; tệp không được gắn sau 24 giờ thì việc dọn dẹp xoá.
+    status: pending (đã cấp link upload) → ready (đã kiểm tra tệp trên R2).
+    """
+
+    __tablename__ = "opportunity_attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    opportunity_id: Mapped[int | None] = mapped_column(ForeignKey("opportunities.id", ondelete="CASCADE"), index=True)
+    uploaded_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    key: Mapped[str] = mapped_column(String(400), unique=True)
+    thumb_key: Mapped[str] = mapped_column(String(400), default="")
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(120))
+    size: Mapped[int] = mapped_column(BigInteger, default=0)
+    kind: Mapped[str] = mapped_column(String(10), default="file")  # image | file
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    caption: Mapped[str] = mapped_column(String(300), default="")
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(12), default="pending", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
 class Purchase(Base):
     __tablename__ = "purchases"
 
