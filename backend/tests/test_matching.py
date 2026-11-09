@@ -137,3 +137,67 @@ def test_min_score_cua_phieu_loc_bot_co_hoi(admin, member):
     assert member.get("/api/member/dashboard").json()["matched_count"] == 0
     ask(member)
     assert member.get("/api/member/dashboard").json()["matched_count"] == 1
+
+
+def test_tim_kiem_lien_tuc_bao_co_hoi_moi(admin, member, client, monkeypatch):
+    """Phiếu tìm "Tìm kiếm liên tục": cơ hội mới mở bán khớp phiếu → thông báo trong cổng + email gộp, mỗi cặp 1 lần."""
+    from app.services import notify
+
+    sent = []
+    monkeypatch.setattr(notify, "send_mail", lambda cfg, subject, body, to=None: sent.append((subject, body, to)) or True)
+
+    r = ask(member)  # chưa có cơ hội nào
+    assert r["status"] == "open"
+    assert member.get("/api/member/notifications").json() == {"unread": 0, "items": []}
+
+    oid = make_opp(admin)  # cơ hội mới mở bán khớp phiếu đã có
+    n = member.get("/api/member/notifications").json()
+    assert n["unread"] == 1 and n["items"][0]["opportunity"]["id"] == oid and n["items"][0]["request"]["id"] == r["id"]
+    assert n["items"][0]["score"] > 0 and not n["items"][0]["read"]
+    mails = [m for m in sent if "cơ hội mới phù hợp" in m[0]]
+    assert len(mails) == 1 and mails[0][2] == "a@minhan.vn"
+    assert "Cần 200.000 hộp carton" in mails[0][1] and f"phu-hop?yeu-cau={r['id']}" in mails[0][1]
+    assert member.get("/api/member/search-requests").json()["items"][0]["new_count"] == 1
+
+    # sửa giá → vẫn khớp nhưng không báo lặp, không gửi thêm email
+    o = admin.get(f"/api/admin/opportunities/{oid}").json()["opportunity"]
+    body = {k: o[k] for k in ("title", "summary", "industry", "province", "region", "source_type", "max_buyers", "buyer_name", "detail", "status")}
+    admin.put(f"/api/admin/opportunities/{oid}", json={**body, "price": 1_300_000, "contacts": []})
+    assert member.get("/api/member/notifications").json()["unread"] == 1
+    assert len([m for m in sent if "cơ hội mới phù hợp" in m[0]]) == 1
+
+    # mở phiếu → cơ hội gắn nhãn "Mới" (tải lại vẫn còn), rồi đánh dấu đã xem
+    for _ in range(2):
+        items = member.get(f"/api/member/search-requests/{r['id']}/opportunities").json()["items"]
+        assert items[0]["id"] == oid and items[0]["is_new"] is True
+    assert member.post(f"/api/member/search-requests/{r['id']}/seen").status_code == 204
+    assert member.get(f"/api/member/search-requests/{r['id']}/opportunities").json()["items"][0]["is_new"] is False
+    assert member.get("/api/member/notifications").json()["unread"] == 0
+    assert member.get("/api/member/search-requests").json()["items"][0]["new_count"] == 0
+
+    # phiếu tìm mới gửi: kết quả có ngay, không tạo thông báo (khách đang xem kết quả rồi)
+    ask(member, "Tìm khách mua thùng carton tại Bắc Ninh")
+    assert member.get("/api/member/notifications").json()["unread"] == 0
+
+    # doanh nghiệp khác không thấy thông báo của mình; không đánh dấu được thông báo của người khác
+    nid = member.get("/api/member/notifications").json()["items"][0]["id"]
+    b = other_member(client, 7)
+    assert b.get("/api/member/notifications").json()["items"] == []
+    assert b.post(f"/api/member/notifications/{nid}/read").status_code == 404
+    assert b.post(f"/api/member/search-requests/{r['id']}/seen").status_code == 404
+
+    # phiếu bị từ chối thì dừng tìm: cơ hội mới không báo nữa
+    for x in member.get("/api/member/search-requests").json()["items"]:
+        admin.patch(f"/api/admin/search-requests/{x['id']}", json={"status": "rejected", "reply": "Dừng"})
+    make_opp(admin, title="Cần 50.000 hộp carton 3 lớp cho nhà máy Bắc Ninh")
+    assert member.get("/api/member/notifications").json()["unread"] == 0
+
+
+def test_doc_het_thong_bao(admin, member):
+    ask(member)
+    make_opp(admin)
+    make_opp(admin, title="Cần thùng carton 7 lớp cho kho Bắc Ninh")
+    assert member.get("/api/member/notifications").json()["unread"] == 2
+    assert member.post("/api/member/notifications/read-all").status_code == 204
+    n = member.get("/api/member/notifications").json()
+    assert n["unread"] == 0 and len(n["items"]) == 2 and all(i["read"] for i in n["items"])

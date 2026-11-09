@@ -27,6 +27,8 @@ celery_app.conf.update(
     timezone="Asia/Ho_Chi_Minh",
     beat_schedule={
         "cleanup-hourly": {"task": "leadscan.cleanup", "schedule": 3600.0},
+        # quét thông báo cơ hội mới chưa gửi email (vd. nhập cơ hội hàng loạt bằng lệnh CLI)
+        "match-digest": {"task": "leadscan.send_match_digest", "schedule": 900.0},
     },
 )
 
@@ -122,16 +124,78 @@ def notify_payment_task(order_id: int) -> None:
 
 @celery_app.task(name="leadscan.send_search_request")
 def send_search_request_task(req_id: int) -> None:
-    """Thành viên gửi yêu cầu Enrich tìm kiếm cơ hội → email báo quản trị."""
+    """Thành viên gửi yêu cầu Enrich tìm kiếm cơ hội → email báo quản trị (kèm số cơ hội hệ thống đã tự tìm được)."""
+    from sqlalchemy import func, select
+
     from app.db import new_session, utcnow
-    from app.models import SearchRequest
+    from app.models import SearchRequest, SearchRequestMatch
     from app.services.notify import notify_search_request
 
     with new_session() as db:
         r = db.get(SearchRequest, req_id)
-        if r and notify_search_request(get_settings(), r):
+        if not r:
+            return
+        n = db.scalar(select(func.count()).select_from(SearchRequestMatch).where(SearchRequestMatch.request_id == r.id)) if r.match_status == "done" else None
+        if notify_search_request(get_settings(), r, n):
             r.email_sent_at = utcnow()
             db.commit()
+
+
+MATCH_DIGEST_DELAY = 120  # chờ 2 phút để gộp nhiều cơ hội mới (vd. admin mở bán liên tiếp) vào 1 email
+
+
+@celery_app.task(name="leadscan.send_match_digest")
+def send_match_digest_task() -> None:
+    """Email gộp "có cơ hội mới phù hợp" cho từng doanh nghiệp có thông báo chưa gửi email.
+
+    Chỉ báo cơ hội còn khớp phiếu tìm đang tìm kiếm liên tục. Nhận việc bằng UPDATE ... WHERE emailed_at IS NULL
+    nên 2 lượt chạy song song không gửi trùng.
+    """
+    from sqlalchemy import select, update
+
+    from app.db import new_session, utcnow
+    from app.models import MemberNotification, MemberUser, Opportunity, SearchRequest, SearchRequestMatch
+    from app.services.notify import send_match_digest
+
+    cfg = get_settings()
+    with new_session() as db:
+        company_ids = db.scalars(select(MemberNotification.company_id).where(MemberNotification.emailed_at.is_(None)).distinct()).all()
+        for cid in company_ids:
+            now = utcnow()
+            ids = db.scalars(select(MemberNotification.id).where(MemberNotification.company_id == cid, MemberNotification.emailed_at.is_(None))).all()
+            claimed = db.execute(
+                update(MemberNotification).where(MemberNotification.id.in_(ids), MemberNotification.emailed_at.is_(None)).values(emailed_at=now)
+            ).rowcount
+            db.commit()
+            if not claimed:
+                continue
+            rows = db.execute(
+                select(MemberNotification, SearchRequest)
+                .join(SearchRequest, SearchRequest.id == MemberNotification.request_id)
+                .join(Opportunity, Opportunity.id == MemberNotification.opportunity_id)
+                .join(
+                    SearchRequestMatch,
+                    (SearchRequestMatch.request_id == MemberNotification.request_id)
+                    & (SearchRequestMatch.opportunity_id == MemberNotification.opportunity_id),
+                )
+                .where(
+                    MemberNotification.id.in_(ids),
+                    MemberNotification.emailed_at == now,
+                    MemberNotification.read_at.is_(None),  # khách đã xem trong cổng thì thôi báo qua email
+                    SearchRequest.status == "open",
+                    Opportunity.status == "published",
+                )
+                .order_by(SearchRequest.id, MemberNotification.score.desc())
+            ).unique().all()
+            groups: dict[int, tuple] = {}
+            for n, req in rows:
+                groups.setdefault(req.id, (req, []))[1].append((n.opportunity, n.score))
+            if not groups:
+                continue
+            users = db.scalars(select(MemberUser).where(MemberUser.company_id == cid, MemberUser.is_active).order_by(MemberUser.id)).all()
+            for u in users:
+                send_match_digest(cfg, u.email, u.full_name, list(groups.values()))
+            log.info("Báo %s cơ hội mới phù hợp cho doanh nghiệp #%s (%s người nhận)", len(rows), cid, len(users))
 
 
 # ------------------------------------------------------------------ so khớp cơ hội (chạy nền)
@@ -165,14 +229,23 @@ def _run_match(task, fn, label: str):
         return fn(False), f"So khớp không dùng ngữ nghĩa: {e}"
 
 
-@celery_app.task(name="leadscan.match_request", bind=True, max_retries=MATCH_RETRIES)
-def match_request_task(self, req_id: int) -> None:
-    """Phiếu tìm cơ hội vừa gửi / đổi trạng thái → nhúng Cohere, ứng viên pgvector, chấm điểm, thêm vào Tất cả cơ hội."""
-    from celery.exceptions import Retry
+def _finish_request(r, note: str = "") -> None:
+    """So khớp xong. Phiếu vẫn ở trạng thái "Tìm kiếm liên tục" — cơ hội mới mở bán sẽ tiếp tục được so với phiếu."""
+    from app.db import utcnow
 
-    from app.db import new_session, utcnow
+    r.match_status, r.match_error, r.matched_at = "done", note[:300], utcnow()
+
+
+def match_request_now(req_id: int) -> None:
+    """So khớp ngay khi khách gửi phiếu tìm cơ hội → kết quả có liền trong lúc gửi, không chờ việc nền hay quản trị.
+
+    Cohere lỗi: so khớp dự phòng (tiêu chí + từ khoá) để khách vẫn có kết quả ngay; lỗi tạm thời thì xếp việc nền
+    chạy lại bằng ngữ nghĩa khi Cohere ổn (không làm phiếu quay về "đang tìm"). Lỗi khác → giao cho việc nền như cũ.
+    """
+    from app.db import new_session
     from app.models import SearchRequest
     from app.services import matching
+    from app.services.embedding import EmbeddingError
 
     with new_session() as db:
         r = db.get(SearchRequest, req_id)
@@ -180,6 +253,52 @@ def match_request_task(self, req_id: int) -> None:
             return
         r.match_status = "running"
         db.commit()
+        refine = False
+        try:
+            try:
+                n = matching.match_request(db, r, semantic=True)
+                note = ""
+            except EmbeddingError as e:
+                db.rollback()
+                log.warning("Phiếu tìm #%s: không lấy được embedding (%s) → so khớp bằng tiêu chí + từ khoá", req_id, e)
+                refine = e.retryable
+                n = matching.match_request(db, r, semantic=False)
+                note = f"So khớp không dùng ngữ nghĩa: {e}"
+            _finish_request(r, note)
+            db.commit()
+        except Exception:  # noqa: BLE001 — vd. 2 việc ghi cùng lúc: để việc nền thử lại
+            db.rollback()
+            log.exception("Phiếu tìm #%s so khớp tại chỗ lỗi → chuyển sang việc nền", req_id)
+            r.match_status = "pending"
+            db.commit()
+            if not enqueue(match_request_task, req_id):
+                match_request_task.apply(args=[req_id])
+            return
+        log.info("Phiếu tìm #%s: %s cơ hội phù hợp%s", req_id, n, " (dự phòng)" if note else "")
+    if refine:
+        enqueue(match_request_task, req_id, True)
+
+
+@celery_app.task(name="leadscan.match_request", bind=True, max_retries=MATCH_RETRIES)
+def match_request_task(self, req_id: int, refine: bool = False) -> None:
+    """Phiếu tìm cơ hội đổi trạng thái / cần so khớp lại → nhúng Cohere, ứng viên pgvector, chấm điểm, thêm vào Tất cả cơ hội.
+
+    refine=True: phiếu đã có kết quả dự phòng, chỉ chấm lại bằng ngữ nghĩa — không đưa phiếu về "đang tìm",
+    lỗi thì giữ nguyên kết quả đang có.
+    """
+    from celery.exceptions import Retry
+
+    from app.db import new_session
+    from app.models import SearchRequest
+    from app.services import matching
+
+    with new_session() as db:
+        r = db.get(SearchRequest, req_id)
+        if not r:
+            return
+        if not refine:
+            r.match_status = "running"
+            db.commit()
 
         def run(semantic: bool) -> int:
             try:
@@ -193,15 +312,17 @@ def match_request_task(self, req_id: int) -> None:
         try:
             n, note = _run_match(self, run, f"Phiếu tìm #{req_id}")
         except Retry:
-            r.match_status, r.match_error = "pending", "Đang thử lại"
-            db.commit()
+            if not refine:
+                r.match_status, r.match_error = "pending", "Đang thử lại"
+                db.commit()
             raise
         except Exception as e:
-            r.match_status, r.match_error = "error", str(e)[:300]
-            db.commit()
+            if not refine:
+                r.match_status, r.match_error = "error", str(e)[:300]
+                db.commit()
             log.exception("Phiếu tìm #%s so khớp lỗi", req_id)
             return
-        r.match_status, r.match_error, r.matched_at = "done", note[:300], utcnow()
+        _finish_request(r, note)
         db.commit()
         log.info("Phiếu tìm #%s: %s cơ hội phù hợp%s", req_id, n, " (dự phòng)" if note else "")
 
@@ -237,6 +358,11 @@ def match_opportunity_task(self, opp_id: int) -> None:
             log.exception("Cơ hội #%s so khớp lỗi", opp_id)
             return
         log.info("Cơ hội %s: khớp %s phiếu tìm%s", o.code, n, " (dự phòng)" if note else "")
+    if n:
+        try:  # có phiếu tìm khớp → email gộp sau ít phút (khách có thể đã xem thông báo trong cổng)
+            send_match_digest_task.apply_async(countdown=MATCH_DIGEST_DELAY, retry=False)
+        except Exception as e:  # noqa: BLE001 — Redis lỗi: lượt quét định kỳ sẽ gửi sau
+            log.warning("Không xếp được email báo cơ hội mới: %s", e)
 
 
 def enqueue(task, *args) -> bool:

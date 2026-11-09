@@ -14,6 +14,8 @@ Luồng:
        SearchRequestMatch  cơ hội phù hợp của từng phiếu tìm cơ hội
        UserOpportunity     "Tất cả cơ hội" của doanh nghiệp — gộp từ mọi phiếu, mỗi cơ hội 1 dòng, điểm cao nhất
      và tự thêm vào "Kho của tôi" (lần đầu tiên cơ hội xuất hiện với doanh nghiệp).
+     Phiếu tìm "tìm kiếm liên tục": cơ hội MỚI mở bán / vừa sửa mà khớp phiếu lần đầu → MemberNotification
+     (báo trong cổng + email gộp), mỗi cặp (phiếu tìm, cơ hội) báo đúng 1 lần.
   5. Giá phiếu thành viên phải trả đồng biến với điểm của chính họ: price_for().
 
 Kỹ thuật:
@@ -27,7 +29,6 @@ Kỹ thuật:
 """
 
 import hashlib
-import re
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -37,7 +38,7 @@ from sqlalchemy.orm import Session, selectinload, undefer
 from app.db import EmbeddingVector
 
 from app.config import Settings, get_settings
-from app.models import Opportunity, Purchase, SavedOpportunity, SearchRequest, SearchRequestMatch, UserOpportunity
+from app.models import MemberNotification, Opportunity, Purchase, SavedOpportunity, SearchRequest, SearchRequestMatch, UserOpportunity
 from app.services import embedding as emb
 
 W_CRITERIA, W_SEMANTIC, W_KEYWORD = 0.40, 0.35, 0.25
@@ -198,19 +199,54 @@ def _clamp(x: float, lo: float = 0.0, hi: float = 100.0) -> float:
     return max(lo, min(hi, x))
 
 
-def _industry_score(wanted: list[str], o: Opportunity, o_fold: str, o_tokens: set[str]) -> tuple[float, str]:
+def accented(text: str) -> bool:
+    """Văn bản gõ có dấu tiếng Việt (khi đó mọi từ trong nó, kể cả "bao", "may", được hiểu đúng như đã viết)."""
+    return emb.has_marks(emb.vtext(text))
+
+
+class WordBag:
+    """Các từ của 1 văn bản để so từ khoá. Hai văn bản cùng gõ có dấu → từ phải giống hệt cả dấu
+    ("giày" ≠ "giấy", "may" ≠ "máy", "bao" ≠ "bảo"); một bên gõ không dấu → so sau khi bỏ dấu
+    (khách gõ "hop carton" vẫn khớp "hộp carton")."""
+
+    def __init__(self, text: str):
+        words = emb.vtokens(text, keep_stop=True)
+        self.accented = accented(text)
+        self.exact = set(words)
+        self.folded = {emb.fold(w) for w in words}
+        self.vtext = f" {' '.join(words)} "
+        self.ftext = f" {emb.fold(text)} "
+
+    def has(self, w: str, strict: bool) -> bool:
+        """strict = văn bản chứa từ w được gõ có dấu."""
+        return w in self.exact if strict and self.accented else emb.fold(w) in self.folded
+
+    def has_phrase(self, p: str, strict: bool) -> bool:
+        return f" {p} " in self.vtext if strict and self.accented else f" {emb.fold(p)} " in self.ftext
+
+
+def _same_or_within(a: str, b: str) -> bool:
+    """Tên ngành a, b trùng / chứa nhau (có dấu thì so có dấu)."""
+    if emb.has_marks(emb.vtext(a)) and emb.has_marks(emb.vtext(b)):
+        x, y = emb.vtext(a), emb.vtext(b)
+    else:
+        x, y = emb.fold(a), emb.fold(b)
+    return bool(x and y) and (x == y or f" {x} " in f" {y} " or f" {y} " in f" {x} ")
+
+
+def _industry_score(wanted: list[str], o: Opportunity, bag: WordBag) -> tuple[float, str]:
     best, hit = 0.0, ""
-    oi = emb.fold(o.industry)
+    ind = WordBag(o.industry)
     for w in wanted:
-        wf = emb.fold(w)
-        if not wf:
+        if not emb.fold(w):
             continue
-        wt = set(emb.tokens(w))
-        if oi and (wf == oi or wf in oi or oi in wf):
+        wt, strict = set(emb.vtokens(w)), accented(w)
+        ratio = sum(bag.has(t, strict) for t in wt) / len(wt) if wt else 0.0
+        if o.industry and _same_or_within(w, o.industry):
             s = 100.0
-        elif wt and len(wt & o_tokens) / len(wt) >= 0.5 and wt & set(emb.tokens(o.industry)):
+        elif ratio >= 0.5 and any(ind.has(t, strict) for t in wt):
             s = 80.0
-        elif wf in o_fold or (wt and len(wt & o_tokens) / len(wt) >= 0.5):
+        elif bag.has_phrase(emb.vtext(w), strict) or ratio >= 0.5:
             s = 55.0  # ngành khách chọn xuất hiện trong nội dung phiếu dù cột "ngành" khác
         elif emb.concepts(w) & emb.concepts(o.industry + " " + o.title):
             s = 45.0  # cùng khái niệm (vd. "Bao bì & in ấn" ~ "thùng carton")
@@ -241,11 +277,11 @@ def _region_score(wanted: list[str], o: Opportunity) -> tuple[float, str]:
     return best, hit
 
 
-def _criteria_score(c: dict, o: Opportunity, o_fold: str, o_tokens: set[str]) -> tuple[float | None, list[str]]:
+def _criteria_score(c: dict, o: Opportunity, bag: WordBag) -> tuple[float | None, list[str]]:
     total = weight = 0.0
     reasons: list[str] = []
     if c.get("industries"):
-        s, hit = _industry_score(c["industries"], o, o_fold, o_tokens)
+        s, hit = _industry_score(c["industries"], o, bag)
         total, weight = total + s * CRITERIA_WEIGHTS["industries"], weight + CRITERIA_WEIGHTS["industries"]
         if s >= 45:
             reasons.append(f"Ngành hàng khớp: {hit}")
@@ -263,19 +299,21 @@ def _criteria_score(c: dict, o: Opportunity, o_fold: str, o_tokens: set[str]) ->
     return (total / weight if weight else None), reasons
 
 
-def _keyword_score(q_tokens: list[str], q_bigrams: set[str], o_tokens: set[str], o_fold: str) -> tuple[float, list[str]]:
-    """Độ bao phủ từ khoá của yêu cầu trong phiếu; từ dài (đặc trưng hơn) nặng hơn, cụm 2 từ nặng gấp đôi."""
-    if not q_tokens:
+def _keyword_score(q_words: list[str], q_bigrams: set[str], bag: WordBag, strict: bool) -> tuple[float, list[str]]:
+    """Độ bao phủ từ khoá của yêu cầu trong phiếu; từ dài (đặc trưng hơn) nặng hơn, cụm 2 từ nặng gấp đôi.
+
+    So có phân biệt dấu (WordBag) để "may" (may mặc) không khớp "máy", "gia công" không khớp "giá"."""
+    if not q_words:
         return 0.0, []
-    uniq = list(dict.fromkeys(q_tokens))
-    total = sum(1 + min(len(t), 8) / 8 for t in uniq)
+    uniq = list(dict.fromkeys(q_words))
+    total = sum(1 + min(len(emb.fold(t)), 8) / 8 for t in uniq)
     got_w, hits = 0.0, []
     for t in uniq:
-        if t in o_tokens:
-            got_w += 1 + min(len(t), 8) / 8
+        if bag.has(t, strict):
+            got_w += 1 + min(len(emb.fold(t)), 8) / 8
             hits.append(t)
     for bg in q_bigrams:
-        if f" {bg} " in f" {o_fold} ":
+        if bag.has_phrase(bg, strict):
             got_w += 2
             total += 2
     need = min(total, 6.0)  # chỉ cần khớp ~6 đơn vị là đủ điểm tối đa — mô tả dài không bị phạt
@@ -304,11 +342,9 @@ class RequestCtx:
     def __init__(self, r: SearchRequest):
         self.r = r
         self.criteria = r.criteria or {}
-        self.q_tokens = emb.tokens(r.note)
-        self.shown = {}  # token đã bỏ dấu → từ gốc khách viết (để hiển thị lý do cho dễ đọc)
-        for w in re.findall(r"\w+", (r.note or "").lower()):
-            self.shown.setdefault(emb.fold(w), w)
-        self.q_bigrams = {f"{a} {b}" for a, b in zip(self.q_tokens, self.q_tokens[1:])}
+        self.q_words = emb.vtokens(r.note)  # giữ dấu: hiển thị lý do đúng chữ khách viết, so có phân biệt dấu
+        self.q_bigrams = {f"{a} {b}" for a, b in zip(self.q_words, self.q_words[1:])}
+        self.accented = accented(r.note or "")
         self.min_score = int(self.criteria.get("min_score") or 0)
         self.has_criteria = any(self.criteria.get(k) for k in CRITERIA_WEIGHTS)
 
@@ -321,17 +357,16 @@ def cos_range(cfg: Settings, model: str) -> tuple[float, float]:
 def score_pair(q: RequestCtx, o: Opportunity, cos: float | None, cfg: Settings, today: date | None = None) -> Scored:
     """Chấm 1 cặp (phiếu tìm, phiếu cơ hội). cos = cosine embedding (pgvector đã tính sẵn); None = không có embedding."""
     today = today or date.today()
-    o_fold = emb.fold(opp_text(o))
-    o_tokens = set(o_fold.split())
+    bag = WordBag(opp_text(o))
 
-    kw, hits = _keyword_score(q.q_tokens, q.q_bigrams, o_tokens, o_fold)
+    kw, hits = _keyword_score(q.q_words, q.q_bigrams, bag, q.accented)
     sem = 0.0
     if cos is not None:
         lo, hi = cos_range(cfg, o.embedding_model)
         sem = _clamp(100 * (cos - lo) / (hi - lo))
 
     reasons: list[str] = []
-    crit, crit_reasons = _criteria_score(q.criteria, o, o_fold, o_tokens)
+    crit, crit_reasons = _criteria_score(q.criteria, o, bag)
     if cos is None:  # dự phòng: chỉ tiêu chí + từ khoá
         fit = kw if crit is None else W_CRITERIA_NOSEM * crit + W_KEYWORD_NOSEM * kw
         reasons += crit_reasons
@@ -343,7 +378,7 @@ def score_pair(q: RequestCtx, o: Opportunity, cos: float | None, cfg: Settings, 
     if crit is not None:
         if q.criteria.get("regions") and _region_score(q.criteria["regions"], o)[0] == 0:
             fit *= 0.8  # sai khu vực khách yêu cầu → trừ điểm
-    shown = [q.shown.get(h, h) for h in hits if len(h) > 2]
+    shown = [h for h in hits if len(h) > 2]
     if shown:
         reasons.append("Từ khoá trùng: " + ", ".join(shown[:5]))
     if sem >= 60:
@@ -373,6 +408,16 @@ def _upsert_request_match(db: Session, req_id: int, opp_id: int, s: Scored, exis
         existing.score, existing.score_fit, existing.score_urgency, existing.score_trust, existing.reasons = s.score, s.fit, s.urgency, s.trust, s.reasons
     else:
         db.add(SearchRequestMatch(request_id=req_id, opportunity_id=opp_id, score=s.score, score_fit=s.fit, score_urgency=s.urgency, score_trust=s.trust, reasons=s.reasons))
+
+
+def _notify_new_match(db: Session, req: SearchRequest, opp: Opportunity, score: int) -> bool:
+    """Cơ hội vừa khớp phiếu tìm lần đầu → thông báo cho doanh nghiệp (mỗi cặp 1 lần, không báo lặp khi sửa phiếu)."""
+    if req.status != "open":
+        return False
+    if db.scalar(select(MemberNotification.id).where(MemberNotification.request_id == req.id, MemberNotification.opportunity_id == opp.id)):
+        return False
+    db.add(MemberNotification(company_id=req.company_id, request_id=req.id, opportunity_id=opp.id, score=score))
+    return True
 
 
 def _lock_company(db: Session, company_id: int) -> None:
@@ -445,7 +490,10 @@ def match_request(db: Session, req: SearchRequest, cfg: Settings | None = None, 
 
 
 def match_opportunity(db: Session, opp: Opportunity, cfg: Settings | None = None, semantic: bool = True) -> int:
-    """So 1 phiếu cơ hội (mới mở bán / vừa sửa / vừa đóng) với các phiếu tìm cơ hội. Trả về số phiếu tìm khớp."""
+    """So 1 phiếu cơ hội (mới mở bán / vừa sửa / vừa đóng) với các phiếu tìm cơ hội. Trả về số phiếu tìm khớp.
+
+    Phiếu tìm nào khớp lần đầu → thêm thông báo "cơ hội mới phù hợp" cho doanh nghiệp đó.
+    """
     cfg = cfg or get_settings()
     today = date.today()
     prev = {m.request_id: m for m in db.scalars(select(SearchRequestMatch).where(SearchRequestMatch.opportunity_id == opp.id)).unique()}
@@ -462,7 +510,10 @@ def match_opportunity(db: Session, opp: Opportunity, cfg: Settings | None = None
             q = RequestCtx(r)
             s = score_pair(q, opp, cos, cfg, today)
             if is_match(q, s, cfg):
-                _upsert_request_match(db, r.id, opp.id, s, prev.pop(r.id, None))
+                existing = prev.pop(r.id, None)
+                _upsert_request_match(db, r.id, opp.id, s, existing)
+                if existing is None:
+                    _notify_new_match(db, r, opp, s.score)
                 by_company[r.company_id] = r.member_user_id
                 matched += 1
     for stale in prev.values():

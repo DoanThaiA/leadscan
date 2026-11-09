@@ -216,8 +216,11 @@ def _criteria_lines(c: dict) -> list[str]:
     ]
 
 
-def notify_search_request(cfg: Settings, req) -> bool:
-    """Báo quản trị (LEADSCAN_NOTIFY_EMAIL) khi thành viên gửi yêu cầu Enrich tìm kiếm cơ hội."""
+def notify_search_request(cfg: Settings, req, match_count: int | None = None) -> bool:
+    """Báo quản trị (LEADSCAN_NOTIFY_EMAIL) khi thành viên gửi yêu cầu Enrich tìm kiếm cơ hội.
+
+    Hệ thống đã tự so khớp và trả kết quả cho khách ngay; email chỉ để quản trị nắm tình hình / bổ sung khi cần.
+    """
     c = req.company
     u = req.member_user
     contact = next((x for x in c.contacts if x.is_primary), c.contacts[0] if c.contacts else None)
@@ -240,7 +243,40 @@ def notify_search_request(cfg: Settings, req) -> bool:
         "MÔ TẢ YÊU CẦU",
         req.note or "—",
         "",
-        f"Xử lý và trả lời khách: {cfg.admin_url.rstrip('/')}/yeu-cau-tim-co-hoi",
+        "KẾT QUẢ TỰ ĐỘNG",
+        (f"Hệ thống đã tìm thấy {match_count} cơ hội phù hợp — khách đã thấy ngay trong cổng thành viên."
+         if match_count is not None else "Hệ thống đang so khớp tự động — khách sẽ thấy kết quả trong cổng thành viên."),
+        "",
+        f"Xem / trả lời khách (nếu cần): {cfg.admin_url.rstrip('/')}/yeu-cau-tim-co-hoi",
         f"Hồ sơ khách hàng      : {cfg.admin_url.rstrip('/')}/khach-hang/{c.id}",
     ]
     return send_mail(cfg, f"[LeadScan] Yêu cầu tìm cơ hội #{req.id}: {c.name}", "\n".join(lines) + "\n")
+
+
+def send_match_digest(cfg: Settings, email: str, name: str, groups: list[tuple]) -> bool:
+    """Báo thành viên: có cơ hội mới phù hợp với phiếu tìm cơ hội (tìm kiếm liên tục). Gộp nhiều cơ hội trong 1 email.
+
+    groups: [(phiếu tìm, [(phiếu cơ hội, điểm), ...]), ...]
+    """
+    base = _member_base(cfg)
+    total = sum(len(items) for _, items in groups)
+    lines = [f"Chào {name},", "", f"LeadScan vừa tìm thấy {total} cơ hội mới phù hợp với yêu cầu tìm cơ hội của bạn.", ""]
+    for req, items in groups:
+        note = " ".join((req.note or "").split())
+        lines.append(f"YÊU CẦU #{req.id}: {note[:90]}{'…' if len(note) > 90 else ''}")
+        for o, score in items[:10]:
+            lines.append(f"  • {o.title} — {score} điểm phù hợp")
+            lines.append(f"    {base}/co-hoi/{o.id}")
+        if len(items) > 10:
+            lines.append(f"  … và {len(items) - 10} cơ hội khác")
+        lines.append(f"  Xem tất cả: {base}/phu-hop?yeu-cau={req.id}")
+        lines.append("")
+    lines += [
+        "Các cơ hội này đã được chấm điểm riêng cho bạn và thêm vào Tất cả cơ hội + Kho của tôi.",
+        "Yêu cầu của bạn vẫn đang tìm kiếm liên tục — có cơ hội mới phù hợp LeadScan sẽ báo tiếp.",
+        "",
+        "Trân trọng,",
+        "Đội ngũ LeadScan",
+    ]
+    subject = f"[LeadScan] {total} cơ hội mới phù hợp với yêu cầu của bạn"
+    return send_mail(cfg, subject, "\n".join(lines) + "\n", to=email)

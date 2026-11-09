@@ -82,6 +82,30 @@ def tokens(text: str, keep_stop: bool = False) -> list[str]:
     return out
 
 
+def vtext(text: str) -> str:
+    """Chữ thường GIỮ dấu tiếng Việt (NFC), ký tự lạ → khoảng trắng — để phân biệt "giày"/"giấy", "may"/"máy"."""
+    t = unicodedata.normalize("NFC", (text or "").lower())
+    return re.sub(r"[\W_]+", " ", t).strip()
+
+
+def vtokens(text: str, keep_stop: bool = False) -> list[str]:
+    """Như tokens() nhưng giữ dấu."""
+    out = []
+    for w in vtext(text).split():
+        f = fold(w)
+        if len(f) < 2 and not f.isdigit():
+            continue
+        if not keep_stop and f in _STOP:
+            continue
+        out.append(w)
+    return out
+
+
+def has_marks(word: str) -> bool:
+    """Từ (đã vtext) có dấu tiếng Việt không — khách gõ không dấu thì so sau khi bỏ dấu."""
+    return fold(word) != word
+
+
 def concepts(text: str) -> set[str]:
     """Các nhãn khái niệm xuất hiện trong văn bản (so khớp cụm đã bỏ dấu, theo ranh giới từ)."""
     f = f" {fold(text)} "

@@ -203,7 +203,8 @@ OPP_SOURCES = [
     "Kết nối giao thương",
 ]
 ENRICH_STATUSES = {"open": "Đang xử lý", "done": "Đã xong", "rejected": "Từ chối"}
-SEARCH_STATUSES = {"open": "Đang tìm", "done": "Đã có kết quả", "rejected": "Từ chối"}
+# Phiếu tìm cơ hội tìm kiếm liên tục: cơ hội mới mở bán khớp phiếu → tự thêm + báo khách. Quản trị có thể từ chối (dừng).
+SEARCH_STATUSES = {"open": "Tìm kiếm liên tục", "rejected": "Từ chối"}
 
 
 class MemberUser(Base):
@@ -390,7 +391,11 @@ class Purchase(Base):
 
 
 class SearchRequest(Base):
-    """Yêu cầu "Enrich tìm kiếm cơ hội": thành viên gửi tiêu chí + mô tả, admin nhận email và tìm cơ hội."""
+    """Yêu cầu "Enrich tìm kiếm cơ hội": thành viên gửi tiêu chí + mô tả, hệ thống so khớp ngay và trả kết quả.
+
+    status: open = tìm kiếm liên tục (mỗi cơ hội mới mở bán đều được so với phiếu, khớp thì báo khách);
+    rejected = quản trị từ chối, phiếu dừng tìm. Quản trị nhận email để nắm tình hình, có thể trả lời khách.
+    """
 
     __tablename__ = "search_requests"
 
@@ -461,6 +466,29 @@ class SearchRequestMatch(Base):
     opportunity: Mapped[Opportunity] = relationship(lazy="joined")
 
     __table_args__ = (UniqueConstraint("request_id", "opportunity_id", name="uq_request_opp_once"),)
+
+
+class MemberNotification(Base):
+    """Thông báo trong cổng thành viên: cơ hội mới mở bán phù hợp với phiếu tìm cơ hội (tìm kiếm liên tục).
+
+    Mỗi (phiếu tìm, cơ hội) báo đúng 1 lần — cơ hội sửa đi sửa lại không báo lặp. Email gộp nhiều thông báo/lần gửi.
+    """
+
+    __tablename__ = "member_notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    request_id: Mapped[int | None] = mapped_column(ForeignKey("search_requests.id", ondelete="CASCADE"), index=True)
+    opportunity_id: Mapped[int] = mapped_column(ForeignKey("opportunities.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(24), default="match")
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    emailed_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    opportunity: Mapped[Opportunity] = relationship(lazy="joined")
+
+    __table_args__ = (UniqueConstraint("request_id", "opportunity_id", name="uq_notify_request_opp_once"),)
 
 
 class SavedOpportunity(Base):

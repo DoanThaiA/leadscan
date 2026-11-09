@@ -78,7 +78,10 @@ export function OppList({ items, onChange }: { items: Opp[]; onChange: (o: Opp) 
             <div className="mt-row" key={o.id}>
               <span className="mt-ic" style={{ background: bg, color: fg }} aria-hidden="true">{txt}</span>
               <div style={{ minWidth: 0 }}>
-                <Link className="mt-t" href={`/thanh-vien/co-hoi/${o.id}`}>{o.title}</Link>
+                <Link className="mt-t" href={`/thanh-vien/co-hoi/${o.id}`}>
+                  {o.is_new ? <span className="mt-new">Mới</span> : null}
+                  {o.title}
+                </Link>
                 <div className="mt-m">
                   {o.source_type ? <span>{o.source_type}</span> : null}
                   {o.province || o.region ? <span>· {o.province || o.region}</span> : null}

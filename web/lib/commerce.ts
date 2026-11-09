@@ -87,6 +87,7 @@ export interface Opp {
   saved?: boolean; // đã thêm vào kho của thành viên
   saved_at?: string;
   sold_out: boolean;
+  is_new?: boolean; // cơ hội mới khớp phiếu tìm, khách chưa xem
   reasons?: string[]; // vì sao cơ hội phù hợp với doanh nghiệp (điểm & giá là của riêng doanh nghiệp)
   match_count?: number; // chỉ ở admin: số doanh nghiệp được cơ hội khớp
   // chỉ có sau khi mua (hoặc ở admin)
@@ -113,11 +114,12 @@ export interface SearchReq {
   id: number;
   criteria: Partial<Criteria>;
   note: string;
-  status: "open" | "done" | "rejected";
+  status: "open" | "rejected"; // open = tìm kiếm liên tục
   reply: string;
   created_at: string;
   resolved_at: string | null;
   match_count?: number; // số cơ hội phù hợp với phiếu
+  new_count?: number; // cơ hội mới phù hợp chưa xem
   match_status?: "pending" | "running" | "done" | "error"; // so khớp chạy nền
   matched_at?: string | null;
 }
@@ -125,8 +127,20 @@ export interface SearchReq {
 /** Phiếu còn đang được hệ thống so khớp (chạy nền) */
 export const isMatching = (r: SearchReq) => r.match_status === "pending" || r.match_status === "running";
 
-export const SEARCH_STATUS: Record<SearchReq["status"], string> = { open: "Đang tìm", done: "Đã có kết quả", rejected: "Từ chối" };
-export const SEARCH_STATUS_CLASS: Record<SearchReq["status"], string> = { open: "s-contacted", done: "s-active", rejected: "s-suspended" };
+/** Phiếu tìm cơ hội tìm kiếm liên tục: cơ hội mới mở bán khớp phiếu sẽ tự thêm vào và báo cho khách */
+export const SEARCH_STATUS: Record<SearchReq["status"], string> = { open: "Tìm kiếm liên tục", rejected: "Từ chối" };
+export const SEARCH_STATUS_CLASS: Record<SearchReq["status"], string> = { open: "sr-live", rejected: "s-suspended" };
+
+/** Thông báo trong cổng thành viên: cơ hội mới phù hợp với phiếu tìm cơ hội */
+export interface MemberNotice {
+  id: number;
+  kind: "match";
+  created_at: string;
+  read: boolean;
+  score: number;
+  request: { id: number; note: string } | null;
+  opportunity: { id: number; code: string; title: string; industry: string; province: string };
+}
 
 /** Tóm tắt tiêu chí thành danh sách nhãn ngắn để hiển thị */
 export function criteriaTags(c: Partial<Criteria>): string[] {

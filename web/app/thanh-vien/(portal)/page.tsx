@@ -85,7 +85,7 @@ export default function MemberHome() {
           <div className="mt-empty">
             <Icon name="scan" />
             <b style={{ color: "var(--ink)" }}>Cho LeadScan biết bạn muốn tìm cơ hội nào</b>
-            <span>Chọn ngành hàng, khu vực, loại cơ hội và mô tả nhu cầu — đội ngũ LeadScan sẽ tìm và enrich cơ hội cho bạn.</span>
+            <span>Chọn ngành hàng, khu vực, loại cơ hội và mô tả nhu cầu — hệ thống tìm và chấm điểm cơ hội phù hợp cho bạn ngay lập tức.</span>
             <Link className="adm-btn primary" href="/thanh-vien/phu-hop">Enrich tìm kiếm cơ hội</Link>
           </div>
         )}

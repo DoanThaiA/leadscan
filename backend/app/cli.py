@@ -252,6 +252,45 @@ def cmd_import_opportunities(args) -> int:
     return 0
 
 
+def cmd_embed(args) -> int:
+    """Nhúng (embedding Cohere) mọi phiếu cơ hội — kể cả nháp/đã đóng — và phiếu tìm cơ hội, không so khớp.
+
+    Mặc định chỉ nhúng phiếu chưa có vector, khác model hoặc đã sửa nội dung; --force nhúng lại tất cả.
+    Gộp 96 phiếu vào 1 lần gọi Cohere.
+    """
+    from app.models import Opportunity, SearchRequest
+    from app.services import matching, usage
+    from app.services.embedding import EmbeddingError, current_model
+
+    cfg = get_settings()
+    if not cfg.cohere_api_key:
+        print("Chưa đặt COHERE_API_KEY → sẽ dùng vector hash (chỉ nên dùng khi chạy thử).")
+    before = usage.calls_this_month("cohere")
+    with new_session() as db:
+        stmt = select(Opportunity).order_by(Opportunity.id)
+        if args.status:
+            stmt = stmt.where(Opportunity.status == args.status)
+        opps = list(db.scalars(stmt).unique())
+        reqs = list(db.scalars(select(SearchRequest).order_by(SearchRequest.id)).unique())
+        try:
+            n_opp = matching.sync_opp_embeddings(db, cfg, opps, force=args.force)
+            n_req = matching.sync_request_embeddings(db, cfg, reqs, force=args.force)
+        except EmbeddingError as e:
+            db.rollback()
+            print(f"Lỗi khi gọi Cohere: {e}")
+            print("Chưa lưu gì. Kiểm tra COHERE_API_KEY / hạn mức tháng rồi chạy lại.")
+            return 1
+        db.commit()
+    used = usage.calls_this_month("cohere") - before
+    print(f"Model: {current_model(cfg)}")
+    print(f"Đã nhúng {n_opp}/{len(opps)} phiếu cơ hội và {n_req}/{len(reqs)} phiếu tìm cơ hội (phiếu còn lại đã có vector, bỏ qua).")
+    if cfg.cohere_api_key:
+        print(f"Tốn {used} lần gọi Cohere; tháng này đã dùng {usage.calls_this_month('cohere')}"
+              + (f"/{cfg.cohere_monthly_limit}." if cfg.cohere_monthly_limit else "."))
+    print("Chạy tiếp `python -m app.cli rematch` để so khớp lại và cập nhật Tất cả cơ hội của khách.")
+    return 0
+
+
 def cmd_rematch(args) -> int:
     """Tính lại toàn bộ điểm phù hợp (sau khi đổi thuật toán hoặc mô hình embedding)."""
     from app.services import matching
@@ -302,6 +341,10 @@ def main(argv: list[str] | None = None) -> int:
     o.add_argument("--dry-run", action="store_true", help="Chỉ kiểm tra, không lưu")
     o.add_argument("--by", default="", help="Email quản trị ghi là người tạo (không bắt buộc)")
     o.set_defaults(fn=cmd_import_opportunities)
+    em = sub.add_parser("embed", help="Nhúng embedding Cohere cho mọi phiếu cơ hội (kể cả nháp) và phiếu tìm, không so khớp")
+    em.add_argument("--force", action="store_true", help="Nhúng lại tất cả (mặc định chỉ phiếu chưa có vector / đã sửa)")
+    em.add_argument("--status", choices=["draft", "published", "closed"], default="", help="Chỉ nhúng phiếu cơ hội ở trạng thái này")
+    em.set_defaults(fn=cmd_embed)
     rm = sub.add_parser("rematch", help="Tính lại điểm phù hợp giữa phiếu tìm cơ hội và phiếu cơ hội")
     rm.add_argument("--reembed", action="store_true", help="Gọi lại Cohere nhúng toàn bộ (mặc định chỉ nhúng phiếu mới/đổi)")
     rm.set_defaults(fn=cmd_rematch)

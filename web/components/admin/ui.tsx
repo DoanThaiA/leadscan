@@ -36,6 +36,8 @@ const ICONS: Record<string, ReactNode> = {
   gauge: <><path d="M12 14l4-4M3.3 17a9 9 0 1 1 17.4 0" /><circle cx="12" cy="14" r="1.5" /></>,
   layers: <path d="M12 2 2 7l10 5 10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />,
   bookmark: <path d="M6 3h12v18l-6-4-6 4z" />,
+  bell: <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0" />,
+  refresh: <path d="M21 12a9 9 0 0 1-15.5 6.2M3 12a9 9 0 0 1 15.5-6.2M21 4v5h-5M3 20v-5h5" />,
 };
 
 export function Icon({ name, size }: { name: keyof typeof ICONS | string; size?: number }) {

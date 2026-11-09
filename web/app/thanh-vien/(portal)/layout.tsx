@@ -6,6 +6,7 @@ import { type ReactNode, useEffect, useState } from "react";
 
 import { Icon, initials } from "@/components/admin/ui";
 import { MemberProvider, useMember } from "@/components/member/MemberContext";
+import { NoticeBell, NoticeProvider, useNotices } from "@/components/member/Notifications";
 import { fmtPts } from "@/lib/commerce";
 import { mapi } from "@/lib/member/api";
 import { Logo } from "@/components/brand/Logo";
@@ -24,6 +25,7 @@ const MEMBERSHIP_POINTS = 10_000_000;
 
 function Shell({ children }: { children: ReactNode }) {
   const { me } = useMember();
+  const { unread } = useNotices();
   const path = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -39,14 +41,20 @@ function Shell({ children }: { children: ReactNode }) {
       <div className="adm-mtop">
         <button className="adm-btn ghost sm" aria-label="Mở menu" onClick={() => setOpen(true)}><Icon name="menu" /></button>
         <Link href="/thanh-vien" aria-label="LeadScan"><Logo variant="mark" height={26} /></Link>
-        <Link href="/thanh-vien/vi" className="adm-balance" style={{ padding: "4px 10px", fontSize: 12.5 }}>{fmtPts(me.company.points_balance)}</Link>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <NoticeBell placement="top" />
+          <Link href="/thanh-vien/vi" className="adm-balance" style={{ padding: "4px 10px", fontSize: 12.5 }}>{fmtPts(me.company.points_balance)}</Link>
+        </div>
       </div>
       {open ? <div className="adm-scrim" onClick={() => setOpen(false)} /> : null}
 
       <aside className={open ? "adm-side open" : "adm-side"}>
-        <Link href="/thanh-vien" className="adm-logo">
-          <Logo height={24} />
-        </Link>
+        <div className="nt-logo-row">
+          <Link href="/thanh-vien" className="adm-logo">
+            <Logo height={24} />
+          </Link>
+          <NoticeBell placement="side" />
+        </div>
         <nav className="adm-nav" aria-label="Cổng thành viên">
           {NAV.map((n) => {
             const on = n.exact ? path === n.href : path.startsWith(n.href);
@@ -54,6 +62,7 @@ function Shell({ children }: { children: ReactNode }) {
               <Link key={n.href} href={n.href} className={on ? "on" : undefined} aria-current={on ? "page" : undefined}>
                 <Icon name={n.icon} />
                 {n.label}
+                {n.href === "/thanh-vien/phu-hop" && unread ? <span className="nt-nav-count" aria-label={`${unread} cơ hội mới`}>{unread > 99 ? "99+" : unread}</span> : null}
               </Link>
             );
           })}
@@ -96,7 +105,9 @@ function Shell({ children }: { children: ReactNode }) {
 export default function PortalLayout({ children }: { children: ReactNode }) {
   return (
     <MemberProvider fallback={<div className="adm-empty" style={{ paddingTop: 120 }}>Đang tải…</div>}>
-      <Shell>{children}</Shell>
+      <NoticeProvider>
+        <Shell>{children}</Shell>
+      </NoticeProvider>
     </MemberProvider>
   );
 }

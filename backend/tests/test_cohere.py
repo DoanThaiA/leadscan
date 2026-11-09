@@ -96,9 +96,12 @@ def test_loi_tam_thoi_thi_thu_lai(admin, member, monkeypatch):
     get_settings.cache_clear()
     with respx.mock as mock:
         route = mock.post(COHERE_URL).mock(return_value=httpx.Response(503, text="busy"))
-        member.post("/api/member/search-requests", json={"note": "Cần mua hộp carton cho nhà máy ở Bắc Ninh"})
-        assert route.call_count == 4  # 1 lần + 3 lần thử lại, rồi chạy dự phòng
-    assert member.get("/api/member/search-requests").json()["items"][0]["match_status"] == "done"
+        out = member.post("/api/member/search-requests", json={"note": "Cần mua hộp carton cho nhà máy ở Bắc Ninh"}).json()
+        # gửi phiếu: 1 lần, lỗi → so khớp dự phòng ngay; việc nền chấm lại bằng ngữ nghĩa: 1 lần + 3 lần thử lại
+        assert route.call_count == 5
+    assert out["status"] == "open" and out["match_status"] == "done"  # khách có kết quả ngay dù Cohere lỗi
+    item = member.get("/api/member/search-requests").json()["items"][0]
+    assert item["match_status"] == "done" and item["status"] == "open"
     get_settings.cache_clear()
 
 
@@ -140,3 +143,40 @@ def test_kho_an_co_hoi_khong_con_phu_hop(admin, member):
     assert member.get("/api/member/opportunities").json()["total"] == 0
     assert member.get("/api/member/saved").json()["total"] == 0  # cơ hội không còn khớp thì không hiện trong kho
     assert member.get("/api/member/dashboard").json()["saved_count"] == 0
+
+
+def test_lenh_embed_nhung_ca_phieu_nhap(admin, member, cohere, capsys):
+    from app.cli import main as cli_main
+
+    draft = make_opp(admin, status="draft")  # phiếu nháp: chưa được nhúng khi lưu
+    pub = make_opp(admin, title="Cần thùng carton 3 lớp")
+    with new_session() as db:
+        assert db.get(Opportunity, draft).embedding is None and db.get(Opportunity, pub).embedding
+    n = len(cohere)
+    assert cli_main(["embed"]) == 0
+    assert len(cohere) == n + 1  # chỉ 1 lần gọi cho phiếu nháp còn thiếu (gộp lô)
+    assert "Đã nhúng 1/2 phiếu cơ hội" in capsys.readouterr().out
+    with new_session() as db:
+        assert len(db.get(Opportunity, draft).embedding) == 1024
+    assert cli_main(["embed"]) == 0 and len(cohere) == n + 1  # chạy lại: không gọi thêm
+    capsys.readouterr()
+    assert cli_main(["embed", "--force"]) == 0 and len(cohere) == n + 2  # --force: nhúng lại tất cả trong 1 lô
+    assert "Đã nhúng 2/2 phiếu cơ hội" in capsys.readouterr().out
+
+
+def test_ket_qua_ngay_khong_can_viec_nen(admin, member, cohere, monkeypatch):
+    """Gửi phiếu tìm → so khớp ngay trong request, không phụ thuộc worker Celery hay quản trị duyệt."""
+    from app import worker
+
+    oid = make_opp(admin)
+
+    def no_background(*a, **k):
+        raise AssertionError("không được đẩy so khớp sang việc nền")
+
+    monkeypatch.setattr(worker.match_request_task, "apply_async", no_background)
+    monkeypatch.setattr(worker.match_request_task, "apply", no_background)
+    r = ask(member)
+    assert r["status"] == "open" and r["match_status"] == "done" and r["match_count"] == 1
+    assert member.get(f"/api/member/search-requests/{r['id']}/opportunities").json()["items"][0]["id"] == oid
+    assert member.get("/api/member/opportunities").json()["total"] == 1
+    

@@ -38,7 +38,7 @@ export default function AdminSearchRequestsPage() {
     load();
   }, [load]);
 
-  async function resolve(r: Row, st: "done" | "rejected" | "open") {
+  async function resolve(r: Row, st: "rejected" | "open") {
     setBusy(r.id);
     try {
       await api.patch(`/search-requests/${r.id}`, { status: st, reply: replies[r.id] ?? r.reply ?? "" });
@@ -67,7 +67,7 @@ export default function AdminSearchRequestsPage() {
       <div className="adm-head">
         <div>
           <h1>Yêu cầu tìm cơ hội</h1>
-          <p>Thành viên bấm “Enrich tìm kiếm cơ hội” trong cổng thành viên. Tìm và thêm cơ hội vào mục Cơ hội & phiếu, rồi trả lời và đánh dấu xong — khách thấy phản hồi trong cổng.</p>
+          <p>Thành viên bấm “Enrich tìm kiếm cơ hội” trong cổng thành viên. Hệ thống trả kết quả ngay và tìm kiếm liên tục: cơ hội mới mở bán khớp phiếu được tự thêm và báo cho khách. Bạn có thể gửi phản hồi cho khách hoặc từ chối (dừng tìm).</p>
         </div>
       </div>
       {error ? <div className="adm-alert" style={{ marginBottom: 16 }}>{error}</div> : null}
@@ -122,10 +122,10 @@ export default function AdminSearchRequestsPage() {
 
                 {r.status === "open" ? (
                   <>
-                    <textarea className="adm-input" style={{ minHeight: 80, height: "auto", padding: "8px 10px" }} placeholder="Trả lời khách (hiện trong cổng thành viên), ví dụ: Đã thêm 3 cơ hội phù hợp vào mục Tất cả cơ hội." value={replies[r.id] ?? ""} onChange={(e) => setReplies((m) => ({ ...m, [r.id]: e.target.value }))} aria-label="Trả lời khách" />
+                    <textarea className="adm-input" style={{ minHeight: 80, height: "auto", padding: "8px 10px" }} placeholder={r.reply ? `Đã trả lời: ${r.reply}` : "Trả lời khách (hiện trong cổng thành viên), ví dụ: LeadScan đang enrich thêm 5 cơ hội cho bạn."} value={replies[r.id] ?? ""} onChange={(e) => setReplies((m) => ({ ...m, [r.id]: e.target.value }))} aria-label="Trả lời khách" />
                     <div className="adm-actions">
                       <button className="adm-btn sm ghost danger" onClick={() => resolve(r, "rejected")} disabled={busy === r.id}>Từ chối</button>
-                      <button className="adm-btn sm primary" onClick={() => resolve(r, "done")} disabled={busy === r.id}>Đã có kết quả</button>
+                      <button className="adm-btn sm primary" onClick={() => resolve(r, "open")} disabled={busy === r.id || !(replies[r.id] ?? "").trim()}>Gửi phản hồi</button>
                     </div>
                   </>
                 ) : (

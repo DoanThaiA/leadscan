@@ -426,11 +426,14 @@ def test_gui_yeu_cau_tim_co_hoi_bao_admin(member, admin, monkeypatch):
     r = member.post("/api/member/search-requests", json=body)
     assert r.status_code == 201, r.text
     out = r.json()
-    assert out["status"] == "open" and out["criteria"]["sizes"] == ["200+ nhân sự"]
+    # so khớp ngay trong lúc gửi, không chờ quản trị; phiếu ở trạng thái "Tìm kiếm liên tục"
+    assert out["status"] == "open" and out["match_status"] == "done" and not out["resolved_at"]
+    assert out["criteria"]["sizes"] == ["200+ nhân sự"]
 
-    # email báo admin có tiêu chí + mô tả
+    # email báo admin có tiêu chí + mô tả + kết quả tự động
     (subject, mail) = sent[-1]
     assert f"#{out['id']}" in subject and "Quốc tế, Hà Nội" in mail and "châu Phi" in mail and "≥ 70" in mail
+    assert f"tìm thấy {out['match_count']} cơ hội phù hợp" in mail
     with new_session() as db:
         req = db.get(SearchRequest, out["id"])
         assert req.email_sent_at is not None
@@ -439,14 +442,16 @@ def test_gui_yeu_cau_tim_co_hoi_bao_admin(member, admin, monkeypatch):
     assert member.get("/api/member/match").json()["criteria"]["regions"] == ["Quốc tế", "Hà Nội"]
     assert member.get("/api/member/search-requests").json()["items"][0]["id"] == out["id"]
 
-    # admin xem, trả lời
+    # admin xem, trả lời thêm (không bắt buộc) — phiếu vẫn tìm kiếm liên tục
     items = admin.get("/api/admin/search-requests?status=open").json()["items"]
     assert items[0]["id"] == out["id"] and items[0]["member"]["email"] and items[0]["email_sent_at"]
-    r = admin.patch(f"/api/admin/search-requests/{out['id']}", json={"status": "done", "reply": "Đã thêm 3 cơ hội vào kho."})
-    assert r.status_code == 200 and r.json()["resolved_at"]
+    r = admin.patch(f"/api/admin/search-requests/{out['id']}", json={"status": "open", "reply": "Đã thêm 3 cơ hội vào kho."})
+    assert r.status_code == 200 and not r.json()["resolved_at"]
     mine = member.get("/api/member/search-requests").json()["items"][0]
-    assert mine["status"] == "done" and mine["reply"] == "Đã thêm 3 cơ hội vào kho."
-    assert admin.get("/api/admin/commerce-stats").json()["open_search"] == 0
+    assert mine["status"] == "open" and mine["reply"] == "Đã thêm 3 cơ hội vào kho."
+    assert admin.get("/api/admin/commerce-stats").json()["open_search"] == 1  # phiếu đang tìm kiếm liên tục
+    # trạng thái "Đã có kết quả" không còn
+    assert admin.patch(f"/api/admin/search-requests/{out['id']}", json={"status": "done"}).status_code == 422
     assert admin.post(f"/api/admin/search-requests/{out['id']}/resend-email").status_code == 200
 
 
