@@ -15,6 +15,7 @@ dependencies = [
     "tzdata>=2024.1",  # zoneinfo trên Windows không có sẵn dữ liệu múi giờ
     "beautifulsoup4>=4.15.0",
     "cryptography>=50.0.2",
+    "pgvector>=0.4",
 ]
 
 [dependency-groups]

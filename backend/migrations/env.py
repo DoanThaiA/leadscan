@@ -4,6 +4,8 @@ from logging.config import fileConfig
 
 from alembic import context
 
+import pgvector.sqlalchemy  # noqa: F401 — để alembic nhận kiểu cột vector khi so sánh schema
+
 from app import models  # noqa: F401 — đăng ký các bảng vào metadata
 from app.db import Base, get_engine
 

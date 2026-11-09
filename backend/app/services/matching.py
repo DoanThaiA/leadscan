@@ -15,14 +15,26 @@ Luồng:
        UserOpportunity     "Tất cả cơ hội" của doanh nghiệp — gộp từ mọi phiếu, mỗi cơ hội 1 dòng, điểm cao nhất
      và tự thêm vào "Kho của tôi" (lần đầu tiên cơ hội xuất hiện với doanh nghiệp).
   5. Giá phiếu thành viên phải trả đồng biến với điểm của chính họ: price_for().
+
+Kỹ thuật:
+  - Embedding: Cohere (services/embedding.py), lưu cột pgvector vector(1024). Chỉ gọi lại API khi văn bản đổi (sha1).
+  - Ứng viên: PostgreSQL lấy N phiếu gần nhất bằng toán tử cosine `<=>` của pgvector (cfg.match_candidates),
+    rồi chấm hybrid từng cặp. SQLite (test) tính cosine bằng Python.
+  - Chạy nền bằng Celery (worker.match_request_task / match_opportunity_task); "Tất cả cơ hội" của doanh nghiệp
+    chỉ có dòng khi doanh nghiệp đã gửi phiếu tìm cơ hội và có cơ hội đạt ngưỡng.
+  - Dự phòng (semantic=False): khi không lấy được embedding (hết 1.000 lượt/tháng của khoá Trial, sai khoá, Cohere lỗi)
+    vẫn so khớp bằng tiêu chí + từ khoá: khớp yêu cầu = 0.60·tiêu chí + 0.40·từ khoá (không chọn tiêu chí: chỉ từ khoá).
 """
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from datetime import date
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import Float, bindparam, or_, select, text
+from sqlalchemy.orm import Session, selectinload, undefer
+
+from app.db import EmbeddingVector
 
 from app.config import Settings, get_settings
 from app.models import Opportunity, Purchase, SavedOpportunity, SearchRequest, SearchRequestMatch, UserOpportunity
@@ -30,9 +42,10 @@ from app.services import embedding as emb
 
 W_CRITERIA, W_SEMANTIC, W_KEYWORD = 0.40, 0.35, 0.25
 W_SEMANTIC_ONLY, W_KEYWORD_ONLY = 0.60, 0.40  # khách không chọn tiêu chí nào
+W_CRITERIA_NOSEM, W_KEYWORD_NOSEM = 0.60, 0.40  # dự phòng không có embedding
 W_FIT, W_URGENCY, W_TRUST = 0.75, 0.10, 0.15
 CRITERIA_WEIGHTS = {"industries": 40, "regions": 30, "sources": 20}
-COS_LOW, COS_HIGH = 0.03, 0.40  # cosine ≤ LOW → 0 điểm, ≥ HIGH → 100 điểm
+HASH_COS_RANGE = (0.03, 0.40)  # vector hash: cosine ≤ 0.03 → 0 điểm ngữ nghĩa, ≥ 0.40 → 100 điểm
 
 TRUST_BY_SOURCE = {
     "Nguồn chính thống": 90,
@@ -70,12 +83,103 @@ def request_text(r: SearchRequest) -> str:
     return ". ".join(p for p in [r.note, " ".join(extra)] if p)
 
 
-def ensure_embeddings(cfg: Settings, o: Opportunity | None = None, r: SearchRequest | None = None, force: bool = False) -> None:
+def _sha(model: str, text_: str) -> str:
+    return hashlib.sha1(f"{model}\n{text_}".encode()).hexdigest()
+
+
+def sync_opp_embeddings(db: Session, cfg: Settings, opps: list[Opportunity], force: bool = False) -> int:
+    """Nhúng (theo lô) các phiếu cơ hội có văn bản mới/đổi hoặc khác mô hình. Trả về số phiếu đã nhúng."""
     model = emb.current_model(cfg)
-    if o is not None and (force or not o.embedding or o.embedding_model != model):
-        o.embedding, o.embedding_model = emb.embed(cfg, opp_text(o))
-    if r is not None and (force or not r.embedding or r.embedding_model != model):
-        r.embedding, r.embedding_model = emb.embed(cfg, request_text(r))
+    todo = []
+    for o in opps:
+        t = opp_text(o)
+        if force or o.embedding_model != model or o.embedding_sha != _sha(model, t):
+            todo.append((o, t))
+    if todo:
+        vecs, used = emb.embed_documents(cfg, [t for _, t in todo])
+        for (o, t), v in zip(todo, vecs):
+            o.embedding, o.embedding_model, o.embedding_sha = v, used, _sha(used, t)
+        db.flush()
+    return len(todo)
+
+
+def sync_request_embeddings(db: Session, cfg: Settings, reqs: list[SearchRequest], force: bool = False) -> int:
+    model = emb.current_model(cfg)
+    todo = []
+    for r in reqs:
+        t = request_text(r)
+        if force or r.embedding_model != model or r.embedding_sha != _sha(model, t):
+            todo.append((r, t))
+    if todo:
+        vecs, used = emb.embed_queries(cfg, [t for _, t in todo])
+        for (r, t), v in zip(todo, vecs):
+            r.embedding, r.embedding_model, r.embedding_sha = v, used, _sha(used, t)
+        db.flush()
+    return len(todo)
+
+
+def _catch_up(db: Session, cfg: Settings) -> None:
+    """Phiếu chưa có vector của mô hình hiện tại (vd. vừa thêm COHERE_API_KEY) → nhúng bù trước khi tìm."""
+    model = emb.current_model(cfg)
+    opps = db.scalars(select(Opportunity).where(Opportunity.status == "published", Opportunity.embedding_model != model)).unique().all()
+    sync_opp_embeddings(db, cfg, list(opps))
+    reqs = db.scalars(select(SearchRequest).where(SearchRequest.status != "rejected", SearchRequest.embedding_model != model)).unique().all()
+    sync_request_embeddings(db, cfg, list(reqs))
+
+
+def _is_pg(db: Session) -> bool:
+    return db.get_bind().dialect.name == "postgresql"
+
+
+def _nearest_opps(db: Session, cfg: Settings, req: SearchRequest, today: date) -> list[tuple[Opportunity, float]]:
+    """Phiếu cơ hội đang bán gần nhất với phiếu tìm (cosine), tối đa cfg.match_candidates."""
+    base = (
+        select(Opportunity)
+        .options(selectinload(Opportunity.contacts))
+        .where(
+            Opportunity.status == "published",
+            or_(Opportunity.deadline.is_(None), Opportunity.deadline >= today),
+            Opportunity.embedding_model == req.embedding_model,
+            Opportunity.embedding.is_not(None),
+        )
+    )
+    if _is_pg(db):
+        dist = Opportunity.embedding.op("<=>", return_type=Float)(bindparam("qv", req.embedding, type_=EmbeddingVector(emb.EMBED_DIM)))
+        rows = db.execute(base.add_columns((1 - dist).label("sim")).order_by(dist).limit(cfg.match_candidates)).unique().all()
+        return [(o, float(sim)) for o, sim in rows]
+    opps = db.scalars(base.options(undefer(Opportunity.embedding))).unique().all()
+    scored = sorted(((o, emb.cosine(req.embedding, o.embedding)) for o in opps), key=lambda x: -x[1])
+    return scored[: cfg.match_candidates]
+
+
+def _all_opps(db: Session, today: date) -> list[tuple[Opportunity, None]]:
+    """Dự phòng không có embedding: mọi phiếu cơ hội đang bán còn hạn."""
+    rows = db.scalars(
+        select(Opportunity)
+        .options(selectinload(Opportunity.contacts))
+        .where(Opportunity.status == "published", or_(Opportunity.deadline.is_(None), Opportunity.deadline >= today))
+    ).unique().all()
+    return [(o, None) for o in rows]
+
+
+def _all_requests(db: Session) -> list[tuple[SearchRequest, None]]:
+    return [(r, None) for r in db.scalars(select(SearchRequest).where(SearchRequest.status != "rejected")).unique().all()]
+
+
+def _nearest_requests(db: Session, cfg: Settings, opp: Opportunity) -> list[tuple[SearchRequest, float]]:
+    """Phiếu tìm cơ hội (chưa bị từ chối) gần nhất với phiếu cơ hội."""
+    base = select(SearchRequest).where(
+        SearchRequest.status != "rejected",
+        SearchRequest.embedding_model == opp.embedding_model,
+        SearchRequest.embedding.is_not(None),
+    )
+    if _is_pg(db):
+        dist = SearchRequest.embedding.op("<=>", return_type=Float)(bindparam("ov", opp.embedding, type_=EmbeddingVector(emb.EMBED_DIM)))
+        rows = db.execute(base.add_columns((1 - dist).label("sim")).order_by(dist).limit(cfg.match_candidates)).unique().all()
+        return [(r, float(sim)) for r, sim in rows]
+    reqs = db.scalars(base.options(undefer(SearchRequest.embedding))).unique().all()
+    scored = sorted(((r, emb.cosine(opp.embedding, r.embedding)) for r in reqs), key=lambda x: -x[1])
+    return scored[: cfg.match_candidates]
 
 
 # ------------------------------------------------------------------ chấm điểm
@@ -200,8 +304,6 @@ class RequestCtx:
     def __init__(self, r: SearchRequest):
         self.r = r
         self.criteria = r.criteria or {}
-        self.vec, self.model = r.embedding or [], r.embedding_model
-        self.text = request_text(r)
         self.q_tokens = emb.tokens(r.note)
         self.shown = {}  # token đã bỏ dấu → từ gốc khách viết (để hiển thị lý do cho dễ đọc)
         for w in re.findall(r"\w+", (r.note or "").lower()):
@@ -209,34 +311,36 @@ class RequestCtx:
         self.q_bigrams = {f"{a} {b}" for a, b in zip(self.q_tokens, self.q_tokens[1:])}
         self.min_score = int(self.criteria.get("min_score") or 0)
         self.has_criteria = any(self.criteria.get(k) for k in CRITERIA_WEIGHTS)
-        self._fallback_vec: list[float] | None = None
-
-    def fallback_vec(self) -> list[float]:
-        if self._fallback_vec is None:
-            self._fallback_vec = emb.embed_hash(self.text)
-        return self._fallback_vec
 
 
-def score_pair(q: RequestCtx, o: Opportunity, today: date | None = None) -> Scored:
+def cos_range(cfg: Settings, model: str) -> tuple[float, float]:
+    """Khoảng cosine quy ra 0–100 điểm ngữ nghĩa; mỗi mô hình embedding có phân bố cosine khác nhau."""
+    return HASH_COS_RANGE if model.startswith("hash") else (cfg.cohere_cos_low, cfg.cohere_cos_high)
+
+
+def score_pair(q: RequestCtx, o: Opportunity, cos: float | None, cfg: Settings, today: date | None = None) -> Scored:
+    """Chấm 1 cặp (phiếu tìm, phiếu cơ hội). cos = cosine embedding (pgvector đã tính sẵn); None = không có embedding."""
     today = today or date.today()
-    text = opp_text(o)
-    o_fold = emb.fold(text)
+    o_fold = emb.fold(opp_text(o))
     o_tokens = set(o_fold.split())
 
     kw, hits = _keyword_score(q.q_tokens, q.q_bigrams, o_tokens, o_fold)
-    if q.model == o.embedding_model and q.vec and o.embedding:
-        cos = emb.cosine(q.vec, o.embedding)
-    else:  # khác mô hình embedding (vd. API lỗi một phía) → so bằng vector hash cho công bằng
-        cos = emb.cosine(q.fallback_vec(), emb.embed_hash(text))
-    sem = _clamp(100 * (cos - COS_LOW) / (COS_HIGH - COS_LOW))
+    sem = 0.0
+    if cos is not None:
+        lo, hi = cos_range(cfg, o.embedding_model)
+        sem = _clamp(100 * (cos - lo) / (hi - lo))
 
     reasons: list[str] = []
     crit, crit_reasons = _criteria_score(q.criteria, o, o_fold, o_tokens)
-    if crit is None:
+    if cos is None:  # dự phòng: chỉ tiêu chí + từ khoá
+        fit = kw if crit is None else W_CRITERIA_NOSEM * crit + W_KEYWORD_NOSEM * kw
+        reasons += crit_reasons
+    elif crit is None:
         fit = W_SEMANTIC_ONLY * sem + W_KEYWORD_ONLY * kw
     else:
         fit = W_CRITERIA * crit + W_SEMANTIC * sem + W_KEYWORD * kw
         reasons += crit_reasons
+    if crit is not None:
         if q.criteria.get("regions") and _region_score(q.criteria["regions"], o)[0] == 0:
             fit *= 0.8  # sai khu vực khách yêu cầu → trừ điểm
     shown = [q.shown.get(h, h) for h in hits if len(h) > 2]
@@ -251,7 +355,6 @@ def score_pair(q: RequestCtx, o: Opportunity, today: date | None = None) -> Scor
     fit_i = round(_clamp(fit))
     total = round(W_FIT * fit_i + W_URGENCY * urgency + W_TRUST * trust)
     return Scored(score=int(_clamp(total)), fit=fit_i, urgency=urgency, trust=trust, reasons=reasons)
-
 
 
 def is_match(q: RequestCtx, s: Scored, cfg: Settings) -> bool:
@@ -272,10 +375,17 @@ def _upsert_request_match(db: Session, req_id: int, opp_id: int, s: Scored, exis
         db.add(SearchRequestMatch(request_id=req_id, opportunity_id=opp_id, score=s.score, score_fit=s.fit, score_urgency=s.urgency, score_trust=s.trust, reasons=s.reasons))
 
 
+def _lock_company(db: Session, company_id: int) -> None:
+    """Hai việc nền cùng ghi "Tất cả cơ hội" của 1 doanh nghiệp thì chạy lần lượt (khoá tới hết giao dịch)."""
+    if _is_pg(db):
+        db.execute(text("SELECT pg_advisory_xact_lock(4242, :cid)"), {"cid": company_id})
+
+
 def refresh_company(db: Session, company_id: int, opp_ids: set[int], member_user_id: int | None = None) -> int:
     """Gộp các phiếu tìm của doanh nghiệp thành "Tất cả cơ hội": mỗi cơ hội 1 dòng, điểm = điểm cao nhất. Trả về số dòng MỚI."""
     if not opp_ids:
         return 0
+    _lock_company(db, company_id)
     db.flush()
     rows = db.execute(
         select(SearchRequestMatch, SearchRequest.id)
@@ -290,7 +400,7 @@ def refresh_company(db: Session, company_id: int, opp_ids: set[int], member_user
     bought = set(db.scalars(select(Purchase.opportunity_id).where(Purchase.company_id == company_id, Purchase.opportunity_id.in_(opp_ids))).all())
     saved = set(db.scalars(select(SavedOpportunity.opportunity_id).where(SavedOpportunity.company_id == company_id, SavedOpportunity.opportunity_id.in_(opp_ids))).all())
     new = 0
-    for oid in opp_ids:
+    for oid in sorted(opp_ids):
         u = existing.get(oid)
         if oid in best:
             m, rid = best[oid]
@@ -301,27 +411,28 @@ def refresh_company(db: Session, company_id: int, opp_ids: set[int], member_user
                 if oid not in saved:  # cơ hội phù hợp tự vào kho (lần đầu; khách bỏ khỏi kho thì không tự thêm lại)
                     db.add(SavedOpportunity(company_id=company_id, opportunity_id=oid, member_user_id=member_user_id))
             u.score, u.score_fit, u.score_urgency, u.score_trust, u.reasons, u.best_request_id = m.score, m.score_fit, m.score_urgency, m.score_trust, m.reasons, rid
-        elif u is not None and u.best_request_id is not None and oid not in bought:
-            db.delete(u)  # không còn phiếu nào khớp (vd. phiếu cơ hội đã sửa nội dung); dòng cũ không gắn phiếu thì giữ
+        elif u is not None and oid not in bought:
+            db.delete(u)  # không còn phiếu tìm nào khớp (phiếu bị từ chối, cơ hội sửa nội dung/đóng) — đã mua thì giữ
     return new
 
 
-def match_request(db: Session, req: SearchRequest, cfg: Settings | None = None) -> int:
-    """So phiếu tìm cơ hội với mọi phiếu cơ hội đang bán; ghi kết quả. Trả về số cơ hội phù hợp."""
+def match_request(db: Session, req: SearchRequest, cfg: Settings | None = None, semantic: bool = True) -> int:
+    """So phiếu tìm cơ hội với các phiếu cơ hội đang bán gần nhất; ghi kết quả. Trả về số cơ hội phù hợp.
+
+    semantic=False: không gọi Cohere, so với mọi phiếu đang bán bằng tiêu chí + từ khoá (dự phòng).
+    """
     cfg = cfg or get_settings()
-    ensure_embeddings(cfg, r=req)
     today = date.today()
-    q = RequestCtx(req)
     prev = {m.opportunity_id: m for m in db.scalars(select(SearchRequestMatch).where(SearchRequestMatch.request_id == req.id)).unique()}
     touched: set[int] = set(prev)
     matched = 0
     if req.status != "rejected":
-        opps = db.scalars(select(Opportunity).where(Opportunity.status == "published")).unique().all()
-        for o in opps:
-            if not _matchable(o, today):
-                continue
-            ensure_embeddings(cfg, o=o)
-            s = score_pair(q, o, today)
+        if semantic:
+            sync_request_embeddings(db, cfg, [req])  # có thể ném EmbeddingError
+            _catch_up(db, cfg)
+        q = RequestCtx(req)
+        for o, cos in (_nearest_opps(db, cfg, req, today) if semantic else _all_opps(db, today)):
+            s = score_pair(q, o, cos, cfg, today)
             if is_match(q, s, cfg):
                 _upsert_request_match(db, req.id, o.id, s, prev.pop(o.id, None))
                 touched.add(o.id)
@@ -333,39 +444,53 @@ def match_request(db: Session, req: SearchRequest, cfg: Settings | None = None) 
     return matched
 
 
-def match_opportunity(db: Session, opp: Opportunity, cfg: Settings | None = None) -> int:
-    """So 1 phiếu cơ hội (mới mở bán / vừa sửa) với mọi phiếu tìm cơ hội. Trả về số phiếu tìm khớp."""
+def match_opportunity(db: Session, opp: Opportunity, cfg: Settings | None = None, semantic: bool = True) -> int:
+    """So 1 phiếu cơ hội (mới mở bán / vừa sửa / vừa đóng) với các phiếu tìm cơ hội. Trả về số phiếu tìm khớp."""
     cfg = cfg or get_settings()
     today = date.today()
-    ensure_embeddings(cfg, o=opp, force=True)  # nội dung có thể vừa đổi
-    prev = {(m.request_id): m for m in db.scalars(select(SearchRequestMatch).where(SearchRequestMatch.opportunity_id == opp.id)).unique()}
-    reqs = db.scalars(select(SearchRequest).where(SearchRequest.status != "rejected")).unique().all() if _matchable(opp, today) else []
-    by_company: dict[int, int | None] = {r.company_id: r.member_user_id for r in db.scalars(select(SearchRequest).where(SearchRequest.id.in_(list(prev)))).unique()} if prev else {}
-    matched = 0
-    for r in reqs:
-        ensure_embeddings(cfg, r=r)
-        q = RequestCtx(r)
-        s = score_pair(q, opp, today)
-        if is_match(q, s, cfg):
-            _upsert_request_match(db, r.id, opp.id, s, prev.pop(r.id, None))
+    prev = {m.request_id: m for m in db.scalars(select(SearchRequestMatch).where(SearchRequestMatch.opportunity_id == opp.id)).unique()}
+    by_company: dict[int, int | None] = {}
+    if prev:
+        for r in db.scalars(select(SearchRequest).where(SearchRequest.id.in_(list(prev)))).unique():
             by_company[r.company_id] = r.member_user_id
-            matched += 1
+    matched = 0
+    if _matchable(opp, today):
+        if semantic:
+            sync_opp_embeddings(db, cfg, [opp])  # chỉ gọi API khi nội dung đổi; có thể ném EmbeddingError
+            _catch_up(db, cfg)
+        for r, cos in (_nearest_requests(db, cfg, opp) if semantic else _all_requests(db)):
+            q = RequestCtx(r)
+            s = score_pair(q, opp, cos, cfg, today)
+            if is_match(q, s, cfg):
+                _upsert_request_match(db, r.id, opp.id, s, prev.pop(r.id, None))
+                by_company[r.company_id] = r.member_user_id
+                matched += 1
     for stale in prev.values():
         db.delete(stale)
-    for cid, uid in by_company.items():
-        refresh_company(db, cid, {opp.id}, uid)
+    for cid in sorted(by_company):  # khoá theo thứ tự tăng dần → không khoá chéo giữa các việc nền
+        refresh_company(db, cid, {opp.id}, by_company[cid])
     db.flush()
     return matched
 
 
-def rematch_all(db: Session, cfg: Settings | None = None) -> tuple[int, int]:
-    """Tính lại toàn bộ (sau khi đổi thuật toán/mô hình embedding). Trả về (số phiếu tìm, số cặp phù hợp)."""
+def rematch_all(db: Session, cfg: Settings | None = None, reembed: bool = False) -> tuple[int, int, str]:
+    """Tính lại toàn bộ (sau khi đổi thuật toán/mô hình embedding).
+
+    Trả về (số phiếu tìm, số cặp phù hợp, lý do nếu phải chạy dự phòng không embedding).
+    """
+    from app.db import utcnow
+
     cfg = cfg or get_settings()
-    reqs = db.scalars(select(SearchRequest).order_by(SearchRequest.id)).unique().all()
-    for o in db.scalars(select(Opportunity)).unique():
-        ensure_embeddings(cfg, o=o, force=True)
+    reqs = list(db.scalars(select(SearchRequest).order_by(SearchRequest.id)).unique())
+    note = ""
+    try:
+        sync_opp_embeddings(db, cfg, list(db.scalars(select(Opportunity).where(Opportunity.status == "published")).unique()), force=reembed)
+        sync_request_embeddings(db, cfg, [r for r in reqs if r.status != "rejected"], force=reembed)
+    except emb.EmbeddingError as e:
+        note = str(e)
     total = 0
     for r in reqs:
-        ensure_embeddings(cfg, r=r, force=True)
-        total += match_request(db, r, cfg)
-    return len(reqs), total
+        total += match_request(db, r, cfg, semantic=not note)
+        r.match_status, r.matched_at = "done", utcnow()
+        r.match_error = f"So khớp không dùng ngữ nghĩa: {note}"[:300] if note else ""
+    return len(reqs), total, note

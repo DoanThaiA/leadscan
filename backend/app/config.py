@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -71,13 +71,21 @@ class Settings(BaseSettings):
     # Yêu cầu xuất hoá đơn được gửi tới email này (kế toán xuất thủ công)
     invoice_email: str = "vylyy9999@gmail.com"
 
-    # So khớp cơ hội ↔ yêu cầu (hybrid: tiêu chí + từ khoá + embedding ngữ nghĩa)
-    # Embedding: "hash" = chạy tại chỗ, không cần khoá API; "openai" = API tương thích OpenAI (/embeddings)
-    embed_provider: str = "hash"
-    embed_api_key: str = ""
-    embed_model: str = "text-embedding-3-small"
-    embed_url: str = "https://api.openai.com/v1"
+    # So khớp cơ hội ↔ yêu cầu (hybrid: tiêu chí + từ khoá + embedding ngữ nghĩa, vector lưu bằng pgvector)
+    # Embedding Cohere: chỉ cần đặt COHERE_API_KEY. Không có khoá → dùng vector "hash" chạy tại chỗ (dev/test).
+    cohere_api_key: str = Field("", validation_alias=AliasChoices("COHERE_API_KEY", "LEADSCAN_COHERE_API_KEY"))
+    cohere_embed_url: str = "https://api.cohere.com/v2/embed"
+    # Embed 5: lập chỉ mục bằng Pro, truy vấn bằng Fast (cùng không gian vector — khuyến nghị của Cohere)
+    cohere_doc_model: str = "embed-v5.0-pro"
+    cohere_query_model: str = "embed-v5.0-fast"
+    # Khoá Trial (miễn phí) của Cohere: dùng được mọi model nhưng tối đa 1.000 lần gọi API/tháng, 2.000 văn bản/phút.
+    # Hết hạn mức tháng → không gọi Cohere nữa, so khớp chỉ dùng tiêu chí + từ khoá tới tháng sau. 0 = không giới hạn.
+    cohere_monthly_limit: int = 1000
     match_min_fit: int = 35  # điểm "khớp yêu cầu" tối thiểu (0–100) để cơ hội được xem là phù hợp
+    match_candidates: int = 500  # số ứng viên gần nhất (pgvector) đưa vào chấm điểm hybrid mỗi lần so khớp
+    # Cosine Cohere quy ra điểm ngữ nghĩa: ≤ low → 0, ≥ high → 100. Nên chỉnh lại theo dữ liệu thật.
+    cohere_cos_low: float = 0.20
+    cohere_cos_high: float = 0.60
 
     # Hàng đợi việc nền (Celery + Redis)
     redis_url: str = "redis://localhost:6379/0"

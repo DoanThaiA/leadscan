@@ -239,6 +239,18 @@ nano .env
 
 > Hiện chưa tích hợp xong InfoCMS (QuickQR, chữ ký RSA). Trang thanh toán hiện QR tĩnh tới tài khoản trên, khách vẫn chuyển được tiền, nhưng **admin phải xác nhận tay** ở mục *Thanh toán* sau khi đối soát sao kê.
 
+### So khớp cơ hội (Cohere)
+
+| Biến | Điền gì |
+|---|---|
+| `COHERE_API_KEY` | Khoá API lấy ở https://dashboard.cohere.com/api-keys. Chỉ cần biến này — model (`embed-v5.0-pro` / `embed-v5.0-fast`, 1024 chiều) và endpoint đã cài sẵn |
+
+> **Khoá Trial (miễn phí):** dùng được các model trên, không mất phí, nhưng tối đa **1.000 lần gọi/tháng** và **2.000 văn bản/phút**; Cohere **không cho dùng khoá Trial cho mục đích thương mại/production**. Hệ thống đếm lượt gọi (trang Tổng quan admin và lệnh `diagnose` hiện số đã dùng). Hết lượt → tới tháng sau so khớp chỉ dùng tiêu chí + từ khoá, không lỗi. Khi chuyển sang khoá Production, đặt `LEADSCAN_COHERE_MONTHLY_LIMIT=0`.
+> Mỗi phiếu tìm hoặc phiếu cơ hội mới tốn khoảng 1 lượt; nhập file/`rematch` gộp 96 phiếu vào 1 lượt.
+>
+> Khi khách gửi phiếu tìm cơ hội, **worker** (Celery) nhúng mô tả bằng Cohere, lấy ứng viên gần nhất bằng pgvector rồi chấm điểm hybrid. Worker dừng thì phiếu sẽ đứng ở trạng thái "đang tìm".
+> Lần đầu thêm khoá (hoặc sau khi đổi model): `docker compose exec api python -m app.cli rematch` để nhúng và so khớp lại toàn bộ.
+
 ### Biến tuỳ chọn
 
 | Biến | Mặc định | Khi nào đổi |
@@ -247,6 +259,10 @@ nano .env
 | `LEADSCAN_MEMBERSHIP_FEE`, `..._POINTS`, `..._DAYS` | 10tr / 10tr điểm / 365 ngày | Đổi giá gói thành viên |
 | `LEADSCAN_TOPUP_PACKS`, `LEADSCAN_TOPUP_MIN` | 5/10/20/50tr, tối thiểu 1tr | Đổi gói nạp |
 | `LEADSCAN_ORDER_EXPIRE_HOURS` | 24 | Thời hạn đơn thanh toán |
+| `LEADSCAN_COHERE_MONTHLY_LIMIT` | 1000 | Hạn mức lượt gọi Cohere/tháng (khoá Trial). Khoá Production: đặt `0` |
+| `LEADSCAN_MATCH_MIN_FIT` | 35 | Điểm "khớp yêu cầu" tối thiểu (0–100) để cơ hội được xem là phù hợp |
+| `LEADSCAN_COHERE_COS_LOW` / `..._HIGH` | 0.20 / 0.60 | Cosine Cohere quy ra 0 / 100 điểm ngữ nghĩa — chỉnh theo dữ liệu thật |
+| `LEADSCAN_MATCH_CANDIDATES` | 500 | Số phiếu gần nhất (pgvector) đưa vào chấm điểm mỗi lần so khớp |
 
 Bảo vệ file (chỉ user của bạn đọc được):
 
@@ -458,9 +474,11 @@ ssh deploy@IP_VPS "cd ~/leadscan && git pull && docker compose up -d --build"
 
 `docker compose up -d --build` chỉ build lại phần thay đổi, tự chạy migration trước khi API khởi động lại, web gián đoạn vài giây.
 
-**3. Nếu `.env.example` có biến mới:** thêm biến đó vào `.env` trên VPS rồi chạy lại `docker compose up -d`.
+**3. Nếu bản cập nhật ghi cần so khớp lại** (đổi thuật toán / model embedding): `docker compose exec api python -m app.cli rematch`.
 
-**4. Nếu `deploy/nginx.conf` thay đổi:** copy lại (giữ phần SSL certbot đã thêm — nên sửa tay file trong `/etc/nginx/sites-available/leadscan.conf` cho khớp thay vì ghi đè), rồi `sudo nginx -t && sudo systemctl reload nginx`.
+**4. Nếu `.env.example` có biến mới:** thêm biến đó vào `.env` trên VPS rồi chạy lại `docker compose up -d`.
+
+**5. Nếu `deploy/nginx.conf` thay đổi:** copy lại (giữ phần SSL certbot đã thêm — nên sửa tay file trong `/etc/nginx/sites-available/leadscan.conf` cho khớp thay vì ghi đè), rồi `sudo nginx -t && sudo systemctl reload nginx`.
 
 Dọn image cũ cho đỡ đầy ổ (thỉnh thoảng):
 
@@ -483,6 +501,7 @@ docker image prune -f
 | Chạy lại toàn bộ | `docker compose up -d` |
 | Tạo / đặt lại mật khẩu admin | `docker compose exec api python -m app.cli create-admin --email ...` |
 | Chẩn đoán DB, Redis, email | `docker compose exec api python -m app.cli diagnose` |
+| So khớp lại toàn bộ cơ hội ↔ phiếu tìm | `docker compose exec api python -m app.cli rematch` (thêm `--reembed` để gọi lại Cohere cho tất cả) |
 | Vào DB bằng psql | `docker compose exec db psql -U leadscan leadscan` |
 | Log Nginx | `sudo tail -f /var/log/nginx/error.log` |
 | Dung lượng ổ | `df -h` và `docker system df` |

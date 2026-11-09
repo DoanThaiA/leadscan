@@ -1,11 +1,11 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { Icon, Skeleton } from "@/components/admin/ui";
 import { MultiSelect } from "@/components/member/MultiSelect";
 import { SearchReqList } from "@/components/member/SearchReqList";
-import { type Criteria, criteriaTags, type SearchReq } from "@/lib/commerce";
+import { type Criteria, criteriaTags, isMatching, type SearchReq } from "@/lib/commerce";
 import { errMsg, mapi } from "@/lib/member/api";
 
 interface MatchResp {
@@ -14,6 +14,15 @@ interface MatchResp {
 }
 
 const NOTE_MIN = 10;
+const POLL_MS = 2500;
+const POLL_MAX = 120; // ~5 phút
+
+function doneText(r: SearchReq) {
+  const n = r.match_count ?? 0;
+  return n
+    ? `Yêu cầu #${r.id}: tìm thấy ${n} cơ hội phù hợp — đã chấm điểm riêng cho bạn, thêm vào Tất cả cơ hội và Kho của tôi. Bấm vào phiếu bên dưới để xem.`
+    : `Yêu cầu #${r.id}: hiện chưa có cơ hội nào đạt mức phù hợp. Cơ hội mới mở bán sẽ tự được so khớp và thêm vào kho của bạn.`;
+}
 
 export default function MatchPage() {
   const [m, setM] = useState<MatchResp | null>(null);
@@ -23,12 +32,35 @@ export default function MatchPage() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [reqs, setReqs] = useState<SearchReq[] | null>(null);
   const [error, setError] = useState("");
+  const [watchId, setWatchId] = useState<number | null>(null); // phiếu vừa gửi, đang chờ việc nền so khớp
+  const polls = useRef(0);
 
   useEffect(() => {
     document.title = "Cơ hội phù hợp · LeadScan B2B";
     mapi.get<MatchResp>("/match").then((r) => { setM(r); setC(r.criteria); }, (e) => setError(errMsg(e)));
     mapi.get<{ items: SearchReq[] }>("/search-requests").then((r) => setReqs(r.items), (e) => setError(errMsg(e)));
   }, []);
+
+  // So khớp chạy nền: còn phiếu đang tìm thì hỏi lại định kỳ cho tới khi xong
+  const pending = !!reqs?.some(isMatching);
+  useEffect(() => {
+    if (!pending) return;
+    if (polls.current >= POLL_MAX) return;
+    const t = setTimeout(() => {
+      polls.current += 1;
+      mapi.get<{ items: SearchReq[] }>("/search-requests").then((r) => setReqs(r.items), () => {});
+    }, POLL_MS);
+    return () => clearTimeout(t);
+  }, [pending, reqs]);
+
+  useEffect(() => {
+    const r = reqs?.find((x) => x.id === watchId);
+    if (!r || isMatching(r)) return;
+    setWatchId(null);
+    setMsg(r.match_status === "error"
+      ? { ok: false, text: `Yêu cầu #${r.id} đã gửi nhưng chưa tìm được cơ hội do lỗi hệ thống. LeadScan sẽ kiểm tra và chạy lại.` }
+      : { ok: true, text: doneText(r) });
+  }, [reqs, watchId]);
 
   const set = (patch: Partial<Criteria>) => { setC((prev) => (prev ? { ...prev, ...patch } : prev)); setMsg(null); };
 
@@ -45,13 +77,13 @@ export default function MatchPage() {
       const r = await mapi.post<SearchReq>("/search-requests", { ...c, note });
       setReqs((prev) => [r, ...(prev ?? [])]);
       setNote("");
-      const n = r.match_count ?? 0;
-      setMsg({
-        ok: true,
-        text: n
-          ? `Đã gửi yêu cầu #${r.id}. Tìm thấy ${n} cơ hội phù hợp — đã chấm điểm riêng cho bạn, thêm vào Tất cả cơ hội và Kho của tôi. Bấm vào phiếu bên dưới để xem.`
-          : `Đã gửi yêu cầu #${r.id}. Hiện chưa có cơ hội nào đạt mức phù hợp; cơ hội mới mở bán sẽ tự được so khớp và thêm vào kho của bạn.`,
-      });
+      polls.current = 0;
+      if (isMatching(r)) {
+        setWatchId(r.id);
+        setMsg({ ok: true, text: `Đã gửi yêu cầu #${r.id}. Hệ thống đang tìm và chấm điểm cơ hội phù hợp — kết quả sẽ hiện ở đây sau ít giây.` });
+      } else {
+        setMsg({ ok: true, text: doneText(r) });
+      }
     } catch (err) {
       setMsg({ ok: false, text: errMsg(err) });
     } finally {

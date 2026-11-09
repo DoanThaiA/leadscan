@@ -34,6 +34,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("LEADSCAN_PAYMENT_ACCOUNT_NAME", "CONG TY LEADSCAN")
     monkeypatch.setenv("LEADSCAN_SMTP_HOST", "")
     monkeypatch.setenv("LEADSCAN_RESEND_API_KEY", "")  # test không bao giờ gửi mail thật
+    monkeypatch.setenv("COHERE_API_KEY", "")  # test không gọi Cohere thật (dùng vector hash hoặc respx giả lập)
     _clear_caches()
     from app import models, worker  # noqa: F401
 

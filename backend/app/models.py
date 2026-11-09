@@ -19,6 +19,7 @@ Opportunity        cơ hội kinh doanh (nhập tay; sau này do crawl + AI tạ
 AdminUser / AdminSession   nhân viên quản trị và phiên đăng nhập
 MemberSession / PasswordReset   phiên đăng nhập & đặt lại mật khẩu của thành viên
 RateHit                    đếm lượt để giới hạn tần suất (đăng ký, đăng nhập)
+ApiUsage                   đếm số lần gọi API ngoài theo tháng (Cohere: khoá Trial giới hạn 1.000 lần/tháng)
 KnowledgeCompany           kho doanh nghiệp để AI quét (crawl từ bảng xếp hạng như PROFIT500 hoặc nhập tay)
 
 Điểm: 1 điểm = 1đ. Số dư lưu ở Company.points_balance và luôn bằng tổng WalletTransaction.amount.
@@ -29,7 +30,7 @@ from datetime import date, datetime
 from sqlalchemy import JSON, BigInteger, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db import Base, utcnow
+from app.db import Base, EmbeddingVector, utcnow
 
 # Vòng đời khách hàng
 COMPANY_STATUSES = {
@@ -162,6 +163,19 @@ class RateHit(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
     __table_args__ = (Index("ix_rate_hits_key_time", "key", "created_at"),)
+
+
+class ApiUsage(Base):
+    """Số lần gọi API bên ngoài theo tháng (giờ UTC) — để không vượt hạn mức của khoá miễn phí."""
+
+    __tablename__ = "api_usage"
+    __table_args__ = (UniqueConstraint("provider", "month", name="uq_api_usage_month"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    provider: Mapped[str] = mapped_column(String(20))  # "cohere"
+    month: Mapped[str] = mapped_column(String(7))  # "2026-11"
+    calls: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 # ================================================================== thành viên (cổng khách hàng)
@@ -332,8 +346,10 @@ class Opportunity(Base):
 
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
     published_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
-    embedding: Mapped[list | None] = mapped_column(JSON)  # vector ngữ nghĩa của tiêu đề + mô tả (services/embedding.py)
-    embedding_model: Mapped[str] = mapped_column(String(60), default="")
+    # Vector ngữ nghĩa (pgvector) của tiêu đề + mô tả — xem services/embedding.py. deferred: không tải khi liệt kê.
+    embedding: Mapped[list | None] = mapped_column(EmbeddingVector(1024), deferred=True)
+    embedding_model: Mapped[str] = mapped_column(String(80), default="")  # nhãn không gian vector
+    embedding_sha: Mapped[str] = mapped_column(String(40), default="")  # sha1 văn bản đã nhúng → không gọi lại API khi chỉ sửa giá
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -387,8 +403,13 @@ class SearchRequest(Base):
     status: Mapped[str] = mapped_column(String(16), default="open", index=True)
     reply: Mapped[str] = mapped_column(Text, default="")  # phản hồi của LeadScan, khách thấy trong cổng
     email_sent_at: Mapped[datetime | None] = mapped_column(DateTime)  # đã gửi email báo admin
-    embedding: Mapped[list | None] = mapped_column(JSON)  # vector ngữ nghĩa của mô tả + tiêu chí
-    embedding_model: Mapped[str] = mapped_column(String(60), default="")
+    embedding: Mapped[list | None] = mapped_column(EmbeddingVector(1024), deferred=True)  # vector của mô tả + tiêu chí
+    embedding_model: Mapped[str] = mapped_column(String(80), default="")
+    embedding_sha: Mapped[str] = mapped_column(String(40), default="")
+    # So khớp chạy nền (Celery): pending → running → done | error
+    match_status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    match_error: Mapped[str] = mapped_column(String(300), default="")
+    matched_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
 

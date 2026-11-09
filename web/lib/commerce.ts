@@ -118,7 +118,12 @@ export interface SearchReq {
   created_at: string;
   resolved_at: string | null;
   match_count?: number; // số cơ hội phù hợp với phiếu
+  match_status?: "pending" | "running" | "done" | "error"; // so khớp chạy nền
+  matched_at?: string | null;
 }
+
+/** Phiếu còn đang được hệ thống so khớp (chạy nền) */
+export const isMatching = (r: SearchReq) => r.match_status === "pending" || r.match_status === "running";
 
 export const SEARCH_STATUS: Record<SearchReq["status"], string> = { open: "Đang tìm", done: "Đã có kết quả", rejected: "Từ chối" };
 export const SEARCH_STATUS_CLASS: Record<SearchReq["status"], string> = { open: "s-contacted", done: "s-active", rejected: "s-suspended" };

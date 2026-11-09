@@ -86,6 +86,15 @@ def cmd_diagnose(_args) -> int:
         admins = db.scalar(select(func.count()).select_from(AdminUser).where(AdminUser.role == "admin", AdminUser.is_active))
         _line(bool(admins), f"Tài khoản quản trị đang hoạt động: {admins}", "" if admins else "chạy create-admin để tạo")
         counts = dict(db.execute(select(Company.status, func.count()).group_by(Company.status)).all())
+    from app.services import usage
+
+    used = usage.calls_this_month("cohere")
+    if cfg.cohere_api_key:
+        limit = f"/{cfg.cohere_monthly_limit}" if cfg.cohere_monthly_limit else " (không giới hạn)"
+        _line(not cfg.cohere_monthly_limit or used < cfg.cohere_monthly_limit, "Embedding Cohere", f"{cfg.cohere_doc_model} / {cfg.cohere_query_model} — đã gọi {used}{limit} lần tháng này")
+    else:
+        _line(False, "Embedding Cohere", "chưa đặt COHERE_API_KEY — đang dùng vector hash (chỉ nên dùng khi chạy thử)")
+    with new_session() as db:
         print("Khách hàng theo trạng thái: " + (", ".join(f"{k}={v}" for k, v in counts.items()) or "(chưa có)"))
     return 0
 
@@ -205,6 +214,7 @@ def cmd_import_opportunities(args) -> int:
             return 1
 
     added = skipped = 0
+    new_opps = []
     with new_session() as db:
         admin_id = db.scalar(select(AdminUser.id).where(AdminUser.email == args.by)) if args.by else None
         for b in bodies:
@@ -217,6 +227,7 @@ def cmd_import_opportunities(args) -> int:
             _apply_opp(o, b)
             db.add(o)
             db.flush()
+            new_opps.append(o)
             print(f"  + {o.code} [{o.status}] {o.title}")
             added += 1
         if args.dry_run:
@@ -225,9 +236,17 @@ def cmd_import_opportunities(args) -> int:
         else:
             from app.services import matching
 
-            for o in db.scalars(select(Opportunity).where(Opportunity.status == "published")).unique():
-                if not o.embedding:
-                    matching.match_opportunity(db, o)  # cơ hội mới mở bán → so khớp với các phiếu tìm cơ hội đã có
+            from app.services.embedding import EmbeddingError
+
+            published = [o for o in new_opps if o.status == "published"]
+            try:
+                matching.sync_opp_embeddings(db, get_settings(), published)  # nhúng theo lô: 96 phiếu / 1 lần gọi Cohere
+                semantic = True
+            except EmbeddingError as e:
+                print(f"Không lấy được embedding ({e}) → so khớp bằng tiêu chí + từ khoá.")
+                semantic = False
+            for o in published:
+                matching.match_opportunity(db, o, semantic=semantic)  # cơ hội mới mở bán → so với các phiếu tìm đã có
             db.commit()
             print(f"Đã thêm {added}, bỏ qua {skipped}.")
     return 0
@@ -238,9 +257,11 @@ def cmd_rematch(args) -> int:
     from app.services import matching
 
     with new_session() as db:
-        reqs, pairs = matching.rematch_all(db)
+        reqs, pairs, note = matching.rematch_all(db, reembed=args.reembed)
         db.commit()
     print(f"Đã so khớp lại {reqs} phiếu tìm cơ hội, tổng {pairs} cặp cơ hội phù hợp.")
+    if note:
+        print(f"Lưu ý: không lấy được embedding ({note}) → đã so khớp bằng tiêu chí + từ khoá. Chạy lại khi Cohere dùng được.")
     return 0
 
 
@@ -281,7 +302,9 @@ def main(argv: list[str] | None = None) -> int:
     o.add_argument("--dry-run", action="store_true", help="Chỉ kiểm tra, không lưu")
     o.add_argument("--by", default="", help="Email quản trị ghi là người tạo (không bắt buộc)")
     o.set_defaults(fn=cmd_import_opportunities)
-    sub.add_parser("rematch", help="Tính lại điểm phù hợp giữa phiếu tìm cơ hội và phiếu cơ hội").set_defaults(fn=cmd_rematch)
+    rm = sub.add_parser("rematch", help="Tính lại điểm phù hợp giữa phiếu tìm cơ hội và phiếu cơ hội")
+    rm.add_argument("--reembed", action="store_true", help="Gọi lại Cohere nhúng toàn bộ (mặc định chỉ nhúng phiếu mới/đổi)")
+    rm.set_defaults(fn=cmd_rematch)
     c = sub.add_parser("crawl-profit500", help="Quét doanh nghiệp từ bảng xếp hạng PROFIT500 vào kho doanh nghiệp")
     c.add_argument("--chart", type=int, default=12, help="12 = Top 500 lợi nhuận tốt nhất, 13 = Top 500 tư nhân, 17 = Top 50 xuất sắc")
     c.add_argument("--year", type=int, default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).year)

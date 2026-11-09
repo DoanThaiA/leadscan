@@ -34,8 +34,8 @@ from app.registration_form import AREAS, CUSTOMER_SIZES, INDUSTRIES, REGIONS
 from app.schemas import LoginIn, PasswordChangeIn
 from app.schemas_commerce import EnrichIn, EnrichOut, InvoiceIn, OrderCreateIn, OrderOut, TxOut
 from app.security import DUMMY_HASH, add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
-from app.services import catalog, matching, payments
-from app.worker import enqueue, send_invoice_request_task, send_password_reset_task, send_search_request_task
+from app.services import catalog, payments
+from app.worker import enqueue, match_request_task, send_invoice_request_task, send_password_reset_task, send_search_request_task
 
 router = APIRouter(prefix="/api/member")
 
@@ -170,7 +170,7 @@ def dashboard(user: MemberUser = Depends(current_member), db: Session = Depends(
         "pending_orders": pending_orders,
         "recent_purchases": [{"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "opportunity": catalog.preview(p.opportunity, True, match=mine.get(p.opportunity_id))} for p in recent],
         "new_opportunities": catalog.previews(db, cid, newest),
-        "saved_count": db.scalar(select(func.count()).select_from(SavedOpportunity).where(SavedOpportunity.company_id == cid)) or 0,
+        "saved_count": db.scalar(select(func.count()).select_from(SavedOpportunity).where(SavedOpportunity.company_id == cid, _visible(cid, SavedOpportunity.opportunity_id))) or 0,
         "matched_count": db.scalar(select(func.count()).select_from(UserOpportunity).where(UserOpportunity.company_id == cid)) or 0,
     }
 
@@ -237,6 +237,14 @@ def list_opportunities(
         "items": catalog.previews(db, cid, rows),
         "facets": {"industries": industries, "regions": REGIONS, "sources": OPP_SOURCES},
     }
+
+
+def _visible(company_id: int, opp_id_col):
+    """Điều kiện SQL: cơ hội doanh nghiệp được thấy = đã khớp phiếu tìm của họ hoặc đã mua."""
+    return or_(
+        opp_id_col.in_(select(UserOpportunity.opportunity_id).where(UserOpportunity.company_id == company_id)),
+        opp_id_col.in_(select(Purchase.opportunity_id).where(Purchase.company_id == company_id)),
+    )
 
 
 def _get_opp(db: Session, opp_id: int, company_id: int) -> tuple[Opportunity, Purchase | None, UserOpportunity | None]:
@@ -478,6 +486,8 @@ class SearchRequestIn(MatchCriteria):
 
 def _search_out(r: SearchRequest, match_count: int = 0) -> dict:
     return {
+        "match_status": r.match_status,  # pending | running | done | error — so khớp chạy nền
+        "matched_at": _iso(r.matched_at),
         "id": r.id,
         "criteria": r.criteria or {},
         "note": r.note,
@@ -554,12 +564,14 @@ def create_search_request(body: SearchRequestIn, user: MemberUser = Depends(curr
         c.profile = Profile()
     c.profile.search = criteria
     db.add(Activity(company_id=c.id, kind="update", content=f"{user.full_name} gửi yêu cầu tìm cơ hội: {note[:200]}"))
-    db.flush()
-    matched = matching.match_request(db, r)  # chấm điểm riêng cho doanh nghiệp, thêm cơ hội phù hợp vào Tất cả cơ hội + Kho
     db.commit()
-    db.refresh(r)
+    # So khớp chạy nền (Celery): nhúng Cohere → ứng viên pgvector → chấm điểm hybrid riêng cho doanh nghiệp
+    # → thêm cơ hội phù hợp vào Tất cả cơ hội + Kho. Redis lỗi thì chạy luôn tại chỗ để khách không phải chờ mãi.
+    if not enqueue(match_request_task, r.id):
+        match_request_task.apply(args=[r.id])
     enqueue(send_search_request_task, r.id)
-    return _search_out(r, matched)
+    db.refresh(r)
+    return _search_out(r, _match_counts(db, [r.id]).get(r.id, 0))
 
 
 # ================================================================== kho của tôi (cơ hội đã lưu)
@@ -572,7 +584,7 @@ def list_saved(
     base = (
         select(SavedOpportunity)
         .join(Opportunity, Opportunity.id == SavedOpportunity.opportunity_id)
-        .where(SavedOpportunity.company_id == user.company_id, Opportunity.status != "draft")
+        .where(SavedOpportunity.company_id == user.company_id, Opportunity.status != "draft", _visible(user.company_id, Opportunity.id))
     )
     total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
     rows = db.scalars(base.order_by(SavedOpportunity.id.desc()).offset((page - 1) * page_size).limit(page_size)).unique().all()

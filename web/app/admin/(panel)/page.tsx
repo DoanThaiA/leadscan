@@ -20,6 +20,7 @@ interface CommerceStats {
   open_enrich: number;
   open_search: number;
   published_opportunities: number;
+  cohere?: { configured: boolean; calls_month: number; monthly_limit: number };
 }
 
 export default function DashboardPage() {
@@ -89,6 +90,15 @@ export default function DashboardPage() {
           </Link>
         ))}
       </div>
+      {cs?.cohere ? (
+        <p className={cs.cohere.monthly_limit && cs.cohere.calls_month >= cs.cohere.monthly_limit ? "adm-alert" : "muted"} style={{ margin: "-6px 0 16px", fontSize: 12.5 }}>
+          {!cs.cohere.configured
+            ? "So khớp cơ hội: chưa đặt COHERE_API_KEY — đang dùng vector tạm (chỉ nên dùng khi chạy thử)."
+            : cs.cohere.monthly_limit && cs.cohere.calls_month >= cs.cohere.monthly_limit
+              ? `Đã dùng hết ${fmtNum(cs.cohere.monthly_limit)} lượt gọi Cohere tháng này — so khớp tạm chỉ dùng tiêu chí + từ khoá tới tháng sau.`
+              : `So khớp cơ hội (Cohere): đã dùng ${fmtNum(cs.cohere.calls_month)}${cs.cohere.monthly_limit ? `/${fmtNum(cs.cohere.monthly_limit)}` : ""} lượt gọi tháng này.`}
+        </p>
+      ) : null}
 
       <div className="adm-grid side" style={{ marginBottom: 16 }}>
         <section className="adm-card">

@@ -10,6 +10,7 @@ import { criteriaTags, SEARCH_STATUS, SEARCH_STATUS_CLASS, type SearchReq } from
 
 type Row = SearchReq & {
   email_sent_at: string | null;
+  match_error?: string;
   company: { id: number; code: string; name: string };
   member: { full_name: string; email: string } | null;
 };
@@ -99,7 +100,9 @@ export default function AdminSearchRequestsPage() {
                         <Icon name="mail" size={13} /> Chưa gửi được email · Gửi lại
                       </button>
                     )}
-                    <span className="muted" style={{ fontSize: 12 }}>{r.match_count ?? 0} cơ hội phù hợp</span>
+                    <span className="muted" style={{ fontSize: 12 }} title={r.match_error || undefined}>
+                      {r.match_status === "error" ? "Lỗi so khớp" : r.match_status === "done" ? `${r.match_count ?? 0} cơ hội phù hợp${r.match_error ? " (không dùng ngữ nghĩa)" : ""}` : "Đang so khớp…"}
+                    </span>
                     <span className={`adm-badge ${SEARCH_STATUS_CLASS[r.status]}`}>{SEARCH_STATUS[r.status]}</span>
                   </div>
                 </div>

@@ -2,15 +2,40 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from functools import lru_cache
 
-from sqlalchemy import create_engine
+from sqlalchemy import JSON, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.types import TypeDecorator
 
 from app.config import get_settings
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class EmbeddingVector(TypeDecorator):
+    """Vector embedding: cột pgvector `vector(dim)` trên PostgreSQL, JSON (danh sách số) trên SQLite khi test."""
+
+    impl = JSON
+    cache_ok = True
+
+    def __init__(self, dim: int = 1024):
+        super().__init__()
+        self.dim = dim
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            from pgvector.sqlalchemy import VECTOR
+
+            return dialect.type_descriptor(VECTOR(self.dim))
+        return dialect.type_descriptor(JSON())
+
+    def process_bind_param(self, value, dialect):
+        return None if value is None else [float(x) for x in value]
+
+    def process_result_value(self, value, dialect):
+        return None if value is None else [float(x) for x in value]
 
 
 def utcnow() -> datetime:

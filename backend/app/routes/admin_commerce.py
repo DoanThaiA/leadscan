@@ -50,10 +50,18 @@ from app.schemas_commerce import (
     TxOut,
 )
 from app.security import hash_password
-from app.services import catalog, matching, payments, wallet
-from app.worker import enqueue, send_invoice_request_task, send_search_request_task
+from app.services import catalog, payments, usage, wallet
+from app.worker import enqueue, match_opportunity_task, match_request_task, send_invoice_request_task, send_search_request_task
 
 router = APIRouter(prefix="/api/admin")
+
+
+def _queue(task, *args) -> bool:
+    """Đưa việc so khớp vào Celery; Redis lỗi thì chạy luôn tại chỗ để dữ liệu không bị treo ở "đang so khớp"."""
+    if enqueue(task, *args):
+        return True
+    task.apply(args=list(args))
+    return False
 
 
 def _iso(dt):
@@ -94,6 +102,12 @@ def commerce_stats(_: AdminUser = Depends(current_user), db: Session = Depends(g
         "open_enrich": db.scalar(select(func.count()).select_from(EnrichRequest).where(EnrichRequest.status == "open")) or 0,
         "open_search": db.scalar(select(func.count()).select_from(SearchRequest).where(SearchRequest.status == "open")) or 0,
         "published_opportunities": db.scalar(select(func.count()).select_from(Opportunity).where(Opportunity.status == "published")) or 0,
+        # Lượt gọi Cohere trong tháng (khoá Trial miễn phí: tối đa 1.000 lần/tháng)
+        "cohere": {
+            "configured": bool(get_settings().cohere_api_key),
+            "calls_month": usage.calls_this_month("cohere"),
+            "monthly_limit": get_settings().cohere_monthly_limit,
+        },
     }
 
 
@@ -158,9 +172,8 @@ def create_opp(body: OppIn, user: AdminUser = Depends(current_user), db: Session
     o = Opportunity(code=_next_opp_code(db), title=body.title, created_by_id=user.id)
     _apply_opp(o, body)
     db.add(o)
-    db.flush()
-    matching.match_opportunity(db, o)  # phiếu không mang điểm; điểm tính riêng cho từng doanh nghiệp có yêu cầu phù hợp
     db.commit()
+    _queue(match_opportunity_task, o.id)  # phiếu không mang điểm; việc nền chấm điểm riêng cho từng doanh nghiệp phù hợp
     db.refresh(o)
     return _opp_out(o, _match_counts(db, [o.id]).get(o.id, 0))
 
@@ -188,9 +201,8 @@ def update_opp(opp_id: int, body: OppIn, _: AdminUser = Depends(current_user), d
     if body.max_buyers < o.sold_count:
         raise HTTPException(400, f"Đã bán {o.sold_count} phiếu, số lượt bán tối đa không được nhỏ hơn.")
     _apply_opp(o, body)
-    db.flush()
-    matching.match_opportunity(db, o)  # nội dung/trạng thái đổi → so khớp lại
     db.commit()
+    _queue(match_opportunity_task, o.id)  # nội dung/trạng thái đổi → so khớp lại (nhúng lại chỉ khi nội dung đổi)
     db.refresh(o)
     return _opp_out(o, _match_counts(db, [o.id]).get(o.id, 0))
 
@@ -360,6 +372,8 @@ class SearchAdminIn(BaseModel):
 def _search_admin_out(r: SearchRequest, match_count: int = 0) -> dict:
     return {
         "match_count": match_count,
+        "match_status": r.match_status,
+        "match_error": r.match_error,
         "id": r.id,
         "criteria": r.criteria or {},
         "note": r.note,
@@ -393,8 +407,9 @@ def update_search_request(req_id: int, body: SearchAdminIn, user: AdminUser = De
     r.status, r.reply = body.status, body.reply.strip()
     r.resolved_at = utcnow() if body.status != "open" else None
     db.add(Activity(company_id=r.company_id, kind="update", actor_id=user.id, content=f"Yêu cầu tìm cơ hội #{r.id}: {SEARCH_STATUSES[r.status]}"))
-    matching.match_request(db, r)  # "Từ chối" gỡ cơ hội khỏi phiếu; mở lại thì so khớp lại
+    r.match_status = "pending"
     db.commit()
+    _queue(match_request_task, r.id)  # "Từ chối" gỡ cơ hội khỏi phiếu; mở lại thì so khớp lại
     db.refresh(r)
     return _search_admin_out(r, db.scalar(select(func.count()).select_from(SearchRequestMatch).where(SearchRequestMatch.request_id == r.id)) or 0)
 
@@ -405,9 +420,12 @@ def rematch_search_request(req_id: int, _: AdminUser = Depends(current_user), db
     r = db.get(SearchRequest, req_id)
     if not r:
         raise HTTPException(404, "Không tìm thấy yêu cầu.")
-    n = matching.match_request(db, r)
+    r.match_status = "pending"
     db.commit()
-    return {"ok": True, "match_count": n}
+    queued = _queue(match_request_task, r.id)
+    db.refresh(r)
+    count = db.scalar(select(func.count()).select_from(SearchRequestMatch).where(SearchRequestMatch.request_id == r.id)) or 0
+    return {"ok": queued, "match_status": r.match_status, "match_count": count}
 
 
 @router.post("/search-requests/{req_id}/resend-email")

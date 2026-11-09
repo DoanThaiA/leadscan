@@ -1,10 +1,13 @@
 """Embedding văn bản để so khớp ngữ nghĩa giữa yêu cầu của khách và mô tả phiếu cơ hội.
 
-Hai chế độ (cấu hình LEADSCAN_EMBED_PROVIDER):
-  hash    mặc định, chạy tại chỗ, không cần khoá API. Vector băm đặc trưng (từ đơn, cụm 2 từ, n-gram ký tự)
-          đã bỏ dấu tiếng Việt + gắn nhãn "khái niệm" cho thuật ngữ thương mại đồng nghĩa (carton ≈ thùng giấy ≈ bao bì).
-  openai  gọi API /embeddings tương thích OpenAI (mô hình ngữ nghĩa thật). Lỗi mạng → rơi về "hash".
-Vector là list[float] đã chuẩn hoá L2, lưu JSON; cosine = tích vô hướng.
+Hai chế độ:
+  cohere  có COHERE_API_KEY → gọi Cohere Embed v2 (đa ngôn ngữ, có tiếng Việt). Phiếu cơ hội nhúng với
+          input_type="search_document" (Embed 5 Pro), phiếu tìm của khách với input_type="search_query" (Embed 5 Fast);
+          hai mô hình cùng không gian vector. Khoá Trial miễn phí dùng được cả hai, giới hạn 1.000 lần gọi/tháng —
+          số lần gọi được đếm trong bảng api_usage (services/usage.py). Lỗi API → EmbeddingError (không trộn mô hình).
+  hash    không có khoá (dev/test): vector băm đặc trưng (từ đơn, cụm 2 từ, n-gram ký tự) đã bỏ dấu tiếng Việt
+          + nhãn "khái niệm" cho thuật ngữ thương mại đồng nghĩa (carton ≈ thùng giấy ≈ bao bì).
+Vector 1024 chiều đã chuẩn hoá L2, lưu cột pgvector (PostgreSQL) hoặc JSON (SQLite khi test); cosine = tích vô hướng.
 """
 
 import logging
@@ -19,8 +22,11 @@ from app.config import Settings
 
 log = logging.getLogger("leadscan.embedding")
 
-HASH_DIM = 512
-HASH_MODEL = "hash-v1-512"
+EMBED_DIM = 1024  # số chiều cột pgvector (Cohere output_dimension = 1024; vector hash cũng 1024)
+HASH_DIM = EMBED_DIM
+HASH_MODEL = "hash-v2-1024"
+COHERE_BATCH = 96  # Cohere nhận tối đa 96 văn bản mỗi lần gọi
+MAX_CHARS = 8000
 
 _STOP = set(
     """va la cua cho cac nhung mot nhieu co khong can cung voi tai trong tu den khi neu ma de duoc se da dang
@@ -117,25 +123,83 @@ def cosine(a: list[float], b: list[float]) -> float:
     return sum(x * y for x, y in zip(a, b))
 
 
+class EmbeddingError(RuntimeError):
+    """Không lấy được vector từ Cohere.
+
+    retryable=True  : lỗi tạm (mạng, 429 quá tần suất, 5xx) → việc nền thử lại sau.
+    retryable=False : thử lại vô ích (sai khoá, hết hạn mức tháng của khoá Trial, yêu cầu sai) → so khớp không dùng embedding.
+    """
+
+    def __init__(self, message: str, retryable: bool = True):
+        super().__init__(message)
+        self.retryable = retryable
+
+
 def current_model(cfg: Settings) -> str:
-    return f"openai:{cfg.embed_model}" if cfg.embed_provider == "openai" and cfg.embed_api_key else HASH_MODEL
+    """Nhãn "không gian vector": chỉ so sánh vector cùng nhãn."""
+    if cfg.cohere_api_key:
+        return f"cohere:{cfg.cohere_doc_model}+{cfg.cohere_query_model}@{EMBED_DIM}"
+    return HASH_MODEL
 
 
-def embed(cfg: Settings, text: str) -> tuple[list[float], str]:
-    """Trả về (vector, tên mô hình). Lỗi API → vector "hash" kèm đúng nhãn hash để không so lẫn mô hình."""
-    text = (text or "").strip()[:8000]
-    if current_model(cfg) != HASH_MODEL:
+def _normalize(vec: list[float]) -> list[float]:
+    norm = math.sqrt(sum(x * x for x in vec)) or 1.0
+    return [round(x / norm, 6) for x in vec]
+
+
+def _cohere(cfg: Settings, texts: list[str], input_type: str, model: str) -> list[list[float]]:
+    from app.services import usage
+
+    out: list[list[float]] = []
+    for i in range(0, len(texts), COHERE_BATCH):  # mỗi lần gọi tối đa 96 văn bản → tiết kiệm lượt gọi của khoá Trial
+        batch = texts[i : i + COHERE_BATCH]
+        if not usage.reserve_call("cohere", cfg.cohere_monthly_limit):
+            raise EmbeddingError(f"Đã dùng hết {cfg.cohere_monthly_limit} lần gọi Cohere của tháng này", retryable=False)
         try:
             r = httpx.post(
-                cfg.embed_url.rstrip("/") + "/embeddings",
-                headers={"Authorization": f"Bearer {cfg.embed_api_key}"},
-                json={"model": cfg.embed_model, "input": text or " "},
-                timeout=20,
+                cfg.cohere_embed_url,
+                headers={"Authorization": f"Bearer {cfg.cohere_api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "input_type": input_type,
+                    "texts": batch,
+                    "embedding_types": ["float"],
+                    "output_dimension": EMBED_DIM,
+                    "truncate": "END",
+                },
+                timeout=60,
             )
-            r.raise_for_status()
-            vec = [float(x) for x in r.json()["data"][0]["embedding"]]
-            norm = math.sqrt(sum(x * x for x in vec)) or 1.0
-            return [round(x / norm, 6) for x in vec], current_model(cfg)
-        except Exception as e:  # noqa: BLE001 — lỗi mạng/khoá không được làm hỏng việc gửi yêu cầu
-            log.warning("Embedding API lỗi, dùng hash: %s", e)
-    return embed_hash(text), HASH_MODEL
+        except httpx.HTTPError as e:
+            raise EmbeddingError(f"Không kết nối được Cohere: {e}") from e
+        if r.status_code >= 400:
+            # 429 quá tần suất & 5xx: thử lại được. 400/401/402/403/404...: sai khoá, hết hạn mức, sai model → không thử lại.
+            retry = r.status_code == 429 or r.status_code >= 500
+            raise EmbeddingError(f"Cohere trả lỗi {r.status_code}: {r.text[:200]}", retryable=retry)
+        try:
+            vecs = r.json()["embeddings"]["float"]
+        except (KeyError, ValueError, TypeError) as e:
+            raise EmbeddingError(f"Cohere trả dữ liệu không đúng định dạng: {e}", retryable=False) from e
+        if len(vecs) != len(batch) or any(len(v) != EMBED_DIM for v in vecs):
+            raise EmbeddingError(f"Cohere trả về {len(vecs)} vector, cần {len(batch)} vector {EMBED_DIM} chiều", retryable=False)
+        out += [_normalize([float(x) for x in v]) for v in vecs]
+    return out
+
+
+def _clean(texts: list[str]) -> list[str]:
+    return [((t or "").strip()[:MAX_CHARS] or "-") for t in texts]
+
+
+def embed_documents(cfg: Settings, texts: list[str]) -> tuple[list[list[float]], str]:
+    """Vector cho phiếu cơ hội (tài liệu được tìm). Trả về (các vector, nhãn mô hình)."""
+    texts = _clean(texts)
+    if cfg.cohere_api_key:
+        return _cohere(cfg, texts, "search_document", cfg.cohere_doc_model), current_model(cfg)
+    return [embed_hash(t) for t in texts], HASH_MODEL
+
+
+def embed_queries(cfg: Settings, texts: list[str]) -> tuple[list[list[float]], str]:
+    """Vector cho phiếu tìm cơ hội của khách (câu truy vấn)."""
+    texts = _clean(texts)
+    if cfg.cohere_api_key:
+        return _cohere(cfg, texts, "search_query", cfg.cohere_query_model), current_model(cfg)
+    return [embed_hash(t) for t in texts], HASH_MODEL

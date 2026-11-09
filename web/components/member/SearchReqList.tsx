@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Icon, Skeleton } from "@/components/admin/ui";
 import { OppList } from "@/components/member/OppList";
 import { fmtDateTime } from "@/lib/admin/format";
-import { criteriaTags, type Opp, SEARCH_STATUS, SEARCH_STATUS_CLASS, type SearchReq } from "@/lib/commerce";
+import { criteriaTags, isMatching, type Opp, SEARCH_STATUS, SEARCH_STATUS_CLASS, type SearchReq } from "@/lib/commerce";
 import { errMsg, mapi, qs } from "@/lib/member/api";
 
 interface MatchedList {
@@ -64,12 +64,22 @@ export function SearchReqList({ items }: { items: SearchReq[] }) {
             ) : null}
             <p className="sr-note">{r.note}</p>
             {r.reply ? <div className="sr-reply"><b>LeadScan phản hồi:</b> {r.reply}</div> : null}
-            <div>
-              <button type="button" className="adm-btn sm" aria-expanded={open} onClick={() => toggle(r.id)}>
-                <Icon name="scan" size={14} /> {open ? "Ẩn" : "Xem"} {r.match_count ?? 0} cơ hội phù hợp
-              </button>
-            </div>
-            {open ? (
+            {isMatching(r) ? (
+              <div className="muted" role="status" style={{ fontSize: 12.5 }}>
+                <Icon name="spark" size={13} /> Đang tìm và chấm điểm cơ hội phù hợp với phiếu này…
+              </div>
+            ) : r.match_status === "error" ? (
+              <div className="muted" role="status" style={{ fontSize: 12.5 }}>
+                Chưa tìm được cơ hội do lỗi hệ thống. LeadScan đã ghi nhận và sẽ chạy lại cho bạn.
+              </div>
+            ) : (
+              <div>
+                <button type="button" className="adm-btn sm" aria-expanded={open} onClick={() => toggle(r.id)}>
+                  <Icon name="scan" size={14} /> {open ? "Ẩn" : "Xem"} {r.match_count ?? 0} cơ hội phù hợp
+                </button>
+              </div>
+            )}
+            {open && !isMatching(r) ? (
               <div style={{ marginTop: 6 }}>
                 {error ? <div className="adm-alert" role="alert">{error}</div> : null}
                 {!d ? (
