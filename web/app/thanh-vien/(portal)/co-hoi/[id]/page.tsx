@@ -166,15 +166,23 @@ export default function OppDetailPage() {
             </div>
           </section>
           <section className="adm-card">
-            <div className="hd"><h2>Điểm chất lượng AI</h2><ScoreChip score={o.score} /></div>
+            <div className="hd"><h2>Điểm phù hợp với bạn</h2><ScoreChip score={o.score} /></div>
             <div className="bd adm-meter">
-              {[["Khớp nhu cầu", o.score_fit], ["Độ cấp thiết", o.score_urgency], ["Độ tin cậy nguồn", o.score_trust]].map(([label, v]) => (
+              {[["Khớp yêu cầu của bạn", o.score_fit], ["Độ cấp thiết", o.score_urgency], ["Độ tin cậy nguồn", o.score_trust]].map(([label, v]) => (
                 <div key={label as string}>
                   <span>{label}</span>
                   <span className="track"><i style={{ width: `${v}%` }} /></span>
                   <b>{v}</b>
                 </div>
               ))}
+            </div>
+            <div className="bd" style={{ display: "grid", gap: 6, paddingTop: 0 }}>
+              {o.reasons?.length ? (
+                <ul className="muted" style={{ fontSize: 12.5, paddingLeft: 18, margin: 0 }}>
+                  {o.reasons.map((r) => <li key={r}>{r}</li>)}
+                </ul>
+              ) : null}
+              <p className="muted" style={{ fontSize: 12 }}>Điểm tính riêng cho doanh nghiệp bạn từ các phiếu tìm cơ hội; điểm càng cao thì giá phiếu càng cao.</p>
             </div>
           </section>
         </div>

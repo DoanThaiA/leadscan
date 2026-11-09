@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -26,13 +26,15 @@ from app.models import (
     Purchase,
     SavedOpportunity,
     SearchRequest,
+    SearchRequestMatch,
+    UserOpportunity,
     WalletTransaction,
 )
 from app.registration_form import AREAS, CUSTOMER_SIZES, INDUSTRIES, REGIONS
 from app.schemas import LoginIn, PasswordChangeIn
 from app.schemas_commerce import EnrichIn, EnrichOut, InvoiceIn, OrderCreateIn, OrderOut, TxOut
 from app.security import DUMMY_HASH, add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
-from app.services import catalog, payments
+from app.services import catalog, matching, payments
 from app.worker import enqueue, send_invoice_request_task, send_password_reset_task, send_search_request_task
 
 router = APIRouter(prefix="/api/member")
@@ -151,8 +153,14 @@ def dashboard(user: MemberUser = Depends(current_member), db: Session = Depends(
     bought = db.scalar(select(func.count()).select_from(Purchase).where(Purchase.company_id == cid)) or 0
     spent = -(db.scalar(select(func.sum(WalletTransaction.amount)).where(WalletTransaction.company_id == cid, WalletTransaction.kind == "purchase")) or 0)
     recent = db.scalars(select(Purchase).where(Purchase.company_id == cid).order_by(Purchase.id.desc()).limit(5)).unique().all()
+    mine = catalog.user_matches(db, cid, [p.opportunity_id for p in recent])
     newest = db.scalars(
-        select(Opportunity).options(selectinload(Opportunity.contacts)).where(Opportunity.status == "published").order_by(Opportunity.published_at.desc()).limit(6)
+        select(Opportunity)
+        .options(selectinload(Opportunity.contacts))
+        .join(UserOpportunity, and_(UserOpportunity.opportunity_id == Opportunity.id, UserOpportunity.company_id == cid))
+        .where(Opportunity.status == "published")
+        .order_by(UserOpportunity.created_at.desc(), UserOpportunity.score.desc())
+        .limit(6)
     ).unique().all()
     pending_orders = db.scalar(select(func.count()).select_from(PaymentOrder).where(PaymentOrder.company_id == cid, PaymentOrder.status == "pending", PaymentOrder.expires_at > utcnow())) or 0
     return {
@@ -160,9 +168,10 @@ def dashboard(user: MemberUser = Depends(current_member), db: Session = Depends(
         "purchased_count": bought,
         "points_spent": spent,
         "pending_orders": pending_orders,
-        "recent_purchases": [{"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "opportunity": catalog.preview(p.opportunity, True)} for p in recent],
+        "recent_purchases": [{"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "opportunity": catalog.preview(p.opportunity, True, match=mine.get(p.opportunity_id))} for p in recent],
         "new_opportunities": catalog.previews(db, cid, newest),
         "saved_count": db.scalar(select(func.count()).select_from(SavedOpportunity).where(SavedOpportunity.company_id == cid)) or 0,
+        "matched_count": db.scalar(select(func.count()).select_from(UserOpportunity).where(UserOpportunity.company_id == cid)) or 0,
     }
 
 
@@ -184,7 +193,10 @@ def list_opportunities(
     user: MemberUser = Depends(current_member),
     db: Session = Depends(get_db),
 ):
-    stmt = select(Opportunity).where(Opportunity.status.in_(("published", "closed")))
+    # Chỉ hiện cơ hội đã được so khớp với doanh nghiệp (từ các phiếu tìm cơ hội), kèm điểm riêng của họ
+    cid = user.company_id
+    mine_join = and_(UserOpportunity.opportunity_id == Opportunity.id, UserOpportunity.company_id == cid)
+    stmt = select(Opportunity).join(UserOpportunity, mine_join).where(Opportunity.status.in_(("published", "closed")))
     if q.strip():
         like = f"%{q.strip()}%"
         stmt = stmt.where(or_(Opportunity.title.ilike(like), Opportunity.summary.ilike(like), Opportunity.code.ilike(like), Opportunity.province.ilike(like)))
@@ -195,10 +207,11 @@ def list_opportunities(
     if source:
         stmt = stmt.where(Opportunity.source_type == source)
     if min_score:
-        stmt = stmt.where(Opportunity.score >= min_score)
+        stmt = stmt.where(UserOpportunity.score >= min_score)
+    price_expr = Opportunity.price * (50 + UserOpportunity.score) / 100  # xấp xỉ matching.price_for (bỏ làm tròn nghìn)
     if max_price is not None:
-        stmt = stmt.where(Opportunity.price <= max_price)
-    mine = select(Purchase.opportunity_id).where(Purchase.company_id == user.company_id)
+        stmt = stmt.where(price_expr <= max_price)
+    mine = select(Purchase.opportunity_id).where(Purchase.company_id == cid)
     if only == "purchased":
         stmt = stmt.where(Opportunity.id.in_(mine))
     elif only == "available":
@@ -207,42 +220,44 @@ def list_opportunities(
         # phiếu đã đóng chỉ hiện nếu mình đã mua
         stmt = stmt.where(or_(Opportunity.status == "published", Opportunity.id.in_(mine)))
     order = {
-        "score": (Opportunity.score.desc(), Opportunity.id.desc()),
-        "price_asc": (Opportunity.price.asc(), Opportunity.id.desc()),
-        "price_desc": (Opportunity.price.desc(), Opportunity.id.desc()),
+        "score": (UserOpportunity.score.desc(), Opportunity.id.desc()),
+        "price_asc": (price_expr.asc(), Opportunity.id.desc()),
+        "price_desc": (price_expr.desc(), Opportunity.id.desc()),
     }.get(sort, (Opportunity.published_at.desc(), Opportunity.id.desc()))
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.options(selectinload(Opportunity.contacts)).order_by(*order).offset((page - 1) * page_size).limit(page_size)).unique().all()
     industries = db.scalars(
-        select(Opportunity.industry).where(Opportunity.status == "published", Opportunity.industry != "").distinct().order_by(Opportunity.industry)
+        select(Opportunity.industry).join(UserOpportunity, mine_join).where(Opportunity.status == "published", Opportunity.industry != "").distinct().order_by(Opportunity.industry)
     ).all()
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": catalog.previews(db, user.company_id, rows),
+        "items": catalog.previews(db, cid, rows),
         "facets": {"industries": industries, "regions": REGIONS, "sources": OPP_SOURCES},
     }
 
 
-def _get_opp(db: Session, opp_id: int, company_id: int) -> tuple[Opportunity, Purchase | None]:
+def _get_opp(db: Session, opp_id: int, company_id: int) -> tuple[Opportunity, Purchase | None, UserOpportunity | None]:
+    """Cơ hội doanh nghiệp được xem: đã được so khớp với doanh nghiệp (hoặc đã mua)."""
     o = db.get(Opportunity, opp_id)
     p = db.scalar(select(Purchase).where(Purchase.company_id == company_id, Purchase.opportunity_id == opp_id)) if o else None
-    if not o or o.status == "draft" or (o.status == "closed" and not p):
+    u = catalog.user_match(db, company_id, opp_id) if o else None
+    if not o or o.status == "draft" or (o.status == "closed" and not p) or not (p or u):
         raise HTTPException(404, "Không tìm thấy cơ hội.")
-    return o, p
+    return o, p, u
 
 
 @router.get("/opportunities/{opp_id}")
 def get_opportunity(opp_id: int, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
-    o, p = _get_opp(db, opp_id, user.company_id)
+    o, p, u = _get_opp(db, opp_id, user.company_id)
     if not p:
         saved = bool(catalog.saved_ids(db, user.company_id, [o.id]))
-        return {"opportunity": catalog.preview(o, saved=saved), "purchase": None}
+        return {"opportunity": catalog.preview(o, saved=saved, match=u), "purchase": None}
     enrich = db.scalars(select(EnrichRequest).where(EnrichRequest.purchase_id == p.id).order_by(EnrichRequest.id.desc())).unique().all()
     return {
-        "opportunity": catalog.full(o),
+        "opportunity": catalog.full(o, u),
         "purchase": {"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "enrich_requests": [EnrichOut.model_validate(e).model_dump(mode="json") for e in enrich]},
     }
 
@@ -261,11 +276,12 @@ def list_purchases(
     base = select(Purchase).where(Purchase.company_id == user.company_id)
     total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
     rows = db.scalars(base.order_by(Purchase.id.desc()).offset((page - 1) * page_size).limit(page_size)).unique().all()
+    mine = catalog.user_matches(db, user.company_id, [p.opportunity_id for p in rows])
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": [{"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "opportunity": catalog.full(p.opportunity)} for p in rows],
+        "items": [{"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "opportunity": catalog.full(p.opportunity, mine.get(p.opportunity_id))} for p in rows],
     }
 
 
@@ -460,7 +476,7 @@ class SearchRequestIn(MatchCriteria):
     note: str = Field(max_length=3000)
 
 
-def _search_out(r: SearchRequest) -> dict:
+def _search_out(r: SearchRequest, match_count: int = 0) -> dict:
     return {
         "id": r.id,
         "criteria": r.criteria or {},
@@ -469,7 +485,21 @@ def _search_out(r: SearchRequest) -> dict:
         "reply": r.reply,
         "created_at": _iso(r.created_at),
         "resolved_at": _iso(r.resolved_at),
+        "match_count": match_count,
     }
+
+
+def _match_counts(db: Session, req_ids: list[int]) -> dict[int, int]:
+    if not req_ids:
+        return {}
+    return dict(
+        db.execute(
+            select(SearchRequestMatch.request_id, func.count())
+            .join(Opportunity, Opportunity.id == SearchRequestMatch.opportunity_id)
+            .where(SearchRequestMatch.request_id.in_(req_ids), Opportunity.status == "published")
+            .group_by(SearchRequestMatch.request_id)
+        ).all()
+    )
 
 
 @router.get("/search-requests")
@@ -477,7 +507,32 @@ def list_search_requests(limit: int = Query(30, ge=1, le=100), user: MemberUser 
     rows = db.scalars(
         select(SearchRequest).where(SearchRequest.company_id == user.company_id).order_by(SearchRequest.id.desc()).limit(limit)
     ).unique().all()
-    return {"items": [_search_out(r) for r in rows]}
+    counts = _match_counts(db, [r.id for r in rows])
+    return {"items": [_search_out(r, counts.get(r.id, 0)) for r in rows]}
+
+
+@router.get("/search-requests/{req_id}/opportunities")
+def search_request_opportunities(
+    req_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+    user: MemberUser = Depends(current_member),
+    db: Session = Depends(get_db),
+):
+    """Bấm vào một phiếu tìm cơ hội → các cơ hội phù hợp với phiếu đó (điểm tính theo chính phiếu này)."""
+    r = db.get(SearchRequest, req_id)
+    if not r or r.company_id != user.company_id:
+        raise HTTPException(404, "Không tìm thấy yêu cầu.")
+    base = (
+        select(SearchRequestMatch)
+        .join(Opportunity, Opportunity.id == SearchRequestMatch.opportunity_id)
+        .where(SearchRequestMatch.request_id == r.id, Opportunity.status == "published")
+    )
+    total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
+    rows = db.scalars(base.order_by(SearchRequestMatch.score.desc(), SearchRequestMatch.id).offset((page - 1) * page_size).limit(page_size)).unique().all()
+    opps = [m.opportunity for m in rows]
+    items = catalog.previews(db, user.company_id, opps, scores={m.opportunity_id: m for m in rows})
+    return {"request": _search_out(r, total), "total": total, "page": page, "page_size": page_size, "items": items}
 
 
 @router.post("/search-requests", status_code=201)
@@ -499,10 +554,12 @@ def create_search_request(body: SearchRequestIn, user: MemberUser = Depends(curr
         c.profile = Profile()
     c.profile.search = criteria
     db.add(Activity(company_id=c.id, kind="update", content=f"{user.full_name} gửi yêu cầu tìm cơ hội: {note[:200]}"))
+    db.flush()
+    matched = matching.match_request(db, r)  # chấm điểm riêng cho doanh nghiệp, thêm cơ hội phù hợp vào Tất cả cơ hội + Kho
     db.commit()
     db.refresh(r)
     enqueue(send_search_request_task, r.id)
-    return _search_out(r)
+    return _search_out(r, matched)
 
 
 # ================================================================== kho của tôi (cơ hội đã lưu)
@@ -527,7 +584,7 @@ def list_saved(
 
 @router.post("/saved/{opp_id}", status_code=201)
 def save_opportunity(opp_id: int, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
-    o, _ = _get_opp(db, opp_id, user.company_id)
+    o, _, _ = _get_opp(db, opp_id, user.company_id)
     exists = db.scalar(select(SavedOpportunity.id).where(SavedOpportunity.company_id == user.company_id, SavedOpportunity.opportunity_id == o.id))
     if not exists:
         db.add(SavedOpportunity(company_id=user.company_id, opportunity_id=o.id, member_user_id=user.id))

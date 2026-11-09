@@ -150,6 +150,7 @@ class OppPreview(Out):
     purchased: bool = False
     saved: bool = False  # đã thêm vào kho của thành viên
     sold_out: bool = False
+    reasons: list[str] = Field(default_factory=list)  # vì sao phù hợp với doanh nghiệp này
 
 
 class OppFull(OppPreview):
@@ -161,6 +162,7 @@ class OppFull(OppPreview):
 
 class OppAdminOut(OppFull):
     status: str
+    match_count: int = 0  # số doanh nghiệp được cơ hội này khớp
     created_at: UtcDatetime
     updated_at: UtcDatetime
 
@@ -175,12 +177,8 @@ class OppIn(BaseModel):
     scale: Line = Field("", max_length=150)
     estimated_value: Line = Field("", max_length=100)
     deadline: date | None = None
-    score: int = Field(0, ge=0, le=100)
-    score_fit: int = Field(0, ge=0, le=100)
-    score_urgency: int = Field(0, ge=0, le=100)
-    score_trust: int = Field(0, ge=0, le=100)
     enrich_round: int = Field(0, ge=0, le=10)
-    price: int = Field(29000, ge=0, le=1_000_000_000)
+    price: int = Field(29000, ge=0, le=1_000_000_000)  # giá cơ bản; giá theo từng thành viên tính theo điểm của họ
     max_buyers: int = Field(3, ge=1, le=1000)
     buyer_name: Line = Field("", max_length=200)
     detail: str = Field("", max_length=10000)

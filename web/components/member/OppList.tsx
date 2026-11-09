@@ -85,8 +85,9 @@ export function OppList({ items, onChange }: { items: Opp[]; onChange: (o: Opp) 
                   {o.published_at ? <span>· {fromNow(o.published_at)}</span> : null}
                   {!o.purchased && !o.sold_out ? <span>· {o.max_buyers === 1 ? "Độc quyền" : `Còn ${left}/${o.max_buyers} lượt`}</span> : null}
                 </div>
+                {o.reasons?.length ? <div className="mt-m"><span>✓ {o.reasons.slice(0, 2).join(" · ")}</span></div> : null}
               </div>
-              <span className={`mt-score ${scoreClass(o.score)}`} title="Điểm chất lượng AI (0–100)">{o.score}</span>
+              <span className={`mt-score ${scoreClass(o.score)}`} title="Điểm phù hợp với bạn (0–100)">{o.score}</span>
               <div className="mt-p">
                 {fmtPts(o.price)}
                 <small>{o.enrich_round ? `Enrich vòng ${o.enrich_round}` : "Phiếu cơ bản"}</small>

@@ -31,6 +31,8 @@ from app.models import (
     PaymentOrder,
     Purchase,
     SearchRequest,
+    SearchRequestMatch,
+    UserOpportunity,
     WalletTransaction,
 )
 from app.schemas_commerce import (
@@ -48,7 +50,7 @@ from app.schemas_commerce import (
     TxOut,
 )
 from app.security import hash_password
-from app.services import catalog, payments, wallet
+from app.services import catalog, matching, payments, wallet
 from app.worker import enqueue, send_invoice_request_task, send_search_request_task
 
 router = APIRouter(prefix="/api/admin")
@@ -98,11 +100,19 @@ def commerce_stats(_: AdminUser = Depends(current_user), db: Session = Depends(g
 # ================================================================== cơ hội
 
 
-def _opp_out(o: Opportunity) -> dict:
+def _opp_out(o: Opportunity, match_count: int = 0) -> dict:
     out = OppAdminOut.model_validate(o)
     out.contact_count = len(o.contacts)
+    out.match_count = match_count
     out.sold_out = o.sold_count >= o.max_buyers or o.status == "closed"
     return out.model_dump(mode="json")
+
+
+def _match_counts(db: Session, opp_ids: list[int]) -> dict[int, int]:
+    """Số doanh nghiệp được mỗi cơ hội khớp (điểm riêng từng doanh nghiệp nằm ở UserOpportunity)."""
+    if not opp_ids:
+        return {}
+    return dict(db.execute(select(UserOpportunity.opportunity_id, func.count()).where(UserOpportunity.opportunity_id.in_(opp_ids)).group_by(UserOpportunity.opportunity_id)).all())
 
 
 def _next_opp_code(db: Session) -> str:
@@ -139,7 +149,8 @@ def list_opps(
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.options(selectinload(Opportunity.contacts)).order_by(Opportunity.id.desc()).offset((page - 1) * page_size).limit(page_size)).unique().all()
     counts = dict(db.execute(select(Opportunity.status, func.count()).group_by(Opportunity.status)).all())
-    return {"total": total, "page": page, "page_size": page_size, "items": [_opp_out(o) for o in rows], "counts": counts}
+    matches = _match_counts(db, [o.id for o in rows])
+    return {"total": total, "page": page, "page_size": page_size, "items": [_opp_out(o, matches.get(o.id, 0)) for o in rows], "counts": counts}
 
 
 @router.post("/opportunities", status_code=201)
@@ -147,9 +158,11 @@ def create_opp(body: OppIn, user: AdminUser = Depends(current_user), db: Session
     o = Opportunity(code=_next_opp_code(db), title=body.title, created_by_id=user.id)
     _apply_opp(o, body)
     db.add(o)
+    db.flush()
+    matching.match_opportunity(db, o)  # phiếu không mang điểm; điểm tính riêng cho từng doanh nghiệp có yêu cầu phù hợp
     db.commit()
     db.refresh(o)
-    return _opp_out(o)
+    return _opp_out(o, _match_counts(db, [o.id]).get(o.id, 0))
 
 
 def _get_opp(db: Session, opp_id: int) -> Opportunity:
@@ -164,7 +177,7 @@ def get_opp(opp_id: int, _: AdminUser = Depends(current_user), db: Session = Dep
     o = _get_opp(db, opp_id)
     buyers = db.scalars(select(Purchase).where(Purchase.opportunity_id == o.id).order_by(Purchase.id.desc())).unique().all()
     return {
-        "opportunity": _opp_out(o),
+        "opportunity": _opp_out(o, _match_counts(db, [o.id]).get(o.id, 0)),
         "purchases": [{"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "company": _company_ref(p.company)} for p in buyers],
     }
 
@@ -175,9 +188,11 @@ def update_opp(opp_id: int, body: OppIn, _: AdminUser = Depends(current_user), d
     if body.max_buyers < o.sold_count:
         raise HTTPException(400, f"Đã bán {o.sold_count} phiếu, số lượt bán tối đa không được nhỏ hơn.")
     _apply_opp(o, body)
+    db.flush()
+    matching.match_opportunity(db, o)  # nội dung/trạng thái đổi → so khớp lại
     db.commit()
     db.refresh(o)
-    return _opp_out(o)
+    return _opp_out(o, _match_counts(db, [o.id]).get(o.id, 0))
 
 
 @router.delete("/opportunities/{opp_id}", status_code=204)
@@ -342,8 +357,9 @@ class SearchAdminIn(BaseModel):
         return v
 
 
-def _search_admin_out(r: SearchRequest) -> dict:
+def _search_admin_out(r: SearchRequest, match_count: int = 0) -> dict:
     return {
+        "match_count": match_count,
         "id": r.id,
         "criteria": r.criteria or {},
         "note": r.note,
@@ -363,7 +379,10 @@ def list_search_requests(status: str = "", _: AdminUser = Depends(current_user),
     if status:
         stmt = stmt.where(SearchRequest.status == status)
     rows = db.scalars(stmt.order_by(SearchRequest.id.desc()).limit(200)).unique().all()
-    return {"items": [_search_admin_out(r) for r in rows]}
+    counts = dict(
+        db.execute(select(SearchRequestMatch.request_id, func.count()).where(SearchRequestMatch.request_id.in_([r.id for r in rows])).group_by(SearchRequestMatch.request_id)).all()
+    ) if rows else {}
+    return {"items": [_search_admin_out(r, counts.get(r.id, 0)) for r in rows]}
 
 
 @router.patch("/search-requests/{req_id}")
@@ -374,9 +393,21 @@ def update_search_request(req_id: int, body: SearchAdminIn, user: AdminUser = De
     r.status, r.reply = body.status, body.reply.strip()
     r.resolved_at = utcnow() if body.status != "open" else None
     db.add(Activity(company_id=r.company_id, kind="update", actor_id=user.id, content=f"Yêu cầu tìm cơ hội #{r.id}: {SEARCH_STATUSES[r.status]}"))
+    matching.match_request(db, r)  # "Từ chối" gỡ cơ hội khỏi phiếu; mở lại thì so khớp lại
     db.commit()
     db.refresh(r)
-    return _search_admin_out(r)
+    return _search_admin_out(r, db.scalar(select(func.count()).select_from(SearchRequestMatch).where(SearchRequestMatch.request_id == r.id)) or 0)
+
+
+@router.post("/search-requests/{req_id}/rematch")
+def rematch_search_request(req_id: int, _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    """So khớp lại phiếu tìm cơ hội với toàn bộ phiếu cơ hội đang bán (vd. sau khi nhập thêm cơ hội hàng loạt)."""
+    r = db.get(SearchRequest, req_id)
+    if not r:
+        raise HTTPException(404, "Không tìm thấy yêu cầu.")
+    n = matching.match_request(db, r)
+    db.commit()
+    return {"ok": True, "match_count": n}
 
 
 @router.post("/search-requests/{req_id}/resend-email")

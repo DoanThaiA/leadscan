@@ -27,10 +27,6 @@ export function OppForm({ initial, onSubmit, submitLabel }: { initial?: Opp; onS
     const body = {
       ...f,
       deadline: f.deadline || null,
-      score: num("score"),
-      score_fit: num("score_fit"),
-      score_urgency: num("score_urgency"),
-      score_trust: num("score_trust"),
       enrich_round: num("enrich_round"),
       price: num("price"),
       max_buyers: num("max_buyers"),
@@ -120,19 +116,19 @@ export function OppForm({ initial, onSubmit, submitLabel }: { initial?: Opp; onS
                   <option value="closed">Đã đóng</option>
                 </select>
               </Field>
-              <Field label="Giá phiếu (điểm)" error={errors.price} htmlFor="o-price"><input id="o-price" className="adm-input" name="price" inputMode="numeric" defaultValue={o?.price ?? 29000} /></Field>
+              <Field label="Giá cơ bản (điểm)" error={errors.price} htmlFor="o-price"><input id="o-price" className="adm-input" name="price" inputMode="numeric" defaultValue={o?.price ?? 29000} /></Field>
               <Field label="Số lượt bán tối đa (1 = độc quyền)" error={errors.max_buyers} htmlFor="o-max"><input id="o-max" className="adm-input" name="max_buyers" inputMode="numeric" defaultValue={o?.max_buyers ?? 3} /></Field>
               <Field label="Vòng enrich" error={errors.enrich_round} htmlFor="o-er"><input id="o-er" className="adm-input" name="enrich_round" inputMode="numeric" defaultValue={o?.enrich_round ?? 0} /></Field>
               {o ? <p className="muted" style={{ fontSize: 12.5 }}>Đã bán {o.sold_count}/{o.max_buyers} lượt.</p> : null}
             </div>
           </section>
           <section className="adm-card">
-            <div className="hd"><div><h2>Điểm chất lượng</h2><p className="muted" style={{ fontSize: 12.5 }}>0–100 · sau này AI tự chấm</p></div></div>
-            <div className="bd adm-form">
-              <Field label="Tổng điểm" error={errors.score} full htmlFor="o-sc"><input id="o-sc" className="adm-input" name="score" inputMode="numeric" defaultValue={o?.score ?? 0} /></Field>
-              <Field label="Khớp chân dung" error={errors.score_fit} htmlFor="o-sf"><input id="o-sf" className="adm-input" name="score_fit" inputMode="numeric" defaultValue={o?.score_fit ?? 0} /></Field>
-              <Field label="Độ cấp thiết" error={errors.score_urgency} htmlFor="o-su"><input id="o-su" className="adm-input" name="score_urgency" inputMode="numeric" defaultValue={o?.score_urgency ?? 0} /></Field>
-              <Field label="Độ tin cậy nguồn" error={errors.score_trust} full htmlFor="o-stt"><input id="o-stt" className="adm-input" name="score_trust" inputMode="numeric" defaultValue={o?.score_trust ?? 0} /></Field>
+            <div className="hd"><div><h2>Điểm &amp; giá theo khách</h2><p className="muted" style={{ fontSize: 12.5 }}>Phiếu không nhập điểm</p></div></div>
+            <div className="bd" style={{ display: "grid", gap: 8 }}>
+              <p className="muted" style={{ fontSize: 13 }}>
+                Hệ thống tự so khớp phiếu với các phiếu tìm cơ hội của khách (tiêu chí + từ khoá + ngữ nghĩa) và chấm điểm riêng cho từng khách. Giá phiếu ở trên là <b>giá cơ bản</b>: khách điểm cao trả cao hơn, điểm thấp trả thấp hơn.
+              </p>
+              {o ? <p style={{ fontSize: 13 }}>Hiện khớp <b>{o.match_count ?? 0}</b> khách hàng.</p> : <p className="muted" style={{ fontSize: 12.5 }}>Sau khi lưu ở trạng thái “Đang bán”, phiếu tự được so khớp với các phiếu tìm cơ hội đang có.</p>}
             </div>
           </section>
           <button className="adm-btn primary" style={{ height: 42 }} disabled={busy}>{busy ? "Đang lưu…" : submitLabel}</button>

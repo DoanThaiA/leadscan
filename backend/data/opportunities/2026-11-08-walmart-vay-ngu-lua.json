@@ -1,5 +1,5 @@
 {
-  "_note": "1 cơ hội nhận ngày 08/11/2026 (tin đăng nhu cầu mua). Nhập: python -m app.cli import-opportunities data/opportunities/2026-11-08-walmart-vay-ngu-lua.json. Giá = phiếu cơ bản 29.000đ (1 đầu mối, chưa enrich); điểm do LeadScan đánh giá thủ công. Nguồn tin và khu vực tin đăng không ghi – tạm đặt 'Mạng xã hội & nhóm chat' / 'Toàn quốc', sửa trong admin nếu biết rõ hơn.",
+  "_note": "1 cơ hội nhận ngày 08/11/2026 (tin đăng nhu cầu mua). Nhập: python -m app.cli import-opportunities data/opportunities/2026-11-08-walmart-vay-ngu-lua.json. Giá = phiếu cơ bản 29.000đ (1 đầu mối, chưa enrich); điểm do hệ thống tính riêng cho từng doanh nghiệp khi so khớp với phiếu tìm cơ hội. Nguồn tin và khu vực tin đăng không ghi – tạm đặt 'Mạng xã hội & nhóm chat' / 'Toàn quốc', sửa trong admin nếu biết rõ hơn.",
   "opportunities": [
     {
       "title": "Nhà bán hàng Walmart cần xưởng gia công váy ngủ lụa nữ theo thiết kế (MOQ 100 chiếc/đơn)",
@@ -11,10 +11,6 @@
       "scale": "MOQ 100 chiếc/lần đặt hàng",
       "estimated_value": "Chưa xác định – chờ báo giá",
       "deadline": null,
-      "score": 63,
-      "score_fit": 75,
-      "score_urgency": 60,
-      "score_trust": 55,
       "enrich_round": 0,
       "price": 29000,
       "max_buyers": 3,

@@ -38,6 +38,23 @@ def pay_membership(m: TestClient) -> str:
     return code
 
 
+CARTON_NOTE = "Cần mua hộp carton, thùng giấy bao bì 5 lớp cho nhà máy điện tử tại Bắc Ninh, số lượng lớn mỗi tháng."
+
+
+def ask(m: TestClient, note: str = CARTON_NOTE, **criteria) -> dict:
+    """Thành viên gửi phiếu tìm cơ hội (hệ thống so khớp & chấm điểm riêng ngay)."""
+    body = {"industries": ["Bao bì & in ấn"], "regions": ["Bắc Ninh"], **criteria, "note": note}
+    r = m.post("/api/member/search-requests", json=body)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def view(m: TestClient, oid: int) -> dict:
+    r = m.get(f"/api/member/opportunities/{oid}")
+    assert r.status_code == 200, r.text
+    return r.json()["opportunity"]
+
+
 def make_opp(admin, **over) -> int:
     body = {
         "title": "Cần 200.000 hộp carton 5 lớp/tháng",
@@ -46,7 +63,6 @@ def make_opp(admin, **over) -> int:
         "province": "Bắc Ninh",
         "region": "Miền Bắc",
         "source_type": "App đăng mua",
-        "score": 92,
         "price": 1_250_000,
         "max_buyers": 2,
         "buyer_name": "Công ty Điện tử ABC",
@@ -193,6 +209,7 @@ def test_webhook_infocms(member, client, monkeypatch):
 def test_kho_co_hoi_an_thong_tin_truoc_khi_mua(admin, member):
     oid = make_opp(admin)
     make_opp(admin, title="Bản nháp chưa bán", status="draft")
+    ask(member)
     items = member.get("/api/member/opportunities").json()["items"]
     assert [i["id"] for i in items] == [oid]
     item = items[0]
@@ -203,12 +220,16 @@ def test_kho_co_hoi_an_thong_tin_truoc_khi_mua(admin, member):
 
 def test_mua_phieu(admin, member, client):
     oid = make_opp(admin, max_buyers=2)
+    ask(member)
     assert member.post(f"/api/member/opportunities/{oid}/purchase").status_code == 402  # chưa đóng phí thành viên
     pay_membership(member)
 
+    price = view(member, oid)["price"]  # giá theo điểm của chính thành viên này
+    assert 625_000 <= price <= 1_875_000
     r = member.post(f"/api/member/opportunities/{oid}/purchase")
-    assert r.status_code == 200 and r.json()["points_balance"] == 8_750_000
-    assert balance() == 8_750_000
+    assert r.status_code == 200 and r.json()["points_balance"] == 10_000_000 - price
+    assert balance() == 10_000_000 - price
+    assert member.get("/api/member/purchases").json()["items"][0]["price"] == price
     assert member.post(f"/api/member/opportunities/{oid}/purchase").status_code == 409  # không mua 2 lần
 
     d = member.get(f"/api/member/opportunities/{oid}").json()
@@ -220,10 +241,12 @@ def test_mua_phieu(admin, member, client):
     # khách thứ 2 mua lượt cuối, khách thứ 3 hết lượt
     register(client, tax_code="0100000002")
     m2 = member_client("lienhe0100000002@minhan.vn")
+    ask(m2)
     pay_membership(m2)
     assert m2.post(f"/api/member/opportunities/{oid}/purchase").status_code == 200
     register(client, tax_code="0100000003")
     m3 = member_client("lienhe0100000003@minhan.vn")
+    ask(m3)
     pay_membership(m3)
     assert m3.post(f"/api/member/opportunities/{oid}/purchase").status_code == 409
     assert m3.get("/api/member/opportunities", params={"only": "available"}).json()["total"] == 0
@@ -231,6 +254,7 @@ def test_mua_phieu(admin, member, client):
 
 def test_khong_du_diem(admin, member):
     oid = make_opp(admin, price=20_000_000)
+    ask(member)
     pay_membership(member)
     r = member.post(f"/api/member/opportunities/{oid}/purchase")
     assert r.status_code == 402 and "Số dư không đủ" in r.json()["detail"]
@@ -238,20 +262,25 @@ def test_khong_du_diem(admin, member):
 
 
 def test_loc_va_sap_xep(admin, member):
-    make_opp(admin, title="A rẻ", price=29_000, score=70, region="Miền Nam", industry="Logistics & vận tải")
-    make_opp(admin, title="B đắt", price=5_000_000, score=95)
-    get = lambda **p: [i["title"] for i in member.get("/api/member/opportunities", params=p).json()["items"]]  # noqa: E731
-    assert get(sort="price_asc") == ["A rẻ", "B đắt"]
-    assert get(sort="score") == ["B đắt", "A rẻ"]
-    assert get(region="Miền Nam") == ["A rẻ"]
-    assert get(min_score=90) == ["B đắt"]
-    assert get(q="đắt") == ["B đắt"]
+    make_opp(admin, title="A rẻ: thùng carton cho kho logistics", price=29_000, region="Miền Nam", province="Đồng Nai", industry="Logistics & vận tải", detail="")
+    make_opp(admin, title="B đắt: hộp carton 5 lớp cho nhà máy Bắc Ninh", price=5_000_000)
+    ask(member, "Cần mua hộp carton thùng carton bao bì cho nhà máy ở Bắc Ninh", regions=["Miền Bắc"])
+    get = lambda **p: [i["title"][:1] for i in member.get("/api/member/opportunities", params=p).json()["items"]]  # noqa: E731
+    assert get(sort="price_asc") == ["A", "B"]
+    assert get(sort="price_desc") == ["B", "A"]
+    assert get(sort="score") == ["B", "A"]  # B khớp ngành + khu vực nên điểm cao hơn
+    assert get(region="Miền Nam") == ["A"]
+    top = member.get("/api/member/opportunities", params={"sort": "score"}).json()["items"]
+    assert top[0]["score"] > top[1]["score"]
+    assert get(min_score=top[0]["score"]) == ["B"]
+    assert get(q="đắt") == ["B"]
     facets = member.get("/api/member/opportunities").json()["facets"]
     assert "Logistics & vận tải" in facets["industries"]
 
 
 def test_yeu_cau_enrich(admin, member):
     oid = make_opp(admin)
+    ask(member)
     pay_membership(member)
     member.post(f"/api/member/opportunities/{oid}/purchase")
     pid = member.get("/api/member/purchases").json()["items"][0]["id"]
@@ -329,6 +358,8 @@ def test_admin_quan_ly_co_hoi(admin, member):
     assert r.json()["status"] == "published" and r.json()["published_at"] and r.json()["contacts"] == []
     assert admin.get("/api/admin/opportunities").json()["counts"] == {"published": 1}
 
+    ask(member)
+    assert admin.get(f"/api/admin/opportunities/{oid}").json()["opportunity"]["match_count"] == 1
     pay_membership(member)
     member.post(f"/api/member/opportunities/{oid}/purchase")
     assert admin.delete(f"/api/admin/opportunities/{oid}").status_code == 400  # đã có người mua
@@ -337,6 +368,7 @@ def test_admin_quan_ly_co_hoi(admin, member):
     assert detail["purchases"][0]["company"]["name"] == "Công ty TNHH Bao Bì Minh An"
     stats = admin.get("/api/admin/commerce-stats").json()
     assert stats["revenue_30d"] == 10_000_000 and stats["tickets_sold_30d"] == 1
+    assert admin.get("/api/admin/opportunities").json()["items"][0]["match_count"] == 1
 
 
 def test_admin_tao_va_khoa_tai_khoan_thanh_vien(admin, client):
@@ -356,6 +388,10 @@ def test_admin_tao_va_khoa_tai_khoan_thanh_vien(admin, client):
 def test_them_vao_kho_cua_toi(admin, member):
     a = make_opp(admin)
     draft = make_opp(admin, status="draft")
+    assert member.post(f"/api/member/saved/{a}").status_code == 404  # chưa có phiếu tìm nào khớp → không xem/lưu được
+    ask(member)
+    assert member.get("/api/member/saved").json()["total"] == 1  # cơ hội phù hợp tự vào kho
+    assert member.delete(f"/api/member/saved/{a}").status_code == 204
     assert member.post(f"/api/member/saved/{a}").status_code == 201
     assert member.post(f"/api/member/saved/{a}").status_code == 201  # lưu lại không nhân đôi
     assert member.post(f"/api/member/saved/{draft}").status_code == 404

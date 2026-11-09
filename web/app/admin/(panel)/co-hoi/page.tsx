@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { Icon, ScoreChip, Skeleton } from "@/components/admin/ui";
+import { Icon, Skeleton } from "@/components/admin/ui";
 import { api, errMsg, qs } from "@/lib/admin/api";
 import { fmtDateTime } from "@/lib/admin/format";
 import { fmtPts, type Opp, OPP_STATUS } from "@/lib/commerce";
@@ -61,7 +61,7 @@ export default function AdminOppsPage() {
         ) : (
           <div className="adm-table-wrap">
             <table className="adm-table">
-              <thead><tr><th>Cơ hội</th><th>Điểm</th><th>Giá</th><th>Đã bán</th><th>Đầu mối</th><th>Trạng thái</th><th>Cập nhật</th></tr></thead>
+              <thead><tr><th>Cơ hội</th><th>Khách phù hợp</th><th>Giá cơ bản</th><th>Đã bán</th><th>Đầu mối</th><th>Trạng thái</th><th>Cập nhật</th></tr></thead>
               <tbody>
                 {d.items.map((o) => (
                   <tr key={o.id} className="link" onClick={() => router.push(`/admin/co-hoi/${o.id}`)}>
@@ -69,7 +69,7 @@ export default function AdminOppsPage() {
                       <Link className="name" href={`/admin/co-hoi/${o.id}`} onClick={(e) => e.stopPropagation()}>{o.title}</Link>
                       <div className="sub mono">{o.code} · {o.industry || "—"} · {o.province || o.region || "—"}</div>
                     </td>
-                    <td><ScoreChip score={o.score} /></td>
+                    <td style={{ fontVariantNumeric: "tabular-nums" }}>{o.status === "published" ? o.match_count ?? 0 : "—"}</td>
                     <td className="adm-neg">{fmtPts(o.price)}</td>
                     <td style={{ fontVariantNumeric: "tabular-nums" }}>{o.sold_count}/{o.max_buyers}</td>
                     <td>{o.contact_count}</td>

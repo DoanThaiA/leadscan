@@ -87,6 +87,8 @@ export interface Opp {
   saved?: boolean; // đã thêm vào kho của thành viên
   saved_at?: string;
   sold_out: boolean;
+  reasons?: string[]; // vì sao cơ hội phù hợp với doanh nghiệp (điểm & giá là của riêng doanh nghiệp)
+  match_count?: number; // chỉ ở admin: số doanh nghiệp được cơ hội khớp
   // chỉ có sau khi mua (hoặc ở admin)
   buyer_name?: string;
   detail?: string;
@@ -115,6 +117,7 @@ export interface SearchReq {
   reply: string;
   created_at: string;
   resolved_at: string | null;
+  match_count?: number; // số cơ hội phù hợp với phiếu
 }
 
 export const SEARCH_STATUS: Record<SearchReq["status"], string> = { open: "Đang tìm", done: "Đã có kết quả", rejected: "Từ chối" };

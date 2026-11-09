@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
@@ -63,7 +64,7 @@ function Catalog() {
       <div className="adm-head">
         <div>
           <h1>Tất cả cơ hội</h1>
-          <p>Xem trước tóm tắt & điểm chất lượng; mua phiếu để mở khoá bên có nhu cầu và đầu mối liên hệ.</p>
+          <p>Cơ hội phù hợp với bạn, tổng hợp từ mọi phiếu tìm cơ hội (đã loại trùng). Điểm và giá phiếu tính riêng cho doanh nghiệp bạn — mua phiếu để mở khoá bên có nhu cầu và đầu mối.</p>
         </div>
       </div>
       {error ? <div className="adm-alert" style={{ marginBottom: 16 }}>{error}</div> : null}
@@ -125,7 +126,16 @@ function Catalog() {
           ) : null}
         </>
       ) : (
-        <div className="adm-card adm-empty">Không có cơ hội phù hợp bộ lọc.</div>
+        <div className="adm-card adm-empty">
+          {f.q || f.industry || f.region || f.source || f.min_score || f.only ? (
+            "Không có cơ hội phù hợp bộ lọc."
+          ) : (
+            <>
+              Bạn chưa có cơ hội nào. Hãy gửi phiếu tìm cơ hội để hệ thống tìm, chấm điểm và thêm cơ hội phù hợp vào đây.
+              <p style={{ marginTop: 12 }}><Link className="adm-btn primary" href="/thanh-vien/phu-hop"><Icon name="scan" size={16} /> Tìm cơ hội phù hợp</Link></p>
+            </>
+          )}
+        </div>
       )}
     </>
   );

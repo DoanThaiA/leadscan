@@ -99,6 +99,7 @@ export default function AdminSearchRequestsPage() {
                         <Icon name="mail" size={13} /> Chưa gửi được email · Gửi lại
                       </button>
                     )}
+                    <span className="muted" style={{ fontSize: 12 }}>{r.match_count ?? 0} cơ hội phù hợp</span>
                     <span className={`adm-badge ${SEARCH_STATUS_CLASS[r.status]}`}>{SEARCH_STATUS[r.status]}</span>
                   </div>
                 </div>

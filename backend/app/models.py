@@ -9,7 +9,9 @@ Company            doanh nghiệp đăng ký / thành viên
   ├─ PaymentOrder   đơn nạp tiền / phí thành viên (thanh toán qua InfoCMS)
   │    └─ InvoiceRequest  thông tin xuất hoá đơn (xuất thủ công)
   ├─ SearchRequest      yêu cầu "Enrich tìm kiếm cơ hội" (tiêu chí + mô tả, email báo admin)
-  ├─ SavedOpportunity   cơ hội thành viên thêm vào kho (xem/mua sau)
+  ├─ SavedOpportunity   cơ hội thành viên thêm vào kho (xem/mua sau; cơ hội phù hợp tự vào kho)
+  ├─ UserOpportunity    "Tất cả cơ hội" của doanh nghiệp: cơ hội phù hợp + điểm riêng (không trùng)
+  ├─ SearchRequestMatch cơ hội phù hợp với từng phiếu tìm cơ hội (xem khi mở phiếu)
   └─ Purchase       phiếu cơ hội đã mua
        └─ EnrichRequest   yêu cầu tìm thêm đầu mối
 Opportunity        cơ hội kinh doanh (nhập tay; sau này do crawl + AI tạo)
@@ -312,11 +314,13 @@ class Opportunity(Base):
     scale: Mapped[str] = mapped_column(String(150), default="")  # quy mô / số lượng
     estimated_value: Mapped[str] = mapped_column(String(100), default="")
     deadline: Mapped[date | None] = mapped_column(Date)
+    # Điểm cũ (chấm tay) — không còn dùng; điểm do hệ thống tính riêng cho từng doanh nghiệp (UserOpportunity)
     score: Mapped[int] = mapped_column(Integer, default=0)
     score_fit: Mapped[int] = mapped_column(Integer, default=0)
     score_urgency: Mapped[int] = mapped_column(Integer, default=0)
     score_trust: Mapped[int] = mapped_column(Integer, default=0)
     enrich_round: Mapped[int] = mapped_column(Integer, default=0)
+    # Giá cơ bản của phiếu; giá thành viên phải trả = giá cơ bản × hệ số theo điểm của chính họ (xem services/matching.py)
     price: Mapped[int] = mapped_column(BigInteger, default=29000)
     max_buyers: Mapped[int] = mapped_column(Integer, default=3)  # 1 = độc quyền
     sold_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -328,6 +332,8 @@ class Opportunity(Base):
 
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
     published_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    embedding: Mapped[list | None] = mapped_column(JSON)  # vector ngữ nghĩa của tiêu đề + mô tả (services/embedding.py)
+    embedding_model: Mapped[str] = mapped_column(String(60), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -381,11 +387,59 @@ class SearchRequest(Base):
     status: Mapped[str] = mapped_column(String(16), default="open", index=True)
     reply: Mapped[str] = mapped_column(Text, default="")  # phản hồi của LeadScan, khách thấy trong cổng
     email_sent_at: Mapped[datetime | None] = mapped_column(DateTime)  # đã gửi email báo admin
+    embedding: Mapped[list | None] = mapped_column(JSON)  # vector ngữ nghĩa của mô tả + tiêu chí
+    embedding_model: Mapped[str] = mapped_column(String(60), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     company: Mapped[Company] = relationship(lazy="joined")
     member_user: Mapped["MemberUser | None"] = relationship(lazy="joined")
+
+
+class UserOpportunity(Base):
+    """Cơ hội nằm trong "Tất cả cơ hội" của một doanh nghiệp, kèm điểm RIÊNG của doanh nghiệp đó.
+
+    Mỗi (doanh nghiệp, cơ hội) đúng 1 dòng dù cơ hội khớp nhiều phiếu tìm — điểm là điểm cao nhất trong các phiếu.
+    """
+
+    __tablename__ = "user_opportunities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    opportunity_id: Mapped[int] = mapped_column(ForeignKey("opportunities.id", ondelete="CASCADE"), index=True)
+    score: Mapped[int] = mapped_column(Integer, default=0, index=True)  # điểm tổng 0–100
+    score_fit: Mapped[int] = mapped_column(Integer, default=0)  # khớp yêu cầu (tiêu chí + ngữ nghĩa + từ khoá)
+    score_urgency: Mapped[int] = mapped_column(Integer, default=0)
+    score_trust: Mapped[int] = mapped_column(Integer, default=0)
+    reasons: Mapped[list] = mapped_column(JSON, default=list)  # vì sao phù hợp (hiển thị cho khách)
+    best_request_id: Mapped[int | None] = mapped_column(ForeignKey("search_requests.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    opportunity: Mapped[Opportunity] = relationship(lazy="joined")
+
+    __table_args__ = (UniqueConstraint("company_id", "opportunity_id", name="uq_user_opp_once"),)
+
+
+class SearchRequestMatch(Base):
+    """Cơ hội phù hợp với một phiếu tìm cơ hội (xem khi bấm vào phiếu)."""
+
+    __tablename__ = "search_request_matches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("search_requests.id", ondelete="CASCADE"), index=True)
+    opportunity_id: Mapped[int] = mapped_column(ForeignKey("opportunities.id", ondelete="CASCADE"), index=True)
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    score_fit: Mapped[int] = mapped_column(Integer, default=0)
+    score_urgency: Mapped[int] = mapped_column(Integer, default=0)
+    score_trust: Mapped[int] = mapped_column(Integer, default=0)
+    reasons: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    opportunity: Mapped[Opportunity] = relationship(lazy="joined")
+
+    __table_args__ = (UniqueConstraint("request_id", "opportunity_id", name="uq_request_opp_once"),)
 
 
 class SavedOpportunity(Base):

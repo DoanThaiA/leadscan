@@ -35,7 +35,7 @@ export default function SavedPage() {
       <div className="adm-head">
         <div>
           <h1>Kho của tôi</h1>
-          <p>Cơ hội bạn đã lưu để xem lại hoặc mua sau. Phiếu có thể hết lượt nếu doanh nghiệp khác mua trước.</p>
+          <p>Cơ hội phù hợp được tự thêm vào kho khi hệ thống tìm thấy, cùng các cơ hội bạn tự lưu. Phiếu có thể hết lượt nếu doanh nghiệp khác mua trước.</p>
         </div>
         <Link className="adm-btn primary" href="/thanh-vien/phu-hop"><Icon name="scan" size={16} /> Tìm cơ hội phù hợp</Link>
       </div>
@@ -65,7 +65,7 @@ export default function SavedPage() {
           <div className="mt-empty">
             <Icon name="bookmark" />
             <b style={{ color: "var(--ink)" }}>Kho đang trống</b>
-            <span>Ở mục “Cơ hội phù hợp”, bấm “Thêm vào kho” để lưu cơ hội muốn xem lại.</span>
+            <span>Gửi phiếu ở mục “Cơ hội phù hợp”: cơ hội tìm thấy sẽ tự vào kho, bạn cũng có thể bấm “Thêm vào kho” để lưu thêm.</span>
           </div>
         )}
       </section>

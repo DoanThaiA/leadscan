@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     # Yêu cầu xuất hoá đơn được gửi tới email này (kế toán xuất thủ công)
     invoice_email: str = "vylyy9999@gmail.com"
 
+    # So khớp cơ hội ↔ yêu cầu (hybrid: tiêu chí + từ khoá + embedding ngữ nghĩa)
+    # Embedding: "hash" = chạy tại chỗ, không cần khoá API; "openai" = API tương thích OpenAI (/embeddings)
+    embed_provider: str = "hash"
+    embed_api_key: str = ""
+    embed_model: str = "text-embedding-3-small"
+    embed_url: str = "https://api.openai.com/v1"
+    match_min_fit: int = 35  # điểm "khớp yêu cầu" tối thiểu (0–100) để cơ hội được xem là phù hợp
+
     # Hàng đợi việc nền (Celery + Redis)
     redis_url: str = "redis://localhost:6379/0"
     celery_eager: bool = False  # True = chạy task ngay trong tiến trình (dùng cho test)

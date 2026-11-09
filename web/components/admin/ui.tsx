@@ -114,7 +114,7 @@ export function Skeleton({ h = 16, w = "100%" }: { h?: number; w?: number | stri
 export function ScoreChip({ score }: { score: number }) {
   const cls = score >= 85 ? "sc-hi" : score >= 70 ? "sc-md" : "sc-lo";
   return (
-    <span className={`adm-score ${cls}`} title="Điểm chất lượng AI (0–100)">
+    <span className={`adm-score ${cls}`} title="Điểm phù hợp với bạn (0–100)">
       {score}
       <small>điểm</small>
     </span>

@@ -45,7 +45,13 @@ export default function MatchPage() {
       const r = await mapi.post<SearchReq>("/search-requests", { ...c, note });
       setReqs((prev) => [r, ...(prev ?? [])]);
       setNote("");
-      setMsg({ ok: true, text: `Đã gửi yêu cầu #${r.id}. LeadScan đã nhận và sẽ tìm, enrich cơ hội theo yêu cầu của bạn.` });
+      const n = r.match_count ?? 0;
+      setMsg({
+        ok: true,
+        text: n
+          ? `Đã gửi yêu cầu #${r.id}. Tìm thấy ${n} cơ hội phù hợp — đã chấm điểm riêng cho bạn, thêm vào Tất cả cơ hội và Kho của tôi. Bấm vào phiếu bên dưới để xem.`
+          : `Đã gửi yêu cầu #${r.id}. Hiện chưa có cơ hội nào đạt mức phù hợp; cơ hội mới mở bán sẽ tự được so khớp và thêm vào kho của bạn.`,
+      });
     } catch (err) {
       setMsg({ ok: false, text: errMsg(err) });
     } finally {
@@ -60,7 +66,7 @@ export default function MatchPage() {
       <div className="adm-head">
         <div>
           <h1>Tìm cơ hội phù hợp</h1>
-          <p>Cho LeadScan biết bạn cần cơ hội thế nào. Đội ngũ và AI của LeadScan sẽ tìm, enrich và đưa cơ hội phù hợp vào kho cho bạn.</p>
+          <p>Cho LeadScan biết bạn cần cơ hội thế nào. Hệ thống so khớp tiêu chí và ngữ nghĩa mô tả của bạn với từng phiếu cơ hội, chấm điểm riêng cho bạn rồi thêm vào Tất cả cơ hội và Kho của tôi (đã loại trùng).</p>
         </div>
       </div>
       {error ? <div className="adm-alert" style={{ marginBottom: 16 }}>{error}</div> : null}
@@ -75,7 +81,7 @@ export default function MatchPage() {
             <MultiSelect icon="users" label="Quy mô khách hàng" options={m.options.sizes} value={c.sizes} onChange={(v) => set({ sizes: v })} placeholder="Chọn quy mô…" />
             <MultiSelect icon="layers" label="Loại cơ hội" options={m.options.sources} value={c.sources} onChange={(v) => set({ sources: v })} placeholder="Gõ loại cơ hội, vd: gói thầu…" />
             <div className="mt-group">
-              <label className="mt-label" htmlFor="sr-score"><Icon name="gauge" />Điểm chất lượng tối thiểu</label>
+              <label className="mt-label" htmlFor="sr-score"><Icon name="gauge" />Điểm phù hợp tối thiểu</label>
               <select id="sr-score" className="adm-input" value={c.min_score} onChange={(e) => set({ min_score: Number(e.target.value) })}>
                 {m.options.min_scores.map((s) => <option key={s} value={s}>{s ? `Từ ${s} điểm trở lên` : "Mọi mức điểm"}</option>)}
               </select>

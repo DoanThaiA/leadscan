@@ -223,8 +223,24 @@ def cmd_import_opportunities(args) -> int:
             db.rollback()
             print(f"Chạy thử: hợp lệ {len(bodies)} cơ hội, sẽ thêm {added}, bỏ qua {skipped}. Chưa lưu gì.")
         else:
+            from app.services import matching
+
+            for o in db.scalars(select(Opportunity).where(Opportunity.status == "published")).unique():
+                if not o.embedding:
+                    matching.match_opportunity(db, o)  # cơ hội mới mở bán → so khớp với các phiếu tìm cơ hội đã có
             db.commit()
             print(f"Đã thêm {added}, bỏ qua {skipped}.")
+    return 0
+
+
+def cmd_rematch(args) -> int:
+    """Tính lại toàn bộ điểm phù hợp (sau khi đổi thuật toán hoặc mô hình embedding)."""
+    from app.services import matching
+
+    with new_session() as db:
+        reqs, pairs = matching.rematch_all(db)
+        db.commit()
+    print(f"Đã so khớp lại {reqs} phiếu tìm cơ hội, tổng {pairs} cặp cơ hội phù hợp.")
     return 0
 
 
@@ -265,6 +281,7 @@ def main(argv: list[str] | None = None) -> int:
     o.add_argument("--dry-run", action="store_true", help="Chỉ kiểm tra, không lưu")
     o.add_argument("--by", default="", help="Email quản trị ghi là người tạo (không bắt buộc)")
     o.set_defaults(fn=cmd_import_opportunities)
+    sub.add_parser("rematch", help="Tính lại điểm phù hợp giữa phiếu tìm cơ hội và phiếu cơ hội").set_defaults(fn=cmd_rematch)
     c = sub.add_parser("crawl-profit500", help="Quét doanh nghiệp từ bảng xếp hạng PROFIT500 vào kho doanh nghiệp")
     c.add_argument("--chart", type=int, default=12, help="12 = Top 500 lợi nhuận tốt nhất, 13 = Top 500 tư nhân, 17 = Top 50 xuất sắc")
     c.add_argument("--year", type=int, default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).year)
