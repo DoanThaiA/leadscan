@@ -8,11 +8,14 @@ export const dynamic = "force-dynamic"; // luôn lấy danh sách mới nhất t
 const DESC =
   "Gia nhập LeadScan B2B – nền tảng dùng AI tìm, làm giàu và chấm điểm cơ hội kinh doanh cho doanh nghiệp. Xem các vị trí đang tuyển và ứng tuyển trực tuyến.";
 
+const OG_IMAGE = { url: "/brand/leadscan-og.jpg", width: 1200, height: 630, type: "image/jpeg", alt: "Tuyển dụng LeadScan B2B" };
+
 export const metadata: Metadata = {
   title: "Tuyển dụng – LeadScan B2B",
   description: DESC,
   alternates: { canonical: "/tuyen-dung" },
-  openGraph: { type: "website", locale: "vi_VN", siteName: "LeadScan B2B", url: "/tuyen-dung", title: "Tuyển dụng – LeadScan B2B", description: DESC },
+  openGraph: { type: "website", locale: "vi_VN", siteName: "LeadScan B2B", url: "/tuyen-dung", title: "Tuyển dụng – LeadScan B2B", description: DESC, images: [OG_IMAGE] },
+  twitter: { card: "summary_large_image", images: [OG_IMAGE.url] },
 };
 
 const WHY = [

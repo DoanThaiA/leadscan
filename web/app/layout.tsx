@@ -16,8 +16,9 @@ export const metadata: Metadata = {
     url: "/",
     title: "LeadScan B2B – Scan cơ hội kinh doanh cho doanh nghiệp bằng AI",
     description: "Chọn tiêu chí → AI thu thập đa nguồn → Enrich & Scoring → mua phiếu cơ hội từ 29.000đ.",
+    images: [{ url: "/brand/leadscan-og.jpg", width: 1200, height: 630, type: "image/jpeg", alt: "LeadScan B2B" }],
   },
-  twitter: { card: "summary_large_image" },
+  twitter: { card: "summary_large_image", images: ["/brand/leadscan-og.jpg"] },
 };
 
 export const viewport: Viewport = {

@@ -26,11 +26,19 @@ const SCHEMA_TYPE: Record<string, string> = {
 /** Bỏ ký hiệu định dạng (##, -, **) để đưa vào mô tả SEO / JSON-LD */
 const plain = (s: string) => s.replace(/^#{2,3}\s+|^[-•*+]\s+|\*\*/gm, "").trim();
 
+const shortHash = (s: string) => {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+};
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const job = await getJob((await params).slug);
   if (!job) return { title: "Không tìm thấy vị trí – LeadScan B2B" };
   const title = `Tuyển dụng ${job.title} – LeadScan B2B`;
   const description = (job.summary || job.subtitle || plain(job.description)).slice(0, 200);
+  // Ảnh preview khi gửi link: luôn là JPG 1200×630 (xem og.jpg/route.ts). ?v đổi theo ảnh bìa để Zalo/Facebook lấy ảnh mới.
+  const image = `/tuyen-dung/${job.slug}/og.jpg?v=${shortHash(job.cover_image ?? "")}`;
   return {
     title,
     description,
@@ -38,9 +46,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     robots: job.is_open ? undefined : { index: false },
     openGraph: {
       type: "website", locale: "vi_VN", siteName: "LeadScan B2B", url: `/tuyen-dung/${job.slug}`, title, description,
-      ...(job.cover_image ? { images: [{ url: job.cover_image, alt: `Tuyển dụng ${job.title}` }] } : {}),
+      images: [{ url: image, width: 1200, height: 630, type: "image/jpeg", alt: `Tuyển dụng ${job.title}` }],
     },
-    ...(job.cover_image ? { twitter: { card: "summary_large_image", images: [job.cover_image] } } : {}),
+    twitter: { card: "summary_large_image", title, description, images: [image] },
   };
 }
 
