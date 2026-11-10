@@ -53,7 +53,7 @@ export default function Workflow() {
               <div className="feat"><h4><svg className="icon"><use href="#i-globe" /></svg>Hơn 10 nhóm nguồn dữ liệu</h4><p>Web trả phí, mạng xã hội, nhóm chat, trang vàng, Bộ Công Thương, công báo, dự án thầu…</p></div>
               <div className="feat"><h4><svg className="icon"><use href="#i-db" /></svg>Cơ sở dữ liệu cơ hội</h4><p>Dữ liệu được chuẩn hoá, loại trùng và cập nhật liên tục, hai chiều với hệ thống AI.</p></div>
             </div>
-            <div className="visual blue">
+            <div className="visual alt">
               <div className="hub" id="hub">
                 <svg className="lines" id="hubLines"></svg>
                 <div className="hub-center"><div><svg className="icon"><use href="#i-bot" /></svg><b>Hệ thống<br />Crawl AI</b><small>→ CSDL cơ hội</small></div></div>
@@ -112,7 +112,7 @@ export default function Workflow() {
               <div className="feat"><h4><svg className="icon"><use href="#i-plus" /></svg>Yêu cầu enrich thêm bất cứ lúc nào</h4><p>Cần thêm đầu mối? Bấm “Enrich” để AI tìm tiếp cho bạn.</p></div>
               <a href="#phieu-co-hoi" className="link-arrow" style={{ marginTop: "10px" }}>Xem chi tiết phiếu cơ hội <svg className="icon"><use href="#i-arrow" /></svg></a>
             </div>
-            <div className="visual blue">
+            <div className="visual alt">
               <div className="ticket">
                 <div className="ticket-head"><div><h5>Phiếu cơ hội #LS-20481</h5><small>Cần 200.000 hộp carton 5 lớp/tháng</small></div><span className="score s-hi">92 điểm</span></div>
                 <div className="ticket-body">

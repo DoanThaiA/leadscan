@@ -11,7 +11,7 @@ export default function LandingEffects() {
       const w = svg.clientWidth, h = svg.clientHeight;
       svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
       const cx = w / 2, cy = h * 0.32;
-      let s = '<defs><radialGradient id="rg" cx="50%" cy="32%" r="60%"><stop offset="35%" stop-color="#FA5320" stop-opacity="0"/><stop offset="100%" stop-color="#FA5320" stop-opacity=".55"/></radialGradient></defs>';
+      let s = '<defs><radialGradient id="rg" cx="50%" cy="32%" r="60%"><stop offset="35%" stop-color="#004B87" stop-opacity="0"/><stop offset="100%" stop-color="#004B87" stop-opacity=".35"/></radialGradient></defs>';
       const n = 30;
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2 + 0.08;

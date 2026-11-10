@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-// Web app manifest: icon & màu khi "Thêm vào màn hình chính" (Brand Kit v1.0)
+// Web app manifest: icon & màu khi "Thêm vào màn hình chính" (Brand Kit v1.2)
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "LeadScan",
@@ -9,7 +9,7 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     display: "standalone",
     background_color: "#FFFFFF",
-    theme_color: "#FA5320",
+    theme_color: "#004B87",
     icons: [
       { src: "/brand/leadscan-app-icon-512.png", sizes: "512x512", type: "image/png" },
       { src: "/brand/leadscan-app-icon.svg", sizes: "any", type: "image/svg+xml" },

@@ -11,13 +11,13 @@ import { ApiError, errMsg, mapi } from "@/lib/member/api";
 
 /** Nhãn màu theo nguồn tin — dùng chung với ảnh minh hoạ ở trang chủ (Hero.tsx) */
 const SOURCE_BADGE: Record<string, [string, string, string]> = {
-  "App đăng mua": ["ĐM", "#FA5320", "#2B1B14"],
+  "App đăng mua": ["ĐM", "#FFCD00", "#004B87"],
   "Dự án & gói thầu": ["DA", "#2563EB", "#fff"],
   "Nhà máy / FDI mới": ["NM", "#16A34A", "#fff"],
   "Hội chợ & triển lãm": ["HC", "#0369A1", "#fff"],
   "Mạng xã hội & nhóm chat": ["MX", "#9333EA", "#fff"],
   "Website doanh nghiệp": ["WB", "#475569", "#fff"],
-  "Nguồn chính thống": ["CT", "#F59E0B", "#2B1B14"],
+  "Nguồn chính thống": ["CT", "#004B87", "#fff"],
   "Email hỏi hàng": ["EM", "#0F766E", "#fff"],
   "Kết nối giao thương": ["KN", "#B45309", "#fff"],
 };

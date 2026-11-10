@@ -5,8 +5,8 @@
 .adm-badge.sr-live::before { animation: sr-pulse 1.8s ease-in-out infinite; }
 @keyframes sr-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.7); } }
 @media (prefers-reduced-motion: reduce) { .adm-badge.sr-live::before { animation: none; } }
-.sr-new { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 99px; background: var(--brand); color: #fff; font: 600 11.5px/1.6 Inter, sans-serif; white-space: nowrap; }
-.mt-new { display: inline-block; vertical-align: 1px; margin-right: 6px; padding: 0 6px; border-radius: 4px; background: var(--brand); color: #fff; font: 700 10.5px/1.6 Inter, sans-serif; text-transform: uppercase; letter-spacing: 0.02em; }
+.sr-new { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 99px; background: var(--accent); color: var(--brand); font: 600 11.5px/1.6 Inter, sans-serif; white-space: nowrap; }
+.mt-new { display: inline-block; vertical-align: 1px; margin-right: 6px; padding: 0 6px; border-radius: 4px; background: var(--accent); color: var(--brand); font: 700 10.5px/1.6 Inter, sans-serif; text-transform: uppercase; letter-spacing: 0.02em; }
 
 .sr-stats { display: flex; gap: 10px; }
 .sr-stats > div { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 14px; min-width: 120px; display: grid; }
@@ -125,7 +125,7 @@
 .nt-list { list-style: none; margin: 0; padding: 0; max-height: min(420px, 70vh); overflow-y: auto; }
 .nt-item { display: flex; gap: 10px; align-items: flex-start; width: 100%; text-align: left; font: inherit; color: inherit; background: #fff; border: 0; border-bottom: 1px solid var(--line-2); padding: 11px 14px; cursor: pointer; }
 .nt-item:hover { background: #fafbfc; }
-.nt-item.unread { background: #fff8f5; }
+.nt-item.unread { background: #f6f9fc; }
 .nt-item.unread:hover { background: var(--brand-50); }
 .nt-ic { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-50); color: var(--brand-600); }
 .nt-body { display: grid; gap: 2px; min-width: 0; flex: 1; }
