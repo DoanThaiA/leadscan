@@ -38,6 +38,8 @@ const P: Record<string, ReactNode> = {
   srm: <><circle cx="9" cy="20" r="1.5" /><circle cx="18" cy="20" r="1.5" /><path d="M2 3h3l2.6 12.4a1.5 1.5 0 0 0 1.5 1.1h8.8a1.5 1.5 0 0 0 1.5-1.1L21 7H6" /></>,
   ecom: <><path d="M5 8h14l-1 13H6z" /><path d="M9 8V6a3 3 0 0 1 6 0v2" /></>,
   ticket: <><path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-2a2 2 0 0 0 0-4z" /><path d="M14 6v12" strokeDasharray="2 2" /></>,
+  uni: <><path d="M3 9l9-5 9 5-9 5z" /><path d="M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5M21 9v6" /></>,
+  growth: <><path d="M3 3v18h18" /><path d="M7 15l4-4 3 3 6-6M15 8h5v5" /></>,
   coins: <><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></>,
 };
 function Ic({ n, size = 22 }: { n: string; size?: number }) {
@@ -128,6 +130,12 @@ const SOFTWARE_CLIENTS: Brand[] = [
   { name: "Modero", src: "/gioi-thieu/logo-modero.png", h: 36 },
 ];
 
+const TEAM = [
+  { icon: "uni", t: "Nhân sự chất lượng cao", d: "Chuyên gia, kỹ sư trẻ được đào tạo từ các trường đại học hàng đầu." },
+  { icon: "growth", t: "Vận hành hiệu quả", d: "Ứng dụng Scrum, Agile và OKR trong quản trị, tối ưu hiệu suất." },
+  { icon: "bot", t: "Con người & AI", d: "Lấy con người làm trung tâm, AI làm đòn bẩy phát triển." },
+];
+
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "AboutPage",
@@ -164,6 +172,7 @@ export default function AboutPage() {
             <a href="#dao-tao-ai"><b>01</b>Đào tạo AI doanh nghiệp</a>
             <a href="#leadscan"><b>02</b>LeadScan.net</a>
             <a href="#phan-mem"><b>03</b>Phần mềm & chuyển đổi số</a>
+            <a href="#doi-ngu"><b>04</b>Năng lực đội ngũ</a>
           </nav>
         </div>
       </section>
@@ -289,6 +298,26 @@ export default function AboutPage() {
               <p className="ab-clients-title">Khách hàng tiêu biểu</p>
               <Logos items={SOFTWARE_CLIENTS} />
             </div>
+          </div>
+        </section>
+
+        {/* 04 — Năng lực đội ngũ */}
+        <section id="doi-ngu" className="container ab-sec">
+          <div className="ab-card ab-dark ab-team">
+            <div className="ab-team-text">
+              <h2 className="ab-title"><span className="ab-num">04</span>Năng lực đội ngũ</h2>
+              <p className="ab-motto">Con người xuất sắc – Được AI tăng lực – Kiến tạo tương lai</p>
+              <ul className="ab-team-list">
+                {TEAM.map((x) => (
+                  <li key={x.t}>
+                    {x.icon === "bot" ? <Sprite id="i-bot" size={34} /> : <Ic n={x.icon} size={34} />}
+                    <div><b>{x.t}</b><p>{x.d}</p></div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="ab-team-photo" src="/gioi-thieu/doi-ngu.webp" alt="Đội ngũ LeadScan" width={1400} height={1052} loading="lazy" />
           </div>
         </section>
       </div>

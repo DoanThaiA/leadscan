@@ -97,6 +97,16 @@
 .ab-modules b{font-family:var(--head);font-size:20px;color:var(--blue)}
 .ab-modules span{font-size:13.5px;color:var(--muted);line-height:1.4}
 
+/* 04 — Năng lực đội ngũ (khối xanh đậm, ảnh tập thể bên phải) */
+.ab-team{display:grid;grid-template-columns:1fr 1.2fr;gap:36px;align-items:center}
+.ab-motto{margin-top:24px;padding:16px 22px;border-radius:16px;background:var(--blue-50);color:var(--blue);font-family:var(--head);font-weight:700;font-size:clamp(17px,1.9vw,21px);line-height:1.4;text-align:center;text-wrap:balance}
+.ab-team-list{list-style:none;display:grid;gap:22px;margin-top:28px}
+.ab-team-list li{display:flex;gap:16px;align-items:flex-start}
+.ab-team-list .icon{flex:none;color:#fff;stroke-width:1.6;margin-top:4px}
+.ab-team-list b{display:block;font-family:var(--head);font-size:19px;color:#fff;line-height:1.3}
+.ab-team-list p{margin-top:4px;font-size:15px;color:var(--blue-100)}
+.ab-team-photo{width:100%;height:100%;min-height:360px;object-fit:cover;border-radius:18px}
+
 /* CTA cuối trang */
 .ab-cta{padding:80px 0;text-align:center}
 .ab-cta h2{color:#fff;max-width:760px;margin:0 auto;text-wrap:balance}
@@ -114,6 +124,8 @@
   .ab-sw{grid-template-columns:1fr}
   .ab-modules{border-left:0;padding-left:0;border-top:1px solid var(--line)}
   .ab-programs ul{grid-template-columns:repeat(2,1fr)}
+  .ab-team{grid-template-columns:1fr}
+  .ab-team-photo{height:auto;min-height:0;aspect-ratio:4/3}
 }
 @media (max-width:640px){
   .ab-hero{padding:40px 0 34px}
