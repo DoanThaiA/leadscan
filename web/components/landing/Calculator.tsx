@@ -2,14 +2,14 @@
 
 import { type CSSProperties, useState } from "react";
 
-const FEE = 10_000_000;
+const FEE = 89_000; // phí thành viên = số điểm được nạp (khớp LEADSCAN_MEMBERSHIP_FEE)
 const fmt = (n: number) => n.toLocaleString("vi-VN");
 const fill = (v: number, min: number, max: number) => ({ "--fill": `${((v - min) / (max - min)) * 100}%` }) as CSSProperties;
 
 /** Ước tính số dư thành viên sau khi mua phiếu. */
 export default function Calculator() {
-  const [qty, setQty] = useState(60);
-  const [avg, setAvg] = useState(49000);
+  const [qty, setQty] = useState(3);
+  const [avg, setAvg] = useState(29000);
   const total = qty * avg;
   const remain = FEE - total;
   const used = Math.min((total / FEE) * 100, 100);
@@ -20,7 +20,7 @@ export default function Calculator() {
       <h4><svg className="icon"><use href="#i-calc" /></svg>Ước tính số dư của bạn</h4>
       <div className="calc-row">
         <label htmlFor="qty">Số phiếu cơ hội mua <b id="vQty">{qty} phiếu</b></label>
-        <input type="range" id="qty" min={1} max={500} value={qty} style={fill(qty, 1, 500)} onChange={(e) => setQty(+e.target.value)} />
+        <input type="range" id="qty" min={1} max={100} value={qty} style={fill(qty, 1, 100)} onChange={(e) => setQty(+e.target.value)} />
       </div>
       <div className="calc-row">
         <label htmlFor="avg">Giá trung bình mỗi phiếu <b id="vAvg">{fmt(avg)}đ</b></label>

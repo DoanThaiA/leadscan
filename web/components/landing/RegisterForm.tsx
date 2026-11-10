@@ -232,7 +232,7 @@ export default function RegisterForm() {
       <div className={code ? "reg-done show" : "reg-done"} id="regDone" role="status" tabIndex={-1} ref={doneRef}>
         <div className="tick"><svg className="icon"><use href="#i-check" /></svg></div>
         <h3>Đăng ký thành công!</h3>
-        <p>Cảm ơn bạn. Tài khoản thành viên đã được tạo với email bạn đăng ký. Thanh toán phí thành viên để nhận 10.000.000 điểm và bắt đầu mua phiếu cơ hội.</p>
+        <p>Cảm ơn bạn. Tài khoản thành viên đã được tạo với email bạn đăng ký. Thanh toán phí thành viên 89.000đ để nhận 89.000 điểm và bắt đầu mua phiếu cơ hội.</p>
         <div className="reg-code" id="regCode">{code ?? ""}</div><br />
         <a href={loggedIn ? "/thanh-vien/nap-tien" : "/thanh-vien/dang-nhap"} className="btn btn-primary">
           {loggedIn ? "Thanh toán phí thành viên" : "Đăng nhập cổng thành viên"}

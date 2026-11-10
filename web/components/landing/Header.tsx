@@ -39,7 +39,7 @@ export default function Header({ base = "", extra = [] }: { base?: string; extra
       <a href="#main" className="skip">Bỏ qua tới nội dung chính</a>
       <div className="announce">
         <a href={`${base}#bang-gia`}>
-          Phí thành viên <b>10.000.000đ/năm</b> được trừ dần khi mua phiếu cơ hội · Phiếu chỉ từ <b>29.000đ</b>{" "}
+          Bắt đầu ngay chỉ với <b>1 ly trà sữa full topping</b>{" "}
           <svg className="icon" style={{ width: 14, height: 14 }}><use href="#i-arrow" /></svg>
         </a>
       </div>

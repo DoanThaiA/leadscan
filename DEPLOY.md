@@ -289,7 +289,7 @@ Admin gắn ảnh/tài liệu vào phiếu ngay trong form tạo/sửa phiếu (
 | Biến | Mặc định | Khi nào đổi |
 |---|---|---|
 | `API_PORT` / `WEB_PORT` | `8012` / `3012` | VPS đã có ứng dụng khác dùng cổng này (nhớ sửa `upstream` trong `deploy/nginx.conf`) |
-| `LEADSCAN_MEMBERSHIP_FEE`, `..._POINTS`, `..._DAYS` | 10tr / 10tr điểm / 365 ngày | Đổi giá gói thành viên |
+| `LEADSCAN_MEMBERSHIP_FEE`, `..._POINTS`, `..._DAYS` | 89.000đ / 89.000 điểm / 365 ngày | Đổi giá gói thành viên |
 | `LEADSCAN_TOPUP_PACKS`, `LEADSCAN_TOPUP_MIN` | 5/10/20/50tr, tối thiểu 1tr | Đổi gói nạp |
 | `LEADSCAN_ORDER_EXPIRE_HOURS` | 24 | Thời hạn đơn thanh toán |
 | `LEADSCAN_COHERE_MONTHLY_LIMIT` | 1000 | Hạn mức lượt gọi Cohere/tháng (khoá Trial). Khoá Production: đặt `0` |

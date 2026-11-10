@@ -16,8 +16,8 @@ export default function Pricing() {
               <span className="badge">Gói thành viên</span>
               <h3>Thành viên LeadScan</h3>
               <p className="desc">Dành cho doanh nghiệp muốn tìm cơ hội kinh doanh đều đặn cả năm.</p>
-              <div className="price">10.000.000đ <small>/năm</small></div>
-              <div className="note"><svg className="icon"><use href="#i-info" /></svg><span>Phí đăng ký được trừ dần vào giá các phiếu cơ hội bạn mua trong năm — bạn không mất thêm khoản nào.</span></div>
+              <div className="price">89.000đ <small>/năm</small></div>
+              <div className="note"><svg className="icon"><use href="#i-info" /></svg><span>Toàn bộ 89.000đ phí đăng ký được nạp thành 89.000 điểm, trừ dần vào giá các phiếu cơ hội bạn mua — bạn không mất thêm khoản nào.</span></div>
               <Calculator />
               <div className="plan-chips"><span><svg className="icon"><use href="#i-check" /></svg>Không phí ẩn</span><span><svg className="icon"><use href="#i-check" /></svg>Trừ đúng giá phiếu</span><span><svg className="icon"><use href="#i-check" /></svg>Nạp thêm khi cần</span></div>
               <a href="#dang-ky" className="btn btn-primary">Đăng ký thành viên ngay</a>

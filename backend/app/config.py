@@ -49,8 +49,8 @@ class Settings(BaseSettings):
     member_url: str = "https://leadscan.net/thanh-vien"  # dùng cho link đặt lại mật khẩu trong email
 
     # Gói thành viên & nạp điểm (1 điểm = 1đ)
-    membership_fee: int = 10_000_000
-    membership_points: int = 10_000_000
+    membership_fee: int = 89_000  # phí thành viên/năm
+    membership_points: int = 89_000  # số điểm nạp vào ví khi đóng phí (bằng phí)
     membership_days: int = 365
     topup_packs: list[int] = Field(default_factory=lambda: [5_000_000, 10_000_000, 20_000_000, 50_000_000])
     topup_min: int = 1_000_000

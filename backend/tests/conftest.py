@@ -34,6 +34,9 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("LEADSCAN_PAYMENT_ACCOUNT_NAME", "CONG TY LEADSCAN")
     monkeypatch.setenv("LEADSCAN_SMTP_HOST", "")
     monkeypatch.setenv("LEADSCAN_RESEND_API_KEY", "")  # test không bao giờ gửi mail thật
+    # Test mua phiếu/thanh toán cần số dư đủ mua phiếu mẫu (625k–1,9tr) → cố định phí 10tr khi test; giá thật nằm ở config.py
+    monkeypatch.setenv("LEADSCAN_MEMBERSHIP_FEE", "10000000")
+    monkeypatch.setenv("LEADSCAN_MEMBERSHIP_POINTS", "10000000")
     monkeypatch.setenv("COHERE_API_KEY", "")  # test không gọi Cohere thật (dùng vector hash hoặc respx giả lập)
     _clear_caches()
     from app import models, worker  # noqa: F401

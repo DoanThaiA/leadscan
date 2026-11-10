@@ -40,7 +40,7 @@ docker-compose.yml  db (pgvector) · redis · migrate · api · worker · beat �
 ## Cổng thành viên (`/thanh-vien`)
 
 - **Đăng ký** trên landing kèm mật khẩu → tạo luôn tài khoản và tự đăng nhập. Có quên / đặt lại mật khẩu qua email.
-- **Phí thành viên** 10.000.000đ → cộng **10.000.000 điểm** (1 điểm = 1đ), hiệu lực 365 ngày; gia hạn cộng dồn.
+- **Phí thành viên** 89.000đ → cộng **89.000 điểm** (1 điểm = 1đ), hiệu lực 365 ngày; gia hạn cộng dồn.
 - **Nạp thêm điểm** (gói 5/10/20/50 triệu hoặc tuỳ chọn) — chỉ khi đang là thành viên.
 - **Thanh toán qua InfoCMS (VietQR)**: mỗi đơn có mã riêng làm nội dung chuyển khoản; trang thanh toán hiện QR + số tài khoản, tự cập nhật khi InfoCMS báo đã nhận tiền.
 - **Xuất hoá đơn**: sau khi thanh toán, khách nhập thông tin xuất hoá đơn → email gửi tới `LEADSCAN_INVOICE_EMAIL` (mặc định vylyy9999@gmail.com) để kế toán xuất thủ công; admin nhập số hoá đơn khi đã xuất.

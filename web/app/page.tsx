@@ -24,7 +24,7 @@ const jsonLd = {
       provider: { "@type": "Organization", name: "LeadScan B2B" },
       areaServed: "VN",
       offers: [
-        { "@type": "Offer", name: "Thành viên LeadScan (1 năm)", price: "10000000", priceCurrency: "VND" },
+        { "@type": "Offer", name: "Thành viên LeadScan (1 năm)", price: "89000", priceCurrency: "VND" },
         {
           "@type": "Offer",
           name: "Phiếu cơ hội",

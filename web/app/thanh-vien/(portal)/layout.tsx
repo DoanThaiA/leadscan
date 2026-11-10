@@ -21,7 +21,7 @@ const NAV = [
   { href: "/thanh-vien/vi", label: "Số dư tài khoản", icon: "wallet" },
   { href: "/thanh-vien/tai-khoan", label: "Tài khoản", icon: "user" },
 ];
-const MEMBERSHIP_POINTS = 10_000_000;
+const MEMBERSHIP_POINTS = 89_000;
 
 function Shell({ children }: { children: ReactNode }) {
   const { me } = useMember();
@@ -91,7 +91,7 @@ function Shell({ children }: { children: ReactNode }) {
         {!me.company.membership_active && !path.startsWith("/thanh-vien/nap-tien") ? (
           <div className="adm-banner">
             <span>
-              <b>Kích hoạt thành viên để mua phiếu cơ hội.</b> Phí 10.000.000đ/năm được cộng đủ 10.000.000 điểm vào ví.
+              <b>Kích hoạt thành viên để mua phiếu cơ hội.</b> Phí 89.000đ/năm được cộng đủ 89.000 điểm vào ví.
             </span>
             <Link className="adm-btn primary" href="/thanh-vien/nap-tien">Thanh toán phí thành viên</Link>
           </div>

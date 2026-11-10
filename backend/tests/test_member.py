@@ -460,3 +460,11 @@ def test_gioi_han_so_yeu_cau_tim_co_hoi_moi_ngay(member):
         assert member.post("/api/member/search-requests", json={"note": f"Yêu cầu số {i} để thử giới hạn"}).status_code == 201
     assert member.post("/api/member/search-requests", json={"note": "Yêu cầu thứ mười một"}).status_code == 429
 
+
+
+def test_gia_thanh_vien_mac_dinh_89k():
+    """Giá gói thành viên mặc định: 89.000đ/năm, nạp đủ 89.000 điểm vào ví."""
+    from app.config import Settings
+
+    assert Settings.model_fields["membership_fee"].default == 89_000
+    assert Settings.model_fields["membership_points"].default == 89_000
