@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.routes import admin, admin_commerce, admin_knowledge, member, payments, public
+from app.routes import admin, admin_commerce, admin_jobs, admin_knowledge, careers, member, payments, public
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -18,6 +18,8 @@ app.include_router(public.router)
 app.include_router(admin.router)
 app.include_router(admin_commerce.router)
 app.include_router(admin_knowledge.router)
+app.include_router(admin_jobs.router)
+app.include_router(careers.router)
 app.include_router(member.router)
 app.include_router(payments.router)
 

@@ -15,7 +15,9 @@ RUN npm run build
 
 FROM node:24-alpine
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
+# Trang /tuyen-dung render phía máy chủ và gọi thẳng FastAPI lúc chạy → cần API_INTERNAL_URL ở cả image chạy
+ARG API_INTERNAL_URL=http://api:8000
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 API_INTERNAL_URL=$API_INTERNAL_URL
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 # Bản standalone không tự kèm public/ (logo, file brand) → copy riêng

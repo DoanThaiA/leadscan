@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     # Yêu cầu xuất hoá đơn được gửi tới email này (kế toán xuất thủ công)
     invoice_email: str = "vylyy9999@gmail.com"
 
+    # Tuyển dụng: hồ sơ ứng viên gửi về email này (từng bài có thể đặt email riêng). Trống = dùng notify_email.
+    recruit_email: str = ""
+    apply_rate_limit_per_hour: int = 5  # số hồ sơ tối đa mỗi IP / giờ
+    apply_cv_max_mb: int = 5
+    site_url: str = "https://leadscan.net"  # link bài tuyển dụng trong email
+
     # So khớp cơ hội ↔ yêu cầu (hybrid: tiêu chí + từ khoá + embedding ngữ nghĩa, vector lưu bằng pgvector)
     # Embedding Cohere: chỉ cần đặt COHERE_API_KEY. Không có khoá → dùng vector "hash" chạy tại chỗ (dev/test).
     cohere_api_key: str = Field("", validation_alias=AliasChoices("COHERE_API_KEY", "LEADSCAN_COHERE_API_KEY"))

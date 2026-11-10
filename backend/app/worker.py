@@ -403,6 +403,60 @@ def match_opportunity_task(self, opp_id: int) -> None:
             log.warning("Không xếp được email báo cơ hội mới: %s", e)
 
 
+def deliver_job_application(app_id: int) -> bool:
+    """Gửi hồ sơ ứng viên về hộp thư tuyển dụng; gửi được thì ghi email_sent_at (admin thấy "Đã gửi")."""
+    from app.db import new_session, utcnow
+    from app.models import JobApplication
+    from app.services import cv_files
+    from app.services.notify import send_job_application
+    from app.services.storage import StorageError
+
+    with new_session() as db:
+        a = db.get(JobApplication, app_id)
+        if not a:
+            return False
+        if a.email_sent_at:
+            return True
+        cv_data = None
+        if a.cv_key:  # lấy file CV từ R2 để đính kèm email
+            try:
+                cv_data = cv_files.fetch(a.cv_key)
+            except StorageError:
+                log.exception("Không lấy được CV của hồ sơ #%s trên R2", app_id)
+                return False
+        if not send_job_application(get_settings(), a, cv_data):
+            return False
+        a.email_sent_at = utcnow()
+        db.commit()
+        return True
+
+
+def deliver_application_receipt(app_id: int) -> bool:
+    from app.db import new_session
+    from app.models import JobApplication
+    from app.services.notify import send_application_receipt
+
+    with new_session() as db:
+        a = db.get(JobApplication, app_id)
+        return bool(a) and send_application_receipt(get_settings(), a)
+
+
+@celery_app.task(name="leadscan.send_job_application", bind=True, max_retries=3)
+def send_job_application_task(self, app_id: int) -> None:
+    from app.services.notify import mail_provider
+
+    cfg = get_settings()
+    if not deliver_job_application(app_id) and mail_provider(cfg) and not cfg.celery_eager:
+        # Resend/SMTP/R2 lỗi tạm → thử lại sau 2, 4, 8 phút
+        if self.request.retries < self.max_retries:
+            raise self.retry(countdown=120 * 2**self.request.retries)
+
+
+@celery_app.task(name="leadscan.send_application_receipt")
+def send_application_receipt_task(app_id: int) -> None:
+    deliver_application_receipt(app_id)
+
+
 def enqueue(task, *args) -> bool:
     """Đưa việc vào hàng đợi; Redis lỗi thì chỉ ghi log (dữ liệu chính đã nằm trong DB). Trả về False nếu lỗi."""
     try:
@@ -417,3 +471,15 @@ def enqueue_new_registration(company_id: int) -> None:
     """Báo quản trị + chào mừng khách. Redis lỗi cũng không sao: hồ sơ đã lưu trong DB, chỉ mất email."""
     enqueue(notify_new_registration_task, company_id)
     enqueue(send_welcome_task, company_id)
+
+
+def enqueue_job_application(app_id: int) -> None:
+    """Hồ sơ đã lưu DB → gửi email về hộp thư tuyển dụng + xác nhận cho ứng viên (chạy nền).
+
+    Không có Redis (vd. máy dev) thì gửi luôn trong request để hồ sơ vẫn tới hộp thư.
+    """
+    if enqueue(send_job_application_task, app_id):
+        enqueue(send_application_receipt_task, app_id)
+    else:
+        deliver_job_application(app_id)
+        deliver_application_receipt(app_id)

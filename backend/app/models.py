@@ -21,13 +21,27 @@ MemberSession / PasswordReset   phiên đăng nhập & đặt lại mật khẩu
 RateHit                    đếm lượt để giới hạn tần suất (đăng ký, đăng nhập)
 ApiUsage                   đếm số lần gọi API ngoài theo tháng (Cohere: khoá Trial giới hạn 1.000 lần/tháng)
 KnowledgeCompany           kho doanh nghiệp để AI quét (crawl từ bảng xếp hạng như PROFIT500 hoặc nhập tay)
+JobPost                    bài tuyển dụng đăng trên /tuyen-dung
+  └─ JobApplication         hồ sơ ứng viên gửi qua form (đồng thời email về hộp thư tuyển dụng)
 
 Điểm: 1 điểm = 1đ. Số dư lưu ở Company.points_balance và luôn bằng tổng WalletTransaction.amount.
 """
 
 from datetime import date, datetime
 
-from sqlalchemy import JSON, BigInteger, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base, EmbeddingVector, utcnow
@@ -611,3 +625,93 @@ class KnowledgeCompany(Base):
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+# ------------------------------------------------------------------ tuyển dụng
+
+JOB_STATUSES = {"draft": "Bản nháp", "published": "Đang tuyển", "closed": "Đã đóng"}
+JOB_TYPES = {
+    "full_time": "Toàn thời gian",
+    "part_time": "Bán thời gian",
+    "intern": "Thực tập",
+    "contract": "Hợp đồng / Freelance",
+    "remote": "Làm việc từ xa",
+}
+APPLICATION_STATUSES = {
+    "new": "Mới nhận",
+    "reviewing": "Đang xem xét",
+    "interview": "Hẹn phỏng vấn",
+    "hired": "Đã tuyển",
+    "rejected": "Chưa phù hợp",
+}
+
+
+class JobPost(Base):
+    """Bài tuyển dụng. Chỉ bài "published" (và chưa quá hạn nộp) hiện trên /tuyen-dung.
+
+    Các mục nội dung (mục tiêu, mô tả, yêu cầu, quyền lợi, cách ứng tuyển) là văn bản thuần với định dạng nhẹ:
+    dòng "## " = tiêu đề nhỏ, dòng "- " = gạch đầu dòng, **chữ đậm**, dòng trống = đoạn mới.
+    """
+
+    __tablename__ = "job_posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(160), unique=True)  # đường dẫn /tuyen-dung/<slug>
+    status: Mapped[str] = mapped_column(String(16), default="draft", index=True)
+
+    title: Mapped[str] = mapped_column(String(200))
+    subtitle: Mapped[str] = mapped_column(String(300), default="")
+    department: Mapped[str] = mapped_column(String(100), default="")
+    location: Mapped[str] = mapped_column(String(300), default="")
+    employment_type: Mapped[str] = mapped_column(String(20), default="full_time")
+    salary: Mapped[str] = mapped_column(String(150), default="")  # vd "10 – 14 triệu/tháng", "Thoả thuận"
+    work_time: Mapped[str] = mapped_column(String(200), default="")
+    reports_to: Mapped[str] = mapped_column(String(150), default="")
+    quantity: Mapped[int | None] = mapped_column(Integer)
+    deadline: Mapped[date | None] = mapped_column(Date)  # hạn nộp hồ sơ (hết ngày này thì tự ẩn)
+
+    summary: Mapped[str] = mapped_column(Text, default="")  # 1–2 câu trên thẻ danh sách
+    objective: Mapped[str] = mapped_column(Text, default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    requirements: Mapped[str] = mapped_column(Text, default="")
+    benefits: Mapped[str] = mapped_column(Text, default="")
+    how_to_apply: Mapped[str] = mapped_column(Text, default="")
+
+    apply_email: Mapped[str] = mapped_column(String(200), default="")  # trống = LEADSCAN_RECRUIT_EMAIL
+
+    published_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class JobApplication(Base):
+    """Hồ sơ ứng tuyển. Email gửi về hộp thư tuyển dụng (kèm file CV lấy từ R2); DB giữ thông tin để tra cứu / gửi lại."""
+
+    __tablename__ = "job_applications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("job_posts.id", ondelete="SET NULL"), index=True)
+    job_title: Mapped[str] = mapped_column(String(200))  # giữ lại tên vị trí kể cả khi bài bị xoá
+    status: Mapped[str] = mapped_column(String(16), default="new", index=True)
+
+    full_name: Mapped[str] = mapped_column(String(100))
+    phone: Mapped[str] = mapped_column(String(20))
+    email: Mapped[str] = mapped_column(String(150))
+    cv_url: Mapped[str] = mapped_column(String(500), default="")
+    portfolio_url: Mapped[str] = mapped_column(String(500), default="")
+    intro: Mapped[str] = mapped_column(Text, default="")
+
+    # File CV tải lên (PDF/DOC/DOCX ≤ 5 MB) lưu trên Cloudflare R2, thư mục CV/ (bucket riêng tư)
+    cv_key: Mapped[str] = mapped_column(String(400), default="")  # vd CV/2026-11/<uuid>/CV Nguyen Van A.pdf
+    cv_filename: Mapped[str] = mapped_column(String(200), default="")
+    cv_mime: Mapped[str] = mapped_column(String(100), default="")
+    cv_size: Mapped[int] = mapped_column(Integer, default=0)
+
+    note: Mapped[str] = mapped_column(Text, default="")  # ghi chú nội bộ của người tuyển dụng
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    user_agent: Mapped[str] = mapped_column(String(300), default="")
+    email_sent_at: Mapped[datetime | None] = mapped_column(DateTime)  # đã gửi về hộp thư tuyển dụng
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    job: Mapped[JobPost | None] = relationship(lazy="joined")

@@ -1,5 +1,6 @@
 """Gửi email (Resend hoặc SMTP). Lỗi gửi mail chỉ ghi log, không làm hỏng luồng chính."""
 
+import base64
 import logging
 import smtplib
 import ssl
@@ -20,14 +21,27 @@ def _sender(cfg: Settings) -> str:
     return formataddr((cfg.mail_from_name, cfg.notify_from)) if cfg.mail_from_name else cfg.notify_from
 
 
-def _send_resend(cfg: Settings, to: str, subject: str, body: str) -> bool:
+# Tệp đính kèm: (tên file, mime, nội dung)
+Attachment = tuple[str, str, bytes]
+
+
+def _send_resend(
+    cfg: Settings, to: str, subject: str, body: str, reply_to: str = "", attachments: list[Attachment] | None = None
+) -> bool:
     """Gửi qua Resend HTTP API (https://resend.com/docs/api-reference/emails/send-email)."""
+    payload: dict = {"from": _sender(cfg), "to": [to], "subject": subject, "text": body}
+    if reply_to:
+        payload["reply_to"] = reply_to
+    if attachments:
+        payload["attachments"] = [
+            {"filename": name, "content": base64.b64encode(data).decode(), "content_type": mime} for name, mime, data in attachments
+        ]
     try:
         r = httpx.post(
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {cfg.resend_api_key}"},
-            json={"from": _sender(cfg), "to": [to], "subject": subject, "text": body},
-            timeout=15,
+            json=payload,
+            timeout=30 if attachments else 15,
         )
     except httpx.HTTPError as e:
         log.error("Không gửi được email qua Resend: %s", e)
@@ -39,12 +53,19 @@ def _send_resend(cfg: Settings, to: str, subject: str, body: str) -> bool:
     return False
 
 
-def _send_smtp(cfg: Settings, to: str, subject: str, body: str) -> bool:
+def _send_smtp(
+    cfg: Settings, to: str, subject: str, body: str, reply_to: str = "", attachments: list[Attachment] | None = None
+) -> bool:
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = _sender(cfg)
     msg["To"] = to
+    if reply_to:
+        msg["Reply-To"] = reply_to
     msg.set_content(body)
+    for name, mime, data in attachments or []:
+        maintype, _, subtype = mime.partition("/")
+        msg.add_attachment(data, maintype=maintype or "application", subtype=subtype or "octet-stream", filename=name)
     try:
         ctx = ssl.create_default_context()
         if cfg.smtp_ssl:
@@ -69,12 +90,22 @@ def mail_provider(cfg: Settings) -> str | None:
     return "smtp" if cfg.smtp_host else None
 
 
-def send_mail(cfg: Settings, subject: str, body: str, to: str | None = None) -> bool:
+def send_mail(
+    cfg: Settings,
+    subject: str,
+    body: str,
+    to: str | None = None,
+    reply_to: str = "",
+    attachments: list[Attachment] | None = None,
+) -> bool:
     to = to or cfg.notify_email
     provider = mail_provider(cfg)
     if not to or not provider:
         return False
-    return (_send_resend if provider == "resend" else _send_smtp)(cfg, to, subject, body)
+    send = _send_resend if provider == "resend" else _send_smtp
+    if reply_to or attachments:
+        return send(cfg, to, subject, body, reply_to=reply_to, attachments=attachments)
+    return send(cfg, to, subject, body)
 
 
 def notify_new_registration(cfg: Settings, c: Company) -> bool:
@@ -280,3 +311,76 @@ def send_match_digest(cfg: Settings, email: str, name: str, groups: list[tuple])
     ]
     subject = f"[LeadScan] {total} cơ hội mới phù hợp với yêu cầu của bạn"
     return send_mail(cfg, subject, "\n".join(lines) + "\n", to=email)
+
+
+# ------------------------------------------------------------------ tuyển dụng
+
+
+def recruit_inbox(cfg: Settings, job=None) -> str:
+    """Hộp thư nhận hồ sơ: email riêng của bài → LEADSCAN_RECRUIT_EMAIL → LEADSCAN_NOTIFY_EMAIL."""
+    return (getattr(job, "apply_email", "") or cfg.recruit_email or cfg.notify_email or "").strip()
+
+
+def _size(n: int) -> str:
+    return f"{n / 1024 / 1024:.1f} MB" if n >= 1024 * 1024 else f"{max(1, n // 1024)} KB"
+
+
+def send_job_application(cfg: Settings, a, cv_data: bytes | None = None) -> bool:
+    """Gửi hồ sơ ứng viên về hộp thư tuyển dụng (Reply-To = email ứng viên, đính kèm file CV nếu có)."""
+    to = recruit_inbox(cfg, a.job)
+    if not to:
+        log.warning("Chưa cấu hình email nhận hồ sơ (LEADSCAN_RECRUIT_EMAIL) — hồ sơ #%s chỉ lưu trong hệ thống", a.id)
+        return False
+    job_link = f"{cfg.site_url.rstrip('/')}/tuyen-dung/{a.job.slug}" if a.job else "—"
+    lines = [
+        "HỒ SƠ ỨNG TUYỂN MỚI — LeadScan",
+        "===============================",
+        "",
+        f"Vị trí            : {a.job_title}",
+        f"Họ và tên         : {a.full_name}",
+        f"Số điện thoại     : {a.phone}",
+        f"Email             : {a.email}",
+        f"Link CV           : {a.cv_url or '—'}",
+        f"File CV           : {f'{a.cv_filename} ({_size(a.cv_size)}) — đính kèm email này' if a.cv_filename else '—'}",
+        f"Portfolio / SP    : {a.portfolio_url or '—'}",
+        f"Gửi lúc           : {_vn(a.created_at)}",
+        "",
+        "GIỚI THIỆU NGẮN",
+        a.intro or "—",
+        "",
+        f"Bài tuyển dụng    : {job_link}",
+        f"Quản lý hồ sơ     : {cfg.admin_url.rstrip('/')}/tuyen-dung/ho-so?id={a.id}",
+        "",
+        "Trả lời email này để liên hệ trực tiếp với ứng viên.",
+    ]
+    attachments = [(a.cv_filename, a.cv_mime or "application/octet-stream", cv_data)] if a.cv_filename and cv_data else None
+    return send_mail(
+        cfg,
+        f"[Tuyển dụng] {a.job_title} — {a.full_name}",
+        "\n".join(lines) + "\n",
+        to=to,
+        reply_to=a.email,
+        attachments=attachments,
+    )
+
+
+def send_application_receipt(cfg: Settings, a) -> bool:
+    """Xác nhận cho ứng viên: LeadScan đã nhận hồ sơ."""
+    lines = [
+        f"Chào {a.full_name},",
+        "",
+        f"Cảm ơn bạn đã quan tâm và ứng tuyển vị trí {a.job_title} tại LeadScan.",
+        "Chúng tôi đã nhận được hồ sơ của bạn. Bộ phận tuyển dụng sẽ xem xét và liên hệ với bạn",
+        "qua số điện thoại hoặc email này trong vòng 3–5 ngày làm việc nếu hồ sơ phù hợp.",
+        "",
+        "Thông tin bạn đã gửi:",
+        f"  • Số điện thoại : {a.phone}",
+        f"  • Email         : {a.email}",
+        f"  • CV            : {a.cv_filename or a.cv_url or '—'}",
+        "",
+        f"Xem các vị trí khác: {cfg.site_url.rstrip('/')}/tuyen-dung",
+        "",
+        "Trân trọng,",
+        "Bộ phận Tuyển dụng LeadScan",
+    ]
+    return send_mail(cfg, f"[LeadScan] Đã nhận hồ sơ ứng tuyển {a.job_title}", "\n".join(lines) + "\n", to=a.email)

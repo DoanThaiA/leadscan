@@ -18,6 +18,7 @@ const NAV = [
   { href: "/admin/hoa-don", label: "Hoá đơn", icon: "receipt" },
   { href: "/admin/yeu-cau-tim-co-hoi", label: "Yêu cầu tìm cơ hội", icon: "search" },
   { href: "/admin/enrich", label: "Yêu cầu enrich", icon: "spark" },
+  { href: "/admin/tuyen-dung", label: "Tuyển dụng", icon: "brief" },
   { href: "/admin/nhan-vien", label: "Nhân viên", icon: "users", adminOnly: true },
   { href: "/admin/tai-khoan", label: "Tài khoản của tôi", icon: "key" },
 ];

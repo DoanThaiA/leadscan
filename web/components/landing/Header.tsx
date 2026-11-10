@@ -11,7 +11,12 @@ const LINKS = [
   ["#faq", "Hỏi đáp"],
 ] as const;
 
-export default function Header() {
+/**
+ * base: tiền tố cho link neo khi dùng ngoài trang chủ (vd "/" trên /tuyen-dung → "/#bang-gia").
+ * extra: link thêm vào menu (vd mục "Tuyển dụng" đang xem).
+ */
+export default function Header({ base = "", extra = [] }: { base?: string; extra?: { href: string; label: string; active?: boolean }[] }) {
+  const links = [...LINKS.map(([href, label]) => ({ href: base + href, label, active: false })), ...extra];
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -33,7 +38,7 @@ export default function Header() {
     <>
       <a href="#main" className="skip">Bỏ qua tới nội dung chính</a>
       <div className="announce">
-        <a href="#bang-gia">
+        <a href={`${base}#bang-gia`}>
           Phí thành viên <b>10.000.000đ/năm</b> được trừ dần khi mua phiếu cơ hội · Phiếu chỉ từ <b>29.000đ</b>{" "}
           <svg className="icon" style={{ width: 14, height: 14 }}><use href="#i-arrow" /></svg>
         </a>
@@ -41,17 +46,17 @@ export default function Header() {
 
       <header id="top" className={scrolled ? "scrolled" : undefined}>
         <div className="container nav">
-          <a href="#top" className="logo" aria-label="LeadScan – về đầu trang">
+          <a href={base || "#top"} className="logo" aria-label={base ? "LeadScan – trang chủ" : "LeadScan – về đầu trang"}>
             <Logo height={26} />
           </a>
           <nav className="nav-links" aria-label="Điều hướng chính">
-            {LINKS.map(([href, label]) => (
-              <a key={href} href={href}>{label}</a>
+            {links.map((l) => (
+              <a key={l.href} href={l.href} className={l.active ? "on" : undefined} aria-current={l.active ? "page" : undefined}>{l.label}</a>
             ))}
           </nav>
           <div className="nav-actions">
             <a href="/thanh-vien/dang-nhap" className="login">Đăng nhập</a>
-            <a href="#dang-ky" className="btn btn-primary btn-sm">Đăng ký thành viên</a>
+            <a href={`${base}#dang-ky`} className="btn btn-primary btn-sm">Đăng ký thành viên</a>
           </div>
           <button
             className="burger"
@@ -65,11 +70,11 @@ export default function Header() {
           </button>
         </div>
         <div className={open ? "mobile-menu open" : "mobile-menu"} id="mobileMenu">
-          {LINKS.map(([href, label]) => (
-            <a key={href} href={href} onClick={close}>{label}</a>
+          {links.map((l) => (
+            <a key={l.href} href={l.href} onClick={close}>{l.label}</a>
           ))}
           <a href="/thanh-vien/dang-nhap" onClick={close}>Đăng nhập</a>
-          <a href="#dang-ky" className="btn btn-primary" onClick={close}>Đăng ký thành viên</a>
+          <a href={`${base}#dang-ky`} className="btn btn-primary" onClick={close}>Đăng ký thành viên</a>
         </div>
       </header>
     </>

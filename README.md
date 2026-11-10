@@ -64,6 +64,16 @@ docker compose exec api python -m app.cli crawl-profit500 --chart 12 --year 2026
 - Mặc định chỉ thêm doanh nghiệp mới (khớp theo mã doanh nghiệp tại nguồn, rồi theo MST); `--update` làm mới bản ghi đã có nhưng **giữ nguyên** trạng thái AI và ghi chú nội bộ.
 - Đi chậm 1 giây/request (`--delay`), 500 doanh nghiệp mất khoảng 10 phút. Mỗi bản ghi lưu link nguồn — khi dùng lại thông tin cần ghi nguồn "Vietnam Report".
 
+## Tuyển dụng (`/tuyen-dung`)
+
+- **Trang công khai** `/tuyen-dung`: danh sách vị trí đang mở (lọc theo phòng ban), "Vì sao chọn LeadScan", quy trình 4 bước. `/tuyen-dung/<slug>`: mô tả đánh số 01–05 (mục tiêu, mô tả, yêu cầu, quyền lợi, cách ứng tuyển), cột "Thông tin chung", form ứng tuyển, JSON-LD `JobPosting` cho Google Jobs.
+- **Form ứng tuyển**: họ tên, SĐT, email, link CV **hoặc** file CV (PDF/DOC/DOCX ≤ 5 MB), portfolio, giới thiệu ngắn. Chống spam: honeypot, thời gian điền tối thiểu, tối đa 5 hồ sơ/IP/giờ.
+- **File CV lưu trên Cloudflare R2**, thư mục `CV/<năm-tháng>/<uuid>/<tên file>` (cùng bucket riêng tư `LEADSCAN_R2_*` với tệp phiếu cơ hội); DB chỉ giữ key. File đi qua backend để kiểm tra đúng PDF/DOC/DOCX rồi mới đẩy lên R2. Admin tải CV bằng link ký sẵn ngắn hạn; xoá hồ sơ thì xoá luôn file trên R2. Chưa cấu hình R2 → form chỉ nhận link CV.
+- **Email**: mỗi hồ sơ gửi về `LEADSCAN_RECRUIT_EMAIL` (hoặc email riêng đặt trong từng bài; trống thì dùng `LEADSCAN_NOTIFY_EMAIL`), **đính kèm file CV** (lấy từ R2), Reply-To là email ứng viên → bấm Trả lời là liên hệ được ngay. Ứng viên nhận email xác nhận đã nhận hồ sơ.
+- **Quản trị** `/admin/tuyen-dung`: đăng / sửa bài (Bản nháp → Đang tuyển → Đã đóng; tự ẩn khi quá hạn nộp), xem trước nội dung. `/admin/tuyen-dung/ho-so`: danh sách hồ sơ, tải CV, đổi trạng thái (Mới nhận → Đang xem xét → Hẹn phỏng vấn → Đã tuyển / Chưa phù hợp), ghi chú, gửi lại email khi lần gửi trước lỗi.
+- Nội dung bài viết bằng định dạng nhẹ: `## ` tiêu đề nhóm, `- ` gạch đầu dòng, `1. ` danh sách số, `**đậm**`.
+- Nginx: endpoint `/api/jobs/<slug>/apply` được nới `client_max_body_size 8m` (file CV gửi kèm) — cập nhật `deploy/nginx.conf` lên VPS.
+
 ## Tích hợp InfoCMS — cần hoàn tất khi có tài liệu
 
 InfoCMS (Smart Collect của InfoPlus) chưa công bố tài liệu API công khai. Hệ thống đã làm sẵn:
@@ -83,6 +93,7 @@ Các email hệ thống gửi:
 | Đơn phí thành viên / nạp điểm được ghi nhận (webhook, admin xác nhận tay) | Khách: kích hoạt thành viên / nạp điểm thành công, số dư, link xuất hoá đơn · Quản trị: đã nhận thanh toán |
 | Khách gửi thông tin xuất hoá đơn | Kế toán (`LEADSCAN_INVOICE_EMAIL`) |
 | Khách bấm "Quên mật khẩu" | Khách: link đặt lại mật khẩu (60 phút) |
+| Ứng viên gửi hồ sơ trên /tuyen-dung | Tuyển dụng (`LEADSCAN_RECRUIT_EMAIL` hoặc email riêng của bài): hồ sơ + file CV đính kèm · Ứng viên: xác nhận đã nhận hồ sơ |
 
 Email gửi qua [Resend](https://resend.com) bằng HTTP API.
 Cấu hình `LEADSCAN_RESEND_API_KEY`, `LEADSCAN_NOTIFY_FROM` (vd `no-reply@mcv.network` — tên miền phải được xác minh trong Resend) và `LEADSCAN_MAIL_FROM_NAME`.
