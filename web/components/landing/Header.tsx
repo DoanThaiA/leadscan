@@ -15,8 +15,18 @@ const LINKS = [
  * base: tiền tố cho link neo khi dùng ngoài trang chủ (vd "/" trên /tuyen-dung → "/#bang-gia").
  * extra: link thêm vào menu (vd mục "Tuyển dụng" đang xem).
  */
-export default function Header({ base = "", extra = [] }: { base?: string; extra?: { href: string; label: string; active?: boolean }[] }) {
-  const links = [...LINKS.map(([href, label]) => ({ href: base + href, label, active: false })), ...extra];
+type NavLink = { href: string; label: string; active?: boolean };
+
+/** Trang riêng luôn có trên menu (không phải link neo trong trang chủ). */
+const PAGES: NavLink[] = [{ href: "/gioi-thieu", label: "Giới thiệu" }];
+
+export default function Header({ base = "", extra = [] }: { base?: string; extra?: NavLink[] }) {
+  const links: NavLink[] = [...PAGES, ...LINKS.map(([href, label]) => ({ href: base + href, label }))];
+  for (const e of extra) {
+    const i = links.findIndex((l) => l.href === e.href); // trùng link sẵn có → thay tại chỗ (vd đánh dấu đang xem)
+    if (i >= 0) links[i] = e;
+    else links.push(e);
+  }
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 

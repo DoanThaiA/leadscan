@@ -50,7 +50,9 @@ header.scrolled{border-color:var(--line)}
 .nav{display:flex;align-items:center;height:68px;gap:32px}
 .logo{display:flex;align-items:center;flex:none}
 .nav-links{display:flex;gap:28px;margin:0 auto;font-size:15px;color:var(--muted)}
+.nav-links a{white-space:nowrap}
 .nav-links a:hover{color:var(--ink)}
+@media (max-width:1200px){.nav{gap:22px}.nav-links{gap:18px;font-size:14.5px}.nav-actions{gap:10px}}
 .nav-actions{display:flex;align-items:center;gap:14px;font-size:15px}
 .nav-actions .login{color:var(--ink-2);font-weight:500}
 .burger{display:none;background:none;border:0;cursor:pointer;color:var(--ink);margin-left:auto}
@@ -356,8 +358,8 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
   .rung{border-radius:0!important;border-left:1px solid var(--line)!important;margin:-1px 0 0 -1px}
   .plans{grid-template-columns:1fr}
 }
+@media (max-width:1040px){.nav-links,.nav-actions{display:none}.burger{display:block}} /* 7 mục menu không vừa dưới ~1040px → dùng menu burger */
 @media (max-width:860px){
-  .nav-links,.nav-actions{display:none}.burger{display:block}
   .foot-grid{grid-template-columns:1fr 1fr}
 }
 @media (max-width:640px){
