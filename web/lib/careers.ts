@@ -46,6 +46,7 @@ export interface JobCard {
   salary: string;
   quantity: number | null;
   deadline: string | null; // YYYY-MM-DD
+  cover_image?: string; // ảnh bìa: "/careers/x.webp" hoặc URL https
   summary: string;
   published_at: string | null;
 }

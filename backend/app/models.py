@@ -669,6 +669,8 @@ class JobPost(Base):
     reports_to: Mapped[str] = mapped_column(String(150), default="")
     quantity: Mapped[int | None] = mapped_column(Integer)
     deadline: Mapped[date | None] = mapped_column(Date)  # hạn nộp hồ sơ (hết ngày này thì tự ẩn)
+    # Ảnh bìa (banner): đường dẫn trên website ("/careers/x.webp", file trong web/public) hoặc URL https
+    cover_image: Mapped[str] = mapped_column(String(500), default="")
 
     summary: Mapped[str] = mapped_column(Text, default="")  # 1–2 câu trên thẻ danh sách
     objective: Mapped[str] = mapped_column(Text, default="")

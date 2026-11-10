@@ -146,3 +146,10 @@
   .cr-steps{grid-template-columns:1fr}
   .cr-body{padding-top:40px}
 }
+
+/* Ảnh bìa (banner) bài tuyển dụng */
+.cr-cover{margin-top:32px}
+.cr-cover img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:16px;border:1px solid var(--line);box-shadow:0 24px 50px -32px rgba(0,30,60,.3)}
+.cr-job.has-cover{padding-top:0;overflow:hidden}
+.cr-job-cover{display:block;width:calc(100% + 52px);margin:0 -26px 6px;aspect-ratio:16/9;object-fit:cover;border-bottom:1px solid var(--line)}
+@media (max-width:640px){.cr-cover{margin-top:20px}.cr-cover img{border-radius:12px}}

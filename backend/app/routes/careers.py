@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -17,7 +17,7 @@ from app.db import new_session
 from app.models import JobApplication, JobPost
 from app.schemas_jobs import ApplyIn, JobCard, JobPublic, decode_cv
 from app.security import add_hit, client_ip, origin_allowed, rate_limited, sha256
-from app.services import cv_files
+from app.services import cv_files, job_covers
 from app.services.storage import StorageError
 from app.worker import enqueue_job_application
 
@@ -58,6 +58,20 @@ def list_jobs():
             .order_by(JobPost.published_at.desc(), JobPost.id.desc())
         ).all()
         return {"items": [JobCard.model_validate(j).model_dump(mode="json") for j in rows]}
+
+
+@router.get("/covers/{name}")
+def cover(name: str):
+    """Ảnh bìa bài tuyển dụng (đọc từ R2 riêng tư). Tên tệp là duy nhất → cache 1 năm."""
+    try:
+        data = job_covers.read_cover(name)
+    except StorageError:
+        raise HTTPException(502, "Kho lưu trữ tạm thời lỗi.") from None
+    return Response(data, media_type="image/webp", headers={
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'",
+    })
 
 
 @router.get("/{slug}")

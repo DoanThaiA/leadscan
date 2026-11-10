@@ -10,8 +10,8 @@ from app.auth import current_user, require_admin
 from app.config import get_settings
 from app.db import get_db, utcnow
 from app.models import APPLICATION_STATUSES, JOB_STATUSES, JOB_TYPES, AdminUser, JobApplication, JobPost
-from app.schemas_jobs import ApplicationAdminIn, ApplicationOut, JobIn, JobOut, slugify
-from app.services import cv_files
+from app.schemas_jobs import ApplicationAdminIn, ApplicationOut, CoverInitIn, JobIn, JobOut, slugify
+from app.services import cv_files, job_covers
 from app.services.notify import mail_provider, recruit_inbox
 from app.services.storage import StorageError
 from app.worker import deliver_job_application
@@ -61,6 +61,18 @@ def _apply(db: Session, j: JobPost, body: JobIn) -> None:
 
 
 # ------------------------------------------------------------------ bài tuyển dụng
+
+
+@router.post("/jobs/covers/init", status_code=201)
+def cover_init(body: CoverInitIn, _: AdminUser = Depends(current_user)):
+    """Ảnh bìa: cấp link PUT ký sẵn để trình duyệt tải thẳng lên R2."""
+    return job_covers.init_upload(body.filename, body.size)
+
+
+@router.post("/jobs/covers/{upload_id}/complete")
+def cover_complete(upload_id: str, _: AdminUser = Depends(current_user)):
+    """Ảnh bìa đã lên R2 → kiểm tra, chuẩn hoá WebP → trả đường dẫn công khai để lưu vào bài."""
+    return job_covers.complete_upload(upload_id)
 
 
 @router.get("/jobs/meta")

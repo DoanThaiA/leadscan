@@ -14,7 +14,11 @@ export function DeadlineTag({ deadline }: { deadline: string | null }) {
 
 export function JobCardItem({ job }: { job: JobCard }) {
   return (
-    <a className="cr-job" href={`/tuyen-dung/${job.slug}`}>
+    <a className={job.cover_image ? "cr-job has-cover" : "cr-job"} href={`/tuyen-dung/${job.slug}`}>
+      {job.cover_image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="cr-job-cover" src={job.cover_image} alt="" loading="lazy" />
+      ) : null}
       <div className="cr-job-top">
         {job.department ? <span className="pill-tag">{job.department}</span> : <span />}
         <DeadlineTag deadline={job.deadline} />

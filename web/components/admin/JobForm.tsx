@@ -6,13 +6,14 @@ import { RichText } from "@/components/careers/RichText";
 import { errFields, errMsg } from "@/lib/admin/api";
 import { JOB_SECTIONS, JOB_STATUS, JOB_TYPES, type JobAdmin, type JobSectionKey, type JobsMeta } from "@/lib/careers";
 
+import { CoverImageField } from "./CoverImageField";
 import { Field, Icon } from "./ui";
 
 type Values = Record<string, string>;
 
 const TEXT_KEYS = [
   "title", "slug", "status", "subtitle", "department", "location", "employment_type", "salary", "work_time",
-  "reports_to", "quantity", "deadline", "summary", "apply_email",
+  "reports_to", "quantity", "deadline", "cover_image", "summary", "apply_email",
   ...JOB_SECTIONS.map(([k]) => k),
 ] as const;
 
@@ -131,6 +132,14 @@ export function JobForm({
                 {input("quantity", "Số lượng", { max: 4, placeholder: "VD: 2" })}
                 {input("deadline", "Hạn nộp", { type: "date" })}
               </div>
+              <CoverImageField
+                value={v.cover_image}
+                error={errors.cover_image}
+                onChange={(url) => {
+                  setV((s) => ({ ...s, cover_image: url }));
+                  if (errors.cover_image) setErrors(({ cover_image: _, ...rest }) => rest);
+                }}
+              />
               <Field label="Tóm tắt trên thẻ danh sách" error={errors.summary} full htmlFor="j-summary">
                 <textarea id="j-summary" className="adm-input" value={v.summary} onChange={set("summary")} maxLength={1000} placeholder="1–2 câu giới thiệu vị trí" />
               </Field>

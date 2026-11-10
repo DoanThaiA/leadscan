@@ -6,6 +6,7 @@
     python -m app.cli import-legacy DIR                                 # nhập hồ sơ JSON từ bản PHP cũ
     python -m app.cli crawl-profit500 --chart 12 --year 2026            # quét PROFIT500 vào kho doanh nghiệp
     python -m app.cli import-opportunities FILE.json [--publish]        # nhập cơ hội từ file JSON (mặc định: nháp)
+    python -m app.cli import-job data/jobs/truong-phong-kinh-doanh.json # đăng / cập nhật bài tuyển dụng từ file JSON
 
 Mật khẩu lấy từ biến môi trường LEADSCAN_ADMIN_PASSWORD nếu có, nếu không sẽ hỏi khi chạy.
 """
@@ -252,6 +253,63 @@ def cmd_import_opportunities(args) -> int:
     return 0
 
 
+def cmd_import_job(args) -> int:
+    """Đăng hoặc cập nhật bài tuyển dụng từ file JSON (1 bài hoặc danh sách; trường như form admin, JobIn).
+
+    Khớp theo slug: chưa có → tạo mới, đã có → ghi đè nội dung (chạy lại sau khi sửa file là đồng bộ).
+    Trạng thái lấy theo file; --status để ép (draft / published / closed).
+    """
+    from pydantic import ValidationError
+
+    from app.models import JobPost
+    from app.routes.admin_jobs import _apply
+    from app.schemas_jobs import JobIn, slugify
+
+    path = Path(args.file)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"Không đọc được {path}: {e}")
+        return 1
+    items = raw if isinstance(raw, list) else [raw]
+
+    bodies: list[JobIn] = []
+    for i, it in enumerate(items, 1):
+        if not isinstance(it, dict):
+            print(f"#{i}: không phải object")
+            return 1
+        it = {k: v for k, v in it.items() if not k.startswith("_")}  # trường "_..." chỉ là ghi chú trong file
+        if args.status:
+            it["status"] = args.status
+        try:
+            b = JobIn.model_validate(it)
+        except ValidationError as e:
+            print(f"#{i} {it.get('title', '')!r} không hợp lệ:")
+            for err in e.errors():
+                print(f"   - {'.'.join(str(x) for x in err['loc'])}: {err['msg']}")
+            return 1
+        b.slug = b.slug or slugify(b.title)
+        bodies.append(b)
+
+    with new_session() as db:
+        admin_id = db.scalar(select(AdminUser.id).where(AdminUser.email == args.by)) if args.by else None
+        for b in bodies:
+            j = db.scalar(select(JobPost).where(JobPost.slug == b.slug))
+            action = "cập nhật" if j else "thêm"
+            if not j:
+                j = JobPost(created_by_id=admin_id)
+            _apply(db, j, b)  # điền nội dung trước rồi mới add (tránh autoflush bản ghi trống)
+            db.add(j)
+            db.flush()
+            print(f"  {action} [{j.status}] /tuyen-dung/{j.slug} — {j.title}")
+        if args.dry_run:
+            db.rollback()
+            print("Chạy thử: dữ liệu hợp lệ, chưa lưu gì.")
+        else:
+            db.commit()
+    return 0
+
+
 def cmd_embed(args) -> int:
     """Nhúng (embedding Cohere) mọi phiếu cơ hội — kể cả nháp/đã đóng — và phiếu tìm cơ hội, không so khớp.
 
@@ -341,6 +399,12 @@ def main(argv: list[str] | None = None) -> int:
     o.add_argument("--dry-run", action="store_true", help="Chỉ kiểm tra, không lưu")
     o.add_argument("--by", default="", help="Email quản trị ghi là người tạo (không bắt buộc)")
     o.set_defaults(fn=cmd_import_opportunities)
+    jb = sub.add_parser("import-job", help="Đăng / cập nhật bài tuyển dụng từ file JSON (khớp theo slug)")
+    jb.add_argument("file")
+    jb.add_argument("--status", choices=["draft", "published", "closed"], default="", help="Ép trạng thái (mặc định theo file)")
+    jb.add_argument("--dry-run", action="store_true", help="Chỉ kiểm tra, không lưu")
+    jb.add_argument("--by", default="", help="Email quản trị ghi là người tạo (không bắt buộc)")
+    jb.set_defaults(fn=cmd_import_job)
     em = sub.add_parser("embed", help="Nhúng embedding Cohere cho mọi phiếu cơ hội (kể cả nháp) và phiếu tìm, không so khớp")
     em.add_argument("--force", action="store_true", help="Nhúng lại tất cả (mặc định chỉ phiếu chưa có vector / đã sửa)")
     em.add_argument("--status", choices=["draft", "published", "closed"], default="", help="Chỉ nhúng phiếu cơ hội ở trạng thái này")

@@ -231,3 +231,85 @@ def test_xu_ly_ho_so_va_phan_quyen(admin, staff, client):
     kept = admin.get(f"{APPS}/{a['id']}").json()
     assert kept["job_id"] is None and kept["job_title"] == "Chuyên viên Kinh doanh B2B"
     assert admin.delete(f"{APPS}/{a['id']}").status_code == 204
+
+
+# ------------------------------------------------------------------ ảnh bìa
+
+
+def _png(w: int = 2400, h: int = 1350) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (w, h), (0, 75, 135)).save(buf, "PNG")
+    return buf.getvalue()
+
+
+def test_anh_bia_tai_len_r2_va_hien_cong_khai(admin, client, r2):
+    png = _png()
+    r = admin.post(f"{JOBS}/covers/init", json={"filename": "Banner tuyển dụng.PNG", "size": len(png)})
+    assert r.status_code == 201, r.text
+    init = r.json()
+    assert init["content_type"] == "image/png" and init["upload_url"]
+    r2.put_bytes(f"job-covers/upload/{init['upload_id']}", png, "image/png")  # thay cho trình duyệt PUT lên R2
+
+    done = admin.post(f"{JOBS}/covers/{init['upload_id']}/complete").json()
+    assert done["url"].startswith("/api/jobs/covers/") and done["url"].endswith(".webp")
+    assert (done["width"], done["height"]) == (1920, 1080)  # thu về rộng tối đa 1920px
+    assert f"job-covers/upload/{init['upload_id']}" not in r2.objects  # bản gốc đã xoá
+
+    img = client.get(done["url"])
+    assert img.status_code == 200 and img.headers["content-type"] == "image/webp"
+    assert "immutable" in img.headers["cache-control"] and img.content[:4] == b"RIFF"
+
+    j = admin.post(JOBS, json=job(cover_image=done["url"])).json()
+    assert j["cover_image"] == done["url"]
+    assert client.get("/api/jobs").json()["items"][0]["cover_image"] == done["url"]
+    assert client.get(f"/api/jobs/{j['slug']}").json()["cover_image"] == done["url"]
+
+    assert client.get("/api/jobs/covers/khong-co.webp").status_code == 404
+    assert client.get("/api/jobs/covers/" + "0" * 32 + ".webp").status_code == 404
+
+
+def test_anh_bia_tu_choi_tep_sai(admin, r2):
+    assert admin.post(f"{JOBS}/covers/init", json={"filename": "a.svg", "size": 100}).status_code == 400
+    assert admin.post(f"{JOBS}/covers/init", json={"filename": "a.png", "size": 50 * 1024 * 1024}).status_code == 400
+    init = admin.post(f"{JOBS}/covers/init", json={"filename": "a.png", "size": 10}).json()
+    r2.put_bytes(f"job-covers/upload/{init['upload_id']}", b"khong phai anh", "image/png")
+    r = admin.post(f"{JOBS}/covers/{init['upload_id']}/complete")
+    assert r.status_code == 400 and "ảnh" in r.json()["detail"]
+    assert admin.post(f"{JOBS}/covers/abc.png/complete").status_code == 400  # mã tải lên sai định dạng
+
+
+def test_anh_bia_chua_cau_hinh_r2(admin):
+    assert admin.post(f"{JOBS}/covers/init", json={"filename": "a.png", "size": 10}).status_code == 503
+
+
+def test_duong_dan_anh_bia(admin):
+    ok = admin.post(JOBS, json=job(cover_image="/careers/truong-phong-kinh-doanh.webp"))
+    assert ok.status_code == 201 and ok.json()["cover_image"] == "/careers/truong-phong-kinh-doanh.webp"
+    assert admin.post(JOBS, json=job(cover_image="cdn.leadscan.net/a.webp")).json()["cover_image"] == "https://cdn.leadscan.net/a.webp"
+    for bad in ("/../etc/passwd", "//evil.com/a.png", "javascript:alert(1)"):
+        r = admin.post(JOBS, json=job(cover_image=bad))
+        assert r.status_code == 422, bad
+
+
+def test_lenh_import_job_tu_file(client):
+    """File data/jobs/truong-phong-kinh-doanh.json đăng được bằng lệnh CLI; chạy lại thì cập nhật, không nhân đôi."""
+    from pathlib import Path
+
+    from app.cli import main
+
+    path = Path(__file__).resolve().parents[1] / "data" / "jobs" / "truong-phong-kinh-doanh.json"
+    src = json.loads(path.read_text(encoding="utf-8"))
+    assert main(["import-job", str(path)]) == 0
+    assert main(["import-job", str(path)]) == 0
+    items = client.get("/api/jobs").json()["items"]
+    assert [i["slug"] for i in items] == ["truong-phong-kinh-doanh"]
+    d = client.get("/api/jobs/truong-phong-kinh-doanh").json()
+    for k in ("title", "subtitle", "department", "location", "salary", "work_time", "reports_to", "quantity", "cover_image",
+              "summary", "objective", "description", "requirements", "benefits", "how_to_apply"):
+        assert d[k] == src[k], k
+    assert d["is_open"] is True and d["deadline"] is None
+    assert "200.000.000 VNĐ/tháng" in d["description"] and "0336080188" in d["how_to_apply"]

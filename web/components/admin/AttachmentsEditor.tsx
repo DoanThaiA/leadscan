@@ -22,7 +22,7 @@ export interface AttachItem {
 const extOf = (name: string) => (name.includes(".") ? name.split(".").pop()!.toLowerCase() : "");
 
 /** PUT tệp thẳng lên R2 bằng link ký sẵn (XHR để có tiến trình). */
-function putToR2(url: string, file: File, contentType: string, onProgress: (p: number) => void): Promise<void> {
+export function putToR2(url: string, file: File, contentType: string, onProgress: (p: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);

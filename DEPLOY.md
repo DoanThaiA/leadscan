@@ -536,6 +536,7 @@ docker image prune -f
 | Chẩn đoán DB, Redis, email | `docker compose exec api python -m app.cli diagnose` |
 | Nhúng embedding mọi phiếu (kể cả nháp), không so khớp | `docker compose exec api python -m app.cli embed` (`--force` nhúng lại tất cả) |
 | So khớp lại toàn bộ cơ hội ↔ phiếu tìm | `docker compose exec api python -m app.cli rematch` (thêm `--reembed` để gọi lại Cohere cho tất cả) |
+| Đăng / cập nhật bài tuyển dụng từ file JSON (khớp theo slug) | `docker compose exec api python -m app.cli import-job data/jobs/truong-phong-kinh-doanh.json` (`--dry-run` để kiểm tra trước) |
 | Vào DB bằng psql | `docker compose exec db psql -U leadscan leadscan` |
 | Log Nginx | `sudo tail -f /var/log/nginx/error.log` |
 | Dung lượng ổ | `df -h` và `docker system df` |

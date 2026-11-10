@@ -36,7 +36,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description,
     alternates: { canonical: `/tuyen-dung/${job.slug}` },
     robots: job.is_open ? undefined : { index: false },
-    openGraph: { type: "website", locale: "vi_VN", siteName: "LeadScan B2B", url: `/tuyen-dung/${job.slug}`, title, description },
+    openGraph: {
+      type: "website", locale: "vi_VN", siteName: "LeadScan B2B", url: `/tuyen-dung/${job.slug}`, title, description,
+      ...(job.cover_image ? { images: [{ url: job.cover_image, alt: `Tuyển dụng ${job.title}` }] } : {}),
+    },
+    ...(job.cover_image ? { twitter: { card: "summary_large_image", images: [job.cover_image] } } : {}),
   };
 }
 
@@ -51,6 +55,7 @@ function jobPostingLd(job: JobPublic) {
     title: job.title,
     description: html || escapeHtml(job.summary),
     datePosted: job.published_at,
+    ...(job.cover_image ? { image: new URL(job.cover_image, site).toString() } : {}),
     ...(job.deadline ? { validThrough: `${job.deadline}T23:59:59+07:00` } : {}),
     employmentType: SCHEMA_TYPE[job.employment_type] ?? "FULL_TIME",
     hiringOrganization: { "@type": "Organization", name: "LeadScan B2B", sameAs: site, logo: `${site}/brand/leadscan-logo-1200.png` },
@@ -113,6 +118,13 @@ export default async function JobDetailPage({ params }: Props) {
           )}
         </div>
       </section>
+
+      {job.cover_image ? (
+        <div className="container cr-cover">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={job.cover_image} alt={`Tuyển dụng ${job.title} – LeadScan`} fetchPriority="high" />
+        </div>
+      ) : null}
 
       <section className="cr-body" id="mo-ta">
         <div className="container cr-detail">

@@ -47,6 +47,7 @@ class JobIn(BaseModel):
     reports_to: Line = Field("", max_length=150)
     quantity: int | None = Field(None, ge=1, le=1000)
     deadline: date | None = None
+    cover_image: str = Field("", max_length=500)
     summary: str = Field("", max_length=1000)
     objective: str = Field("", max_length=20000)
     description: str = Field("", max_length=20000)
@@ -54,6 +55,19 @@ class JobIn(BaseModel):
     benefits: str = Field("", max_length=20000)
     how_to_apply: str = Field("", max_length=20000)
     apply_email: Email = Field("", max_length=200)
+
+    @field_validator("cover_image")
+    @classmethod
+    def _cover(cls, v: str) -> str:
+        """Ảnh bìa: đường dẫn trên website (bắt đầu bằng "/") hoặc URL http(s)."""
+        v = v.strip()
+        if not v:
+            return ""
+        if v.startswith("/") and not v.startswith("//"):
+            if re.search(r"\s|\.\.", v):
+                raise ValueError("Đường dẫn ảnh chưa đúng định dạng.")
+            return v
+        return _url(v)
 
     @field_validator("slug")
     @classmethod
@@ -95,6 +109,7 @@ class JobPublic(Out):
     reports_to: str
     quantity: int | None
     deadline: date | None
+    cover_image: str
     summary: str
     objective: str
     description: str
@@ -114,6 +129,7 @@ class JobCard(Out):
     salary: str
     quantity: int | None
     deadline: date | None
+    cover_image: str
     summary: str
     published_at: UtcDatetime | None
 
@@ -122,6 +138,13 @@ class JobOut(JobPublic):
     id: int
     apply_email: str
     created_at: UtcDatetime
+
+
+class CoverInitIn(BaseModel):
+    """Khai báo ảnh bìa trước khi tải thẳng lên R2."""
+
+    filename: str = Field(min_length=1, max_length=255)
+    size: int = Field(ge=0)
 
 
 # ------------------------------------------------------------------ hồ sơ ứng tuyển
