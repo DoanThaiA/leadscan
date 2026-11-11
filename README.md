@@ -14,7 +14,7 @@ backend/            FastAPI + SQLAlchemy + Alembic + Celery (Python 3.12, quản
   app/routes/admin_commerce.py  /api/admin/* — cơ hội, đơn thanh toán, hoá đơn, enrich, ví & tài khoản thành viên
   app/routes/member.py   /api/member/* — cổng thành viên: đăng nhập, kho cơ hội, mua phiếu, ví, nạp tiền, hoá đơn
   app/routes/payments.py /api/payments/infocms/webhook — InfoCMS báo đã nhận tiền
-  app/services/      payments.py (đơn & InfoCMS), vietqr.py (mã QR NAPAS), wallet.py (sổ cái điểm), catalog.py (mua phiếu)
+  app/services/      payments.py (đơn & InfoCMS), einvoice.py (HĐĐT IAM Invoice), vietqr.py (mã QR NAPAS), wallet.py (sổ cái điểm), catalog.py (mua phiếu)
   app/auth.py         phiên đăng nhập (cookie HttpOnly, DB chỉ lưu sha256 token)
   app/worker.py       Celery: email báo đăng ký mới, dọn phiên hết hạn (beat mỗi giờ)
   app/cli.py          create-admin · diagnose · import-legacy
@@ -43,7 +43,8 @@ docker-compose.yml  db (pgvector) · redis · migrate · api · worker · beat �
 - **Phí thành viên** 89.000đ → cộng **89.000 điểm** (1 điểm = 1đ), hiệu lực 365 ngày; gia hạn cộng dồn.
 - **Nạp thêm điểm** (gói 5/10/20/50 triệu hoặc tuỳ chọn) — chỉ khi đang là thành viên.
 - **Thanh toán qua InfoCMS (VietQR)**: mỗi đơn có mã riêng làm nội dung chuyển khoản; trang thanh toán hiện QR + số tài khoản, tự cập nhật khi InfoCMS báo đã nhận tiền.
-- **Xuất hoá đơn**: sau khi thanh toán, khách nhập thông tin xuất hoá đơn → email gửi tới `LEADSCAN_INVOICE_EMAIL` (mặc định vylyy9999@gmail.com) để kế toán xuất thủ công; admin nhập số hoá đơn khi đã xuất.
+- **Xuất hoá đơn điện tử tự động (IAM Invoice)** — bật bằng `LEADSCAN_IAM_ENABLED=true` (xem `.env.example`): thanh toán xong (webhook, admin xác nhận tay, giả lập) hệ thống tự lấy tên/MST/địa chỉ doanh nghiệp đã đăng ký, gọi IAM tạo + ký số hoá đơn (chứng thư IntrustCA + PIN) và lưu số hoá đơn; khách thấy số HĐ ở trang đơn. Thiếu địa chỉ → khách điền form "Thông tin xuất hoá đơn" rồi tự xuất. Mã đơn `LSP…` là mã tra cứu bên IAM (`thirdPartyCode`) nên gọi lại không xuất trùng. IAM lỗi → thử lại 3 lần, vẫn lỗi thì email kế toán kèm lý do; admin bấm **Phát hành HĐĐT** ở trang Hoá đơn. Với method khác GET, client xoá cookie trước khi gọi IAM (yêu cầu của IAM). Code: `backend/app/services/einvoice.py`.
+- **Xuất hoá đơn thủ công** (khi tắt IAM): khách nhập thông tin xuất hoá đơn → email gửi tới `LEADSCAN_INVOICE_EMAIL` (mặc định vylyy9999@gmail.com) để kế toán xuất; admin nhập số hoá đơn khi đã xuất.
 - **Kho cơ hội**: lọc theo ngành, khu vực, nguồn, điểm; sắp xếp mới nhất / điểm / giá. Xem trước tóm tắt + điểm AI; tên bên có nhu cầu, chi tiết và đầu mối chỉ mở sau khi mua.
 - **Mua phiếu**: trừ điểm, giới hạn số lượt bán (1 = độc quyền), không mua trùng; **phiếu đã mua** lưu lại đầy đủ; **yêu cầu enrich** thêm đầu mối.
 - **Ví**: số dư, hạn thành viên, lịch sử điểm (sổ cái không sửa/xoá), đơn thanh toán & trạng thái hoá đơn. **Chân dung cơ hội** tự cập nhật.

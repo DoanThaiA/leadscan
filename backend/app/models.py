@@ -8,7 +8,7 @@ Company            doanh nghiệp đăng ký / thành viên
   ├─ WalletTransaction   sổ cái điểm (mỗi lần cộng/trừ 1 dòng, không sửa/xoá)
   ├─ PaymentOrder   đơn nạp tiền / phí thành viên (thanh toán qua cổng MCV → InfoCMS)
   │    ├─ McvPayment      mỗi mã QR MCV cấp cho đơn (1 đơn có thể nhiều payment_code); chống mở dịch vụ 2 lần
-  │    └─ InvoiceRequest  thông tin xuất hoá đơn (xuất thủ công)
+  │    └─ InvoiceRequest  thông tin xuất hoá đơn (tự xuất HĐĐT qua IAM Invoice, hoặc kế toán xuất thủ công)
   ├─ SearchRequest      yêu cầu "Enrich tìm kiếm cơ hội" (tiêu chí + mô tả, email báo admin)
   ├─ SavedOpportunity   cơ hội thành viên thêm vào kho (xem/mua sau; cơ hội phù hợp tự vào kho)
   ├─ UserOpportunity    "Tất cả cơ hội" của doanh nghiệp: cơ hội phù hợp + điểm riêng (không trùng)
@@ -364,6 +364,14 @@ class InvoiceRequest(Base):
     email_sent_at: Mapped[datetime | None] = mapped_column(DateTime)
     issued_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # "member" = khách gửi form · "auto" = hệ thống tự lấy thông tin doanh nghiệp khi thanh toán
+    source: Mapped[str] = mapped_column(String(16), default="member")
+    # Hoá đơn điện tử IAM (mã tra cứu bên IAM = mã đơn PaymentOrder.code)
+    einvoice_id: Mapped[str] = mapped_column(String(50), default="")
+    einvoice_serial: Mapped[str] = mapped_column(String(20), default="")  # mẫu số + ký hiệu, vd 1C26TYY
+    einvoice_status: Mapped[str] = mapped_column(String(40), default="")  # issueStatusId của IAM
+    einvoice_error: Mapped[str] = mapped_column(String(500), default="")
+    einvoice_at: Mapped[datetime | None] = mapped_column(DateTime)  # lần gọi IAM gần nhất
 
     order: Mapped[PaymentOrder] = relationship(back_populates="invoice")
 

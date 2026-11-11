@@ -35,6 +35,11 @@ class InvoiceOut(Out):
     email_sent_at: UtcDatetime | None
     issued_at: UtcDatetime | None
     created_at: UtcDatetime
+    source: str = "member"
+    einvoice_serial: str = ""
+    einvoice_status: str = ""
+    einvoice_error: str = ""
+    einvoice_at: UtcDatetime | None = None
 
 
 class OrderOut(Out):

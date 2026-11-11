@@ -37,7 +37,7 @@ from app.schemas_commerce import EnrichIn, EnrichOut, InvoiceIn, OrderCreateIn, 
 from app.security import DUMMY_HASH, add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
 from app.services import attachments, catalog, mcv_payments, payments
 from app.services.mcv import McvClient, McvError
-from app.worker import enqueue, match_request_now, send_invoice_request_task, send_password_reset_task, send_search_request_task
+from app.worker import enqueue, issue_einvoice_task, match_request_now, send_invoice_request_task, send_password_reset_task, send_search_request_task
 
 router = APIRouter(prefix="/api/member")
 
@@ -477,9 +477,16 @@ def request_invoice(code: str, body: InvoiceIn, user: MemberUser = Depends(curre
         raise HTTPException(409, "Đơn này đã gửi thông tin xuất hoá đơn.")
     inv = InvoiceRequest(order_id=o.id, **body.model_dump())
     db.add(inv)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:  # hệ thống vừa tự tạo yêu cầu hoá đơn cho đơn này
+        db.rollback()
+        raise HTTPException(409, "Đơn này đã có thông tin xuất hoá đơn.") from None
     db.refresh(inv)
-    enqueue(send_invoice_request_task, inv.id)
+    if get_settings().iam_enabled:
+        enqueue(issue_einvoice_task, inv.id)  # tự xuất hoá đơn điện tử IAM (lỗi → email kế toán)
+    else:
+        enqueue(send_invoice_request_task, inv.id)
     return {"ok": True, "invoice_id": inv.id}
 
 

@@ -124,9 +124,11 @@ def mark_paid(
         )
     )
     db.commit()
-    from app.worker import enqueue, notify_payment_task  # import muộn: tránh vòng import khi khởi động
+    from app.worker import einvoice_for_order_task, enqueue, notify_payment_task  # import muộn: tránh vòng import
 
     enqueue(notify_payment_task, order.id)  # email cho thành viên + báo quản trị (chạy nền)
+    if cfg.iam_enabled and cfg.iam_issue_on_payment:
+        enqueue(einvoice_for_order_task, order.id)  # tự xuất hoá đơn điện tử IAM
     return True
 
 

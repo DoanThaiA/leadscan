@@ -49,6 +49,19 @@ export default function OrderPage() {
     return () => clearInterval(t);
   }, [d?.order.status, d?.payment.mcv_status, load]);
 
+  // Đã thanh toán: hoá đơn điện tử được xuất ở việc nền → hỏi lại vài lần (tối đa ~2 phút) để hiện số hoá đơn
+  const invPolls = useRef(0);
+  const invWaiting = d?.order.status === "paid" && (d.order.invoice ? d.order.invoice.status === "pending" && !d.order.invoice.einvoice_error : true);
+  useEffect(() => {
+    // chưa có yêu cầu hoá đơn: chỉ chờ ~30 giây xem hệ thống có tự tạo không (rồi để khách tự điền form)
+    if (!invWaiting || invPolls.current >= (d?.order.invoice ? 24 : 6)) return;
+    const t = setTimeout(() => {
+      invPolls.current += 1;
+      load();
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [invWaiting, d, load]);
+
   useEffect(() => {
     document.title = `Thanh toán ${code} · LeadScan B2B`;
     if (d?.payment.provider !== "mcv" && d?.payment.qr_payload) QRCode.toDataURL(d.payment.qr_payload, { width: 456, margin: 1, errorCorrectionLevel: "M" }).then(setQr);
@@ -211,12 +224,13 @@ function InvoiceForm({ order, me, onDone }: { order: Order; me: MemberMe; onDone
             <dt>Địa chỉ</dt><dd>{inv.address}</dd>
             <dt>Người mua hàng</dt><dd>{inv.buyer_name || "—"}</dd>
             <dt>Email nhận HĐ</dt><dd>{inv.receive_email}</dd>
+            {inv.einvoice_serial && inv.invoice_number ? (<><dt>Ký hiệu</dt><dd className="mono">{inv.einvoice_serial}</dd></>) : null}
             {inv.invoice_number ? (<><dt>Số hoá đơn</dt><dd><b>{inv.invoice_number}</b></dd></>) : null}
           </dl>
           <p className="muted" style={{ fontSize: 13 }}>
             {inv.status === "issued"
-              ? `Hoá đơn đã được xuất${inv.issued_at ? ` ngày ${fmtDateTime(inv.issued_at)}` : ""} và gửi tới ${inv.receive_email}.`
-              : "Bộ phận kế toán đã nhận thông tin và sẽ xuất hoá đơn, gửi về email của bạn."}
+              ? `Hoá đơn điện tử đã được xuất${inv.issued_at ? ` ngày ${fmtDateTime(inv.issued_at)}` : ""} và gửi tới ${inv.receive_email}.`
+              : "Hoá đơn đang được xuất và sẽ gửi về email của bạn."}
           </p>
         </div>
       </section>

@@ -113,6 +113,75 @@ def send_invoice_request_task(invoice_id: int) -> None:
             db.commit()
 
 
+EINVOICE_RETRIES = 3
+
+
+def run_einvoice(invoice_id: int) -> tuple[str, str]:
+    """Xuất HĐĐT qua IAM cho 1 yêu cầu hoá đơn. Trả (kết quả, thông báo lỗi):
+    'issued' | 'draft' | 'skip' | 'retry' (lỗi mạng/IAM tạm thời) | 'error'. Lỗi đã được ghi vào einvoice_error.
+    """
+    from app.db import new_session
+    from app.models import InvoiceRequest
+    from app.services import einvoice
+
+    cfg = get_settings()
+    with new_session() as db:
+        inv = db.get(InvoiceRequest, invoice_id)
+        if not inv or inv.status == "issued":
+            return "skip", ""
+        try:
+            return einvoice.issue(db, cfg, inv), ""
+        except einvoice.IamError as e:
+            db.rollback()
+            inv = db.get(InvoiceRequest, invoice_id)
+            einvoice.record_error(db, inv, e)
+            log.warning("HĐĐT yêu cầu #%s (đơn %s) lỗi: %s", invoice_id, inv.order.code, e.message)
+            return ("retry" if e.retryable else "error"), e.message
+
+
+@celery_app.task(name="leadscan.issue_einvoice", bind=True, max_retries=EINVOICE_RETRIES)
+def issue_einvoice_task(self, invoice_id: int) -> None:
+    """Xuất hoá đơn điện tử IAM. Lỗi mạng → thử lại sau 1, 2, 4 phút; vẫn lỗi → email kế toán xuất thủ công."""
+    result, _ = run_einvoice(invoice_id)
+    if result == "retry" and self.request.retries < self.max_retries and not get_settings().celery_eager:
+        raise self.retry(countdown=60 * 2**self.request.retries)
+    if result in ("retry", "error"):
+        from app.db import new_session
+        from app.models import InvoiceRequest
+
+        with new_session() as db:
+            inv = db.get(InvoiceRequest, invoice_id)
+            emailed = bool(inv and inv.email_sent_at)
+        if not emailed:
+            send_invoice_request_task.apply(args=[invoice_id])  # dự phòng: kế toán nhận email kèm lý do lỗi
+
+
+@celery_app.task(name="leadscan.einvoice_for_order")
+def einvoice_for_order_task(order_id: int) -> None:
+    """Đơn vừa thanh toán → lấy thông tin doanh nghiệp đã đăng ký, tạo yêu cầu hoá đơn và xuất HĐĐT luôn."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.db import new_session
+    from app.models import PaymentOrder
+    from app.services import einvoice
+
+    with new_session() as db:
+        o = db.get(PaymentOrder, order_id)
+        if not o or o.status != "paid" or o.invoice:
+            return
+        try:
+            inv = einvoice.auto_request(db, o)
+        except IntegrityError:  # khách vừa gửi form cùng lúc → dùng yêu cầu của khách
+            db.rollback()
+            return
+        if not inv:
+            log.info("Đơn %s: thiếu tên/MST/địa chỉ doanh nghiệp → chờ khách gửi thông tin xuất hoá đơn", o.code)
+            return
+        invoice_id = inv.id
+    if not enqueue(issue_einvoice_task, invoice_id):
+        issue_einvoice_task.apply(args=[invoice_id])
+
+
 @celery_app.task(name="leadscan.send_password_reset")
 def send_password_reset_task(email: str, name: str, token: str) -> None:
     from app.services.notify import send_password_reset

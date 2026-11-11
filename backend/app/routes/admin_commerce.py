@@ -54,6 +54,7 @@ from app.security import hash_password
 from app.services import attachments, catalog, payments, usage, wallet
 from app.worker import (
     enqueue,
+    run_einvoice,
     match_opportunity_task,
     match_request_task,
     purge_files_task,
@@ -94,6 +95,14 @@ def commerce_meta(_: AdminUser = Depends(current_user)):
         "tx_kinds": TX_KINDS,
         "payment_provider": cfg.payment_provider,
         "invoice_email": cfg.invoice_email,
+        "einvoice": {
+            "enabled": cfg.iam_enabled,
+            "provider": "IAM Invoice",
+            "serial": f"{cfg.iam_invoice_form}{cfg.iam_invoice_serial}" if cfg.iam_invoice_serial else "",
+            "sign": cfg.iam_sign,
+            "on_payment": cfg.iam_issue_on_payment,
+            "portal": cfg.iam_base_url,
+        },
     }
 
 
@@ -402,6 +411,23 @@ def update_invoice(invoice_id: int, body: InvoiceAdminIn, _: AdminUser = Depends
     db.commit()
     db.refresh(i)
     return _inv_out(i)
+
+
+@router.post("/invoices/{invoice_id}/einvoice")
+def issue_einvoice(invoice_id: int, _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    """Phát hành (hoặc kiểm tra lại) hoá đơn điện tử IAM ngay — dùng khi lần tự xuất bị lỗi hoặc hoá đơn đang là nháp."""
+    if not get_settings().iam_enabled:
+        raise HTTPException(400, "Chưa bật hoá đơn điện tử IAM (LEADSCAN_IAM_ENABLED).")
+    i = db.get(InvoiceRequest, invoice_id)
+    if not i:
+        raise HTTPException(404, "Không tìm thấy yêu cầu hoá đơn.")
+    if i.status == "issued":
+        raise HTTPException(409, "Hoá đơn này đã xuất.")
+    result, error = run_einvoice(invoice_id)
+    if result in ("retry", "error"):
+        raise HTTPException(502, f"IAM: {error}")
+    db.expire_all()
+    return _inv_out(db.get(InvoiceRequest, invoice_id))
 
 
 @router.post("/invoices/{invoice_id}/resend")

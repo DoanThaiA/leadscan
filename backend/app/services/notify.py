@@ -135,10 +135,17 @@ def send_invoice_request(cfg: Settings, inv) -> bool:
     """Gửi thông tin xuất hoá đơn tới kế toán (cfg.invoice_email) để xuất thủ công."""
     o = inv.order
     c = o.company
+    failed = (
+        f"!! Hệ thống CHƯA tự xuất được hoá đơn điện tử qua IAM: {inv.einvoice_error}\n"
+        "   Kiểm tra lại trên IAM (mã tra cứu = mã đơn) rồi bấm \"Phát hành HĐĐT\" ở trang Hoá đơn, hoặc xuất thủ công.\n\n"
+        if inv.einvoice_error
+        else ""
+    )
     body = (
         "YÊU CẦU XUẤT HOÁ ĐƠN — LeadScan B2B\n"
         "=====================================\n\n"
-        f"Mã đơn thanh toán : {o.code}\n"
+        + failed
+        + f"Mã đơn thanh toán : {o.code}\n"
         f"Nội dung          : {'Phí thành viên LeadScan' if o.kind == 'membership' else 'Nạp điểm LeadScan'}\n"
         f"Số tiền           : {_vnd(o.paid_amount or o.amount)}\n"
         f"Thanh toán lúc    : {_vn(o.paid_at)}\n\n"

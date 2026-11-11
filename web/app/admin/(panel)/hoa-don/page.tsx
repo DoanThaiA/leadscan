@@ -13,11 +13,17 @@ type AdminInvoice = Invoice & {
   company: { id: number; code: string; name: string };
 };
 
+type Meta = {
+  invoice_email: string;
+  einvoice: { enabled: boolean; provider: string; serial: string; sign: boolean; on_payment: boolean; portal: string };
+};
+
 export default function AdminInvoicesPage() {
   const [status, setStatus] = useState("pending");
   const [d, setD] = useState<{ total: number; items: AdminInvoice[] } | null>(null);
   const [error, setError] = useState("");
-  const [meta, setMeta] = useState<{ invoice_email: string } | null>(null);
+  const [meta, setMeta] = useState<Meta | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
 
   const load = useCallback(() => {
     api.get<{ total: number; items: AdminInvoice[] }>("/invoices" + qs({ status, page_size: 100 })).then(setD, (e) => setError(errMsg(e)));
@@ -28,7 +34,7 @@ export default function AdminInvoicesPage() {
     load();
   }, [load]);
   useEffect(() => {
-    api.get<{ invoice_email: string }>("/commerce-meta").then(setMeta, () => {});
+    api.get<Meta>("/commerce-meta").then(setMeta, () => {});
   }, []);
 
   async function issue(i: AdminInvoice) {
@@ -39,6 +45,19 @@ export default function AdminInvoicesPage() {
       load();
     } catch (e) {
       alert(errMsg(e));
+    }
+  }
+
+  async function einvoice(i: AdminInvoice) {
+    setBusyId(i.id);
+    try {
+      const r = await api.post<AdminInvoice>(`/invoices/${i.id}/einvoice`);
+      alert(r.status === "issued" ? `Đã phát hành hoá đơn số ${r.invoice_number} (${r.einvoice_serial}).` : "Đã tạo hoá đơn nháp trên IAM — vào IAM để ký phát hành.");
+    } catch (e) {
+      alert(errMsg(e));
+    } finally {
+      setBusyId(null);
+      load();
     }
   }
 
@@ -57,7 +76,16 @@ export default function AdminInvoicesPage() {
       <div className="adm-head">
         <div>
           <h1>Yêu cầu xuất hoá đơn</h1>
-          <p>Khách nhập sau khi thanh toán; hệ thống gửi email tới <b>{meta?.invoice_email ?? "…"}</b> để xuất thủ công. Xuất xong, nhập số hoá đơn tại đây.</p>
+          {meta?.einvoice.enabled ? (
+            <p>
+              Tự xuất hoá đơn điện tử qua <b>{meta.einvoice.provider}</b> (ký hiệu <span className="mono">{meta.einvoice.serial || "chưa cấu hình"}</span>
+              {meta.einvoice.sign ? ", ký số ngay" : ", tạo nháp chờ ký trên IAM"})
+              {meta.einvoice.on_payment ? " ngay khi khách thanh toán, theo thông tin doanh nghiệp đã đăng ký (thiếu địa chỉ thì chờ khách điền form)" : " khi khách gửi thông tin xuất hoá đơn"}.
+              {" "}Lỗi thì email <b>{meta.invoice_email}</b> để xuất thủ công.
+            </p>
+          ) : (
+            <p>Khách nhập sau khi thanh toán; hệ thống gửi email tới <b>{meta?.invoice_email ?? "…"}</b> để xuất thủ công. Xuất xong, nhập số hoá đơn tại đây.</p>
+          )}
         </div>
       </div>
       {error ? <div className="adm-alert" style={{ marginBottom: 16 }}>{error}</div> : null}
@@ -83,6 +111,7 @@ export default function AdminInvoicesPage() {
                       <div className="sub">MST <span className="mono">{i.tax_code}</span> · {i.address}</div>
                       {i.buyer_name ? <div className="sub">Người mua: {i.buyer_name}</div> : null}
                       {i.note ? <div className="sub">Ghi chú: {i.note}</div> : null}
+                      {i.source === "auto" ? <div className="sub">Tự lấy từ hồ sơ doanh nghiệp khi thanh toán</div> : null}
                       <div className="sub">KH: <Link href={`/admin/khach-hang/${i.company.id}`} style={{ color: "var(--brand-600)" }}>{i.company.name}</Link></div>
                     </td>
                     <td><b className="mono">{i.order.code}</b><div className="sub">{ORDER_KIND[i.order.kind]} · {fmtVnd(i.order.amount)}</div><div className="sub">TT {fmtDateTime(i.order.paid_at)}</div></td>
@@ -90,11 +119,24 @@ export default function AdminInvoicesPage() {
                     <td>{i.email_sent_at ? <span className="sub">Đã gửi {fmtDateTime(i.email_sent_at)}</span> : <span className="sub" style={{ color: "var(--danger)" }}>Chưa gửi được</span>}</td>
                     <td>
                       {i.status === "issued" ? (
-                        <><span className="adm-badge s-active">Đã xuất</span><div className="sub">Số {i.invoice_number} · {fmtDateTime(i.issued_at)}</div></>
+                        <>
+                          <span className="adm-badge s-active">Đã xuất</span>
+                          <div className="sub">{i.einvoice_serial ? <span className="mono">{i.einvoice_serial} · </span> : null}Số {i.invoice_number} · {fmtDateTime(i.issued_at)}</div>
+                          {i.einvoice_serial ? <div className="sub">HĐĐT IAM</div> : null}
+                        </>
+                      ) : i.einvoice_error ? (
+                        <><span className="adm-badge s-rejected">Lỗi HĐĐT</span><div className="sub" style={{ color: "var(--danger)", maxWidth: 260 }}>{i.einvoice_error}</div></>
+                      ) : i.einvoice_status === "InvNotIssued" ? (
+                        <><span className="adm-badge s-contacted">Nháp trên IAM</span><div className="sub">Chờ ký phát hành</div></>
                       ) : <span className="adm-badge s-contacted">Chờ xuất</span>}
                     </td>
                     <td>
                       <div className="adm-actions">
+                        {meta?.einvoice.enabled && i.status !== "issued" ? (
+                          <button className="adm-btn sm" disabled={busyId === i.id} onClick={() => einvoice(i)}>
+                            {busyId === i.id ? "Đang gọi IAM…" : i.einvoice_status === "InvNotIssued" ? "Kiểm tra / ký HĐĐT" : "Phát hành HĐĐT"}
+                          </button>
+                        ) : null}
                         <button className="adm-btn sm" onClick={() => resend(i)}>Gửi lại email</button>
                         {i.status !== "issued" ? <button className="adm-btn sm primary" onClick={() => issue(i)}>Đã xuất hoá đơn</button> : null}
                       </div>

@@ -13,6 +13,13 @@ export interface Invoice {
   email_sent_at: string | null;
   issued_at: string | null;
   created_at: string;
+  /** "member" = khách gửi form · "auto" = hệ thống tự lấy thông tin doanh nghiệp khi thanh toán */
+  source: "member" | "auto";
+  /** Hoá đơn điện tử IAM: mẫu số + ký hiệu (vd 1C26TYY), trạng thái IAM, lỗi lần gọi gần nhất */
+  einvoice_serial: string;
+  einvoice_status: string;
+  einvoice_error: string;
+  einvoice_at: string | null;
 }
 
 export interface Order {

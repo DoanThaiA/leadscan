@@ -83,6 +83,26 @@ class Settings(BaseSettings):
     # Yêu cầu xuất hoá đơn được gửi tới email này (kế toán xuất thủ công)
     invoice_email: str = "vylyy9999@gmail.com"
 
+    # Hoá đơn điện tử IAM Invoice (iamsoftware.com.vn): tự xuất HĐĐT sau khi thanh toán.
+    # Tắt (mặc định) → giữ cách cũ: email kế toán xuất thủ công.
+    iam_enabled: bool = False
+    iam_base_url: str = "https://demo-invoice.iamsoftware.com.vn"  # production: link IAM cấp
+    iam_username: str = ""  # vd 0312303803-999 (MST-mã tài khoản)
+    iam_password: str = ""
+    iam_invoice_form: str = "1"  # ký hiệu mẫu số (1 = HĐ GTGT)
+    iam_invoice_serial: str = ""  # ký hiệu hoá đơn đã đăng ký, vd C26TYY
+    # Ký số luôn khi tạo (phát hành ngay). False = chỉ tạo hoá đơn nháp trên IAM, kế toán vào IAM ký.
+    iam_sign: bool = True
+    iam_cert_sn: str = ""  # serial chứng thư số; trống = lấy chứng thư IntrustCA đầu tiên của tài khoản
+    iam_pin_code: str = ""  # mã PIN ký số từ xa
+    iam_vat_rate: str = "10"  # thuế suất GTGT: 0, 5, 8, 10, KCT, KKKNT. Số tiền đơn hàng đã GỒM thuế.
+    iam_payment_method: str = "PiCashOrWireTransfer"  # TM/CK
+    iam_unit: str = "Gói"  # đơn vị tính trên hoá đơn
+    # Thanh toán xong → tự lấy thông tin doanh nghiệp đã đăng ký (tên, MST, địa chỉ) để xuất luôn, khách không phải điền.
+    # False = chờ khách gửi form "Thông tin xuất hoá đơn" rồi mới xuất.
+    iam_issue_on_payment: bool = True
+    iam_timeout_seconds: float = 60.0
+
     # Tuyển dụng: hồ sơ ứng viên gửi về email này (từng bài có thể đặt email riêng). Trống = dùng notify_email.
     recruit_email: str = ""
     apply_rate_limit_per_hour: int = 5  # số hồ sơ tối đa mỗi IP / giờ
