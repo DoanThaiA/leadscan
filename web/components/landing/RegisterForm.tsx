@@ -1,8 +1,14 @@
 "use client";
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type BusinessInfo, lookupBusiness, normalizeTaxCode } from "@/lib/business-lookup";
 
 type Errors = Record<string, string>;
+type Lookup =
+  | { state: "idle" }
+  | { state: "loading" }
+  | { state: "ok"; info: BusinessInfo }
+  | { state: "error"; message: string };
 
 const REQUIRED: Record<string, string> = {
   company_name: "Vui lòng nhập tên doanh nghiệp.",
@@ -11,7 +17,7 @@ const REQUIRED: Record<string, string> = {
 };
 // Thứ tự dùng để cuộn tới lỗi đầu tiên
 const FIELDS = [
-  "company_name", "tax_code", "industries", "company_size", "province", "website",
+  "tax_code", "company_name", "industries", "company_size", "province", "website",
   "contact_name", "email", "phone", "password", "password_confirm", "agree",
 ];
 // Ngành hàng gợi ý — khớp INDUSTRIES ở backend/app/registration_form.py
@@ -70,10 +76,71 @@ export default function RegisterForm() {
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState<string | null>(null);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [lookup, setLookup] = useState<Lookup>({ state: "idle" });
+  const lookupCtl = useRef<AbortController | null>(null);
+  const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastLooked = useRef(""); // MST đã tra gần nhất — tránh gọi lại khi gõ thêm ký tự không đổi giá trị
 
   useEffect(() => {
     startedAt.current = Date.now();
+    return () => {
+      lookupCtl.current?.abort();
+      if (lookupTimer.current) clearTimeout(lookupTimer.current);
+    };
   }, []);
+
+  /** Điền tên, địa chỉ, tỉnh/thành từ kết quả tra MST vào các ô tương ứng */
+  function fillFromBusiness(info: BusinessInfo) {
+    const form = formRef.current;
+    if (!form) return;
+    const set = (name: string, value: string) => {
+      const el = form.elements.namedItem(name) as HTMLInputElement | null;
+      if (el && value) el.value = value;
+    };
+    set("company_name", info.name);
+    set("address", info.address);
+    set("province", info.province);
+    setErrors(({ company_name: _a, province: _p, tax_code: _t, ...rest }) => rest);
+  }
+
+  async function runLookup(raw: string, force = false) {
+    const tax = normalizeTaxCode(raw);
+    if (!tax) {
+      if (force) setLookup({ state: "error", message: "Mã số thuế gồm 10 hoặc 13 chữ số." });
+      return;
+    }
+    if (!force && tax === lastLooked.current) return;
+    lastLooked.current = tax;
+    lookupCtl.current?.abort();
+    const ctl = new AbortController();
+    lookupCtl.current = ctl;
+    setLookup({ state: "loading" });
+    try {
+      const r = await lookupBusiness(tax, ctl.signal);
+      if (ctl.signal.aborted) return;
+      if (r.ok) {
+        fillFromBusiness(r.data);
+        setLookup({ state: "ok", info: r.data });
+      } else {
+        if (r.reason === "rate_limited" || r.reason === "network") lastLooked.current = ""; // cho phép thử lại
+        setLookup({ state: "error", message: r.message });
+      }
+    } catch {
+      // bị huỷ do người dùng gõ tiếp — bỏ qua
+    }
+  }
+
+  // Tự tra cứu khi người dùng nhập đủ 10/13 số (chờ ngừng gõ 600ms)
+  function onTaxInput(raw: string) {
+    if (lookupTimer.current) clearTimeout(lookupTimer.current);
+    if (!normalizeTaxCode(raw)) {
+      lookupCtl.current?.abort();
+      lastLooked.current = "";
+      setLookup({ state: "idle" });
+      return;
+    }
+    lookupTimer.current = setTimeout(() => runLookup(raw), 600);
+  }
 
   useEffect(() => {
     if (banner) alertRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -185,8 +252,28 @@ export default function RegisterForm() {
             <fieldset className="fs">
               <legend><i>1</i>Thông tin doanh nghiệp</legend>
               <div className="fgrid">
+                <div className="fld full"><label htmlFor="tax_code">Mã số thuế <span className="req">*</span></label>
+                  <div className="tax-row">
+                    <input type="text" id="tax_code" name="tax_code" inputMode="numeric" maxLength={14} placeholder="10 hoặc 13 chữ số" {...inv("tax_code")}
+                      onChange={(e) => onTaxInput(e.currentTarget.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); runLookup(e.currentTarget.value, true); } }} />
+                    <button type="button" className="btn btn-outline" disabled={lookup.state === "loading"}
+                      onClick={() => runLookup((formRef.current?.elements.namedItem("tax_code") as HTMLInputElement | null)?.value ?? "", true)}>
+                      {lookup.state === "loading" ? "Đang tra…" : "Tra cứu"}
+                    </button>
+                  </div>
+                  {err("tax_code")}
+                  <span className={`tax-note ${lookup.state}`} role="status" aria-live="polite">
+                    {lookup.state === "idle" && "Nhập mã số thuế để tự điền tên doanh nghiệp, địa chỉ và tỉnh/thành."}
+                    {lookup.state === "loading" && "Đang tra cứu thông tin doanh nghiệp…"}
+                    {lookup.state === "ok" && (
+                      lookup.info.active
+                        ? <>Đã điền thông tin của <b>{lookup.info.name}</b>. Bạn có thể chỉnh sửa nếu cần.</>
+                        : <>Đã điền thông tin của <b>{lookup.info.name}</b> — lưu ý trạng thái thuế: <b>{lookup.info.status}</b>.</>
+                    )}
+                    {lookup.state === "error" && lookup.message}
+                  </span></div>
                 <div className="fld full"><label htmlFor="company_name">Tên doanh nghiệp <span className="req">*</span></label><input type="text" id="company_name" name="company_name" maxLength={150} autoComplete="organization" placeholder="Công ty TNHH ABC" {...inv("company_name")} />{err("company_name")}</div>
-                <div className="fld"><label htmlFor="tax_code">Mã số thuế <span className="req">*</span></label><input type="text" id="tax_code" name="tax_code" inputMode="numeric" maxLength={14} placeholder="10 hoặc 13 chữ số" {...inv("tax_code")} />{err("tax_code")}</div>
                 <div className="fld"><label htmlFor="company_size">Quy mô nhân sự <span className="req">*</span></label>
                   <select id="company_size" name="company_size" {...inv("company_size")}><option value="">Chọn quy mô…</option><option>Dưới 10 nhân sự</option><option>10–49 nhân sự</option><option>50–199 nhân sự</option><option>200–499 nhân sự</option><option>Từ 500 nhân sự</option></select>{err("company_size")}</div>
                 <div className="fld"><label htmlFor="province">Tỉnh/thành <span className="req">*</span></label><input type="text" id="province" name="province" maxLength={80} autoComplete="address-level1" placeholder="Hà Nội" list="provinceList" {...inv("province")} />{err("province")}

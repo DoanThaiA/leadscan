@@ -426,6 +426,13 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
 .hint{font-size:12.5px;color:var(--soft)}
 .err{font-size:12.5px;color:#DC2626;min-height:0;display:none}
 .err.show{display:block}
+.tax-row{display:flex;gap:8px}
+.tax-row input{flex:1;min-width:0}
+.tax-row .btn{min-height:44px;padding:0 16px;flex:none}
+.tax-note{font-size:12.5px;color:var(--soft);line-height:1.45}
+.tax-note.ok{color:var(--green)}
+.tax-note.ok b{color:var(--ink-2)}
+.tax-note.error{color:var(--warn)}
 .checks{display:flex;flex-wrap:wrap;gap:8px}
 .checks label{position:relative;cursor:pointer}
 .checks input{position:absolute;opacity:0;inset:0;cursor:pointer}
