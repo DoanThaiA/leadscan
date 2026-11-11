@@ -54,7 +54,7 @@ export default function TopupPage() {
       <div className="adm-head">
         <div>
           <h1>Nạp tiền</h1>
-          <p>Thanh toán bằng chuyển khoản VietQR qua InfoCMS — điểm được cộng tự động khi nhận tiền.</p>
+          <p>Thanh toán bằng chuyển khoản VietQR qua cổng thanh toán MCV — điểm được cộng tự động khi nhận tiền.</p>
         </div>
       </div>
 

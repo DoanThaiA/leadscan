@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.routes import admin, admin_commerce, admin_jobs, admin_knowledge, careers, member, payments, public
+from app.routes import admin, admin_commerce, admin_jobs, admin_knowledge, careers, mcv, member, payments, public
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -22,6 +22,7 @@ app.include_router(admin_jobs.router)
 app.include_router(careers.router)
 app.include_router(member.router)
 app.include_router(payments.router)
+app.include_router(mcv.router)
 
 
 @app.exception_handler(RequestValidationError)

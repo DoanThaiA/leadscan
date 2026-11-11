@@ -56,9 +56,21 @@ class Settings(BaseSettings):
     topup_min: int = 1_000_000
     topup_max: int = 500_000_000
 
-    # Thanh toán: "infocms" (thật) hoặc "mock" (giả lập để chạy thử — KHÔNG dùng trên production)
-    payment_provider: str = "infocms"
+    # Thanh toán: "mcv" (cổng MCV — mặc định), "infocms" (gọi thẳng InfoCMS, cần khoá RSA) hoặc
+    # "mock" (giả lập tại chỗ để chạy thử — KHÔNG dùng trên production)
+    payment_provider: str = "mcv"
     order_expire_hours: int = 24
+
+    # Cổng thanh toán MCV (https://api.mcv.network). Khoá do admin MCV cấp; Secret chỉ nằm trên server.
+    mcv_api_key: str = Field("", validation_alias=AliasChoices("MCV_API_KEY", "LEADSCAN_MCV_API_KEY"))  # mcvpk_test_… / mcvpk_live_…
+    mcv_secret: str = Field("", validation_alias=AliasChoices("MCV_SECRET", "LEADSCAN_MCV_SECRET"))  # mcvsk_…
+    mcv_base_url: str = Field("https://api.mcv.network", validation_alias=AliasChoices("MCV_BASE_URL", "LEADSCAN_MCV_BASE_URL"))
+    # Nhận thanh toán test_mode (khoá test, giả lập) — CHỈ bật khi chạy thử. Production để false: webhook test bị bỏ qua.
+    mcv_allow_test_mode: bool = False
+    # Trang MCV đưa khách quay về sau khi trả (phải https + thuộc tên miền đã đăng ký với MCV). Không phải https → không gửi.
+    mcv_return_url: str = "https://leadscan.net/thanh-vien/nap-tien/ket-qua"
+    mcv_expires_minutes: int = 15  # hạn mã QR (5–60 phút); hết hạn khách bấm "Tạo mã QR mới"
+    mcv_timeout_seconds: float = 15.0
     # Tài khoản thu (InfoCMS Smart Collect cấp) để sinh mã VietQR
     payment_bank_bin: str = ""  # mã BIN ngân hàng theo NAPAS, vd 970436 = Vietcombank
     payment_bank_name: str = ""

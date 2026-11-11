@@ -6,7 +6,8 @@ Company            doanh nghiệp đăng ký / thành viên
   └─ Activity       lịch sử: tạo hồ sơ, đổi trạng thái, ghi chú chăm sóc
   ├─ MemberUser     tài khoản đăng nhập cổng thành viên
   ├─ WalletTransaction   sổ cái điểm (mỗi lần cộng/trừ 1 dòng, không sửa/xoá)
-  ├─ PaymentOrder   đơn nạp tiền / phí thành viên (thanh toán qua InfoCMS)
+  ├─ PaymentOrder   đơn nạp tiền / phí thành viên (thanh toán qua cổng MCV → InfoCMS)
+  │    ├─ McvPayment      mỗi mã QR MCV cấp cho đơn (1 đơn có thể nhiều payment_code); chống mở dịch vụ 2 lần
   │    └─ InvoiceRequest  thông tin xuất hoá đơn (xuất thủ công)
   ├─ SearchRequest      yêu cầu "Enrich tìm kiếm cơ hội" (tiêu chí + mô tả, email báo admin)
   ├─ SavedOpportunity   cơ hội thành viên thêm vào kho (xem/mua sau; cơ hội phù hợp tự vào kho)
@@ -302,6 +303,47 @@ class PaymentOrder(Base):
     company: Mapped[Company] = relationship(lazy="joined")
     invoice: Mapped["InvoiceRequest | None"] = relationship(back_populates="order", uselist=False, lazy="joined")
     confirmed_by: Mapped[AdminUser | None] = relationship(lazy="joined")
+
+
+MCV_STATUSES = {
+    "pending": "Đang chờ chuyển khoản",
+    "paid": "Đã thanh toán",
+    "expired": "Mã QR hết hạn",
+    "needs_attention": "Đã nhận tiền nhưng chưa khớp",
+    "failed": "Lỗi — thử lại sau",
+}
+
+
+class McvPayment(Base):
+    """1 lần thanh toán do cổng MCV cấp (payment_code). Đơn LeadScan gửi sang MCV với order_id = PaymentOrder.code.
+
+    processed_at khác NULL = đã xử lý tín hiệu "paid" (webhook hoặc API tra trạng thái) đúng 1 lần —
+    payment_code unique + khoá dòng khi xử lý đảm bảo mỗi payment_code chỉ mở dịch vụ 1 lần.
+    """
+
+    __tablename__ = "mcv_payments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    payment_code: Mapped[str] = mapped_column(String(100), unique=True)
+    order_id: Mapped[int | None] = mapped_column(ForeignKey("payment_orders.id", ondelete="SET NULL"), index=True)
+    mcv_order_id: Mapped[str] = mapped_column(String(100), index=True)  # order_id gửi MCV (= PaymentOrder.code)
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    amount: Mapped[int] = mapped_column(BigInteger)
+    paid_amount: Mapped[int | None] = mapped_column(BigInteger)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    test_mode: Mapped[bool] = mapped_column(Boolean, default=False)
+    checkout_url: Mapped[str] = mapped_column(String(500), default="")
+    qr_data: Mapped[str | None] = mapped_column(Text)
+    bank: Mapped[dict | None] = mapped_column(JSON)  # {bank_name, account_no, account_name, transfer_content}
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime)  # đã mở dịch vụ / đã xử lý tín hiệu paid
+    result: Mapped[str] = mapped_column(String(300), default="")  # kết quả xử lý: credited / lý do bỏ qua
+    last_event_id: Mapped[str] = mapped_column(String(100), default="")
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime)  # lần gần nhất tra trạng thái với MCV
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    order: Mapped[PaymentOrder | None] = relationship(lazy="joined")
 
 
 class InvoiceRequest(Base):

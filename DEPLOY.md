@@ -30,7 +30,7 @@ Trên VPS:
 - [ ] **VPS** Ubuntu 22.04 hoặc 24.04, tối thiểu **2 vCPU / 4 GB RAM / 40 GB ổ**, có IP public và quyền SSH (root hoặc user có `sudo`).
 - [ ] **Tên miền** `leadscan.net`, có quyền sửa DNS.
 - [ ] **Resend** (gửi email): tài khoản + API key, tên miền gửi đã xác minh (xem Phần 9).
-- [ ] **Thông tin thanh toán**: tài khoản thu (BIDV `8600642866`) và tên chủ tài khoản.
+- [ ] **Cổng thanh toán MCV**: API Key `mcvpk_live_…` + Secret `mcvsk_…` do admin MCV cấp (xem *Thanh toán* ở Phần env).
 - [ ] Code mới nhất đã ở trên GitHub nhánh `main`.
 
 ---
@@ -231,13 +231,30 @@ nano .env
 
 | Biến | Điền gì |
 |---|---|
-| `LEADSCAN_PAYMENT_PROVIDER` | `infocms` — **không để `mock` trên production** (mock có nút giả lập đã trả tiền) |
-| `LEADSCAN_PAYMENT_BANK_BIN` | `970418` (BIDV) |
-| `LEADSCAN_PAYMENT_BANK_NAME` | `BIDV` |
-| `LEADSCAN_PAYMENT_ACCOUNT_NO` | `8600642866` |
-| `LEADSCAN_PAYMENT_ACCOUNT_NAME` | Tên chủ tài khoản, VIẾT HOA KHÔNG DẤU |
+| `LEADSCAN_PAYMENT_PROVIDER` | `mcv` — **không để `mock` trên production** (mock có nút giả lập đã trả tiền) |
+| `MCV_API_KEY` | `mcvpk_live_…` (admin MCV cấp). Khoá `mcvpk_test_…` chỉ để chạy thử: không có QR thật |
+| `MCV_SECRET` | `mcvsk_…` — chỉ nằm trong `.env` trên server, không bao giờ ra trình duyệt |
+| `MCV_BASE_URL` | `https://api.mcv.network` (mặc định) |
+| `LEADSCAN_MCV_ALLOW_TEST_MODE` | `false` trên production — webhook/thanh toán `test_mode: true` bị bỏ qua, nút giả lập bị tắt |
+| `LEADSCAN_MCV_RETURN_URL` | `https://leadscan.net/thanh-vien/nap-tien/ket-qua` (https, tên miền đã đăng ký với MCV) |
+| `LEADSCAN_MCV_EXPIRES_MINUTES` | Hạn mã QR, 5–60 phút (mặc định 15). Hết hạn khách bấm "Tạo mã QR mới" |
 
-> Hiện chưa tích hợp xong InfoCMS (QuickQR, chữ ký RSA). Trang thanh toán hiện QR tĩnh tới tài khoản trên, khách vẫn chuyển được tiền, nhưng **admin phải xác nhận tay** ở mục *Thanh toán* sau khi đối soát sao kê.
+Luồng: thành viên tạo đơn → LeadScan gọi `POST /v1/payments` (ký HMAC) → trang nạp tiền vẽ QR từ `qr_data` →
+khách chuyển khoản vào tài khoản công ty qua InfoCMS → MCV gửi webhook `payment.paid` (đã ký) tới
+`https://leadscan.net/api/mcv/webhook` → cộng điểm / kích hoạt thành viên (mỗi `payment_code` đúng 1 lần).
+Trong lúc đợi, backend tra `GET /v1/payments/{payment_code}` tối đa 5 giây/lần.
+
+**Việc cần làm với MCV trước khi bật:**
+
+1. Gửi admin MCV: webhook URL `https://leadscan.net/api/mcv/webhook` và tên miền return_url `leadscan.net`.
+2. Nhận khoá live (`mcvpk_live_…` + `mcvsk_…`), điền vào `.env`, `docker compose up -d` lại api.
+3. Chạy `docker compose exec api alembic upgrade head` (bảng `mcv_payments`).
+4. Giao dịch thật **10.000₫**: tạm đặt `LEADSCAN_MEMBERSHIP_FEE=10000` + `LEADSCAN_MEMBERSHIP_POINTS=10000` trên server (hoặc
+   tài khoản test riêng), tạo đơn phí thành viên, quét QR bằng app ngân hàng → trang tự chuyển "Đã thanh toán", ví +10.000 điểm,
+   log api có `MCV … (webhook): đã cộng`. Xong đặt lại phí 89.000 rồi khởi động lại api.
+
+Dự phòng: nếu khách chuyển sai số tiền (MCV báo `needs_attention`) hoặc chuyển 2 lần, đơn **không** tự cộng điểm —
+xem ghi chú ở đơn / lịch sử khách hàng và xác nhận tay ở mục *Thanh toán* (hoặc hoàn tiền).
 
 ### So khớp cơ hội (Cohere)
 
@@ -431,7 +448,7 @@ Mở trình duyệt và thử:
 - [ ] Gửi 1 đăng ký thử trên trang chủ → nhận email thông báo (nếu đặt `LEADSCAN_NOTIFY_EMAIL`)
 - [ ] `https://leadscan.net/admin` — đăng nhập, thấy đăng ký vừa gửi
 - [ ] `https://leadscan.net/thanh-vien` — đăng nhập bằng tài khoản vừa đăng ký
-- [ ] Tạo đơn nạp tiền → trang thanh toán hiện QR BIDV đúng số tài khoản, số tiền, nội dung
+- [ ] Tạo đơn nạp tiền → trang thanh toán hiện QR MCV, số tiền, chủ tài khoản, đếm ngược; giao dịch thật 10.000₫ được cộng điểm tự động
 - [ ] Quên mật khẩu → nhận được email đặt lại
 
 Kiểm tra cổng nội bộ không lộ ra ngoài — chạy **từ máy bạn**, phải bị từ chối / hết thời gian:

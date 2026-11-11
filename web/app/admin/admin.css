@@ -117,6 +117,7 @@ select.adm-input { padding-right: 28px; }
 
 .adm-alert { padding: 10px 12px; border-radius: 6px; background: var(--danger-50); color: var(--danger); border: 1px solid #f3c1c1; }
 .adm-alert.ok { background: #e8f5ec; color: var(--ok); border-color: #bfe3cb; }
+.adm-alert.warn { background: #fff7e6; color: #8a5a00; border-color: #f3dca8; }
 
 .adm-badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; border: 1px solid transparent; }
 .adm-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }

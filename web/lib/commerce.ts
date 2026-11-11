@@ -40,7 +40,17 @@ export interface PaymentInfo {
   amount: number;
   transfer_content: string;
   qr_payload: string | null;
+  // Chỉ có khi provider = "mcv" (cổng thanh toán MCV)
+  payment_code?: string | null;
+  mcv_status?: McvStatus | null;
+  checkout_url?: string | null;
+  expires_at?: string | null;
+  test_mode?: boolean;
+  can_simulate?: boolean;
+  error?: string;
 }
+
+export type McvStatus = "pending" | "paid" | "expired" | "needs_attention" | "failed";
 
 export interface Tx {
   id: number;

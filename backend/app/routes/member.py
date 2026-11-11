@@ -35,7 +35,8 @@ from app.registration_form import AREAS, CUSTOMER_SIZES, INDUSTRIES, REGIONS
 from app.schemas import LoginIn, PasswordChangeIn
 from app.schemas_commerce import EnrichIn, EnrichOut, InvoiceIn, OrderCreateIn, OrderOut, TxOut
 from app.security import DUMMY_HASH, add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
-from app.services import attachments, catalog, payments
+from app.services import attachments, catalog, mcv_payments, payments
+from app.services.mcv import McvClient, McvError
 from app.worker import enqueue, match_request_now, send_invoice_request_task, send_password_reset_task, send_search_request_task
 
 router = APIRouter(prefix="/api/member")
@@ -357,7 +358,36 @@ def create_order(body: OrderCreateIn, user: MemberUser = Depends(current_member)
             raise HTTPException(400, f"Số tiền nạp phải từ {cfg.topup_min:,}đ đến {cfg.topup_max:,}đ.".replace(",", "."))
         points = amount
     order = payments.create_order(db, cfg, user.company_id, user.id, body.kind, amount, points)
-    return {"order": OrderOut.model_validate(order).model_dump(mode="json"), "payment": payments.payment_info(order, cfg)}
+    error = ""
+    if order.provider == "mcv":  # xin MCV mã QR ngay; lỗi thì đơn vẫn còn, trang thanh toán có nút "Tạo mã QR"
+        try:
+            mcv_payments.start_payment(db, cfg, order)
+        except McvError as e:
+            error = _mcv_error_text(e)
+    return {"order": OrderOut.model_validate(order).model_dump(mode="json"), "payment": _payment_info(db, order, error=error)}
+
+
+def _mcv_error_text(e: McvError) -> str:
+    if e.status == 429:
+        return "Cổng thanh toán đang bận, vui lòng thử lại sau ít phút."
+    if e.code == "not_configured":
+        return "Cổng thanh toán chưa được cấu hình. Vui lòng liên hệ LeadScan để được hỗ trợ thanh toán."
+    return f"Chưa tạo được mã thanh toán: {e.message}"
+
+
+def _payment_info(db: Session, o: PaymentOrder, *, refresh: bool = False, payment_code: str = "", error: str = "") -> dict:
+    """Thông tin thanh toán của đơn. Đơn MCV: tra trạng thái với MCV (tối đa 1 lần/5 giây) — trình duyệt không gọi MCV."""
+    cfg = get_settings()
+    if o.provider != "mcv":
+        return payments.payment_info(o, cfg)
+    mp = None
+    if payment_code:  # trang kết quả (return_url): tra đúng payment_code MCV gửi về, không tin status trên URL
+        mp = mcv_payments.lookup_for_order(db, cfg, o, payment_code)
+    latest = mcv_payments.latest(db, o)
+    if refresh and latest and mcv_payments.configured(cfg):
+        latest = mcv_payments.refresh(db, cfg, latest)
+    db.refresh(o)
+    return mcv_payments.payment_info(db, cfg, o, mp or latest, error=error)
 
 
 def _my_order(db: Session, user: MemberUser, code: str) -> PaymentOrder:
@@ -368,11 +398,36 @@ def _my_order(db: Session, user: MemberUser, code: str) -> PaymentOrder:
 
 
 @router.get("/orders/{code}")
-def get_order(code: str, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+def get_order(
+    code: str,
+    payment_code: str = Query("", max_length=100, pattern=r"^[A-Za-z0-9._:-]*$"),
+    user: MemberUser = Depends(current_member),
+    db: Session = Depends(get_db),
+):
     o = _my_order(db, user, code)
     payments.expire_if_due(o)
     db.commit()
-    return {"order": OrderOut.model_validate(o).model_dump(mode="json"), "payment": payments.payment_info(o, get_settings()), "me": _me(user)}
+    payment = _payment_info(db, o, refresh=o.status in ("pending", "expired", "cancelled"), payment_code=payment_code)
+    db.refresh(user.company)
+    return {"order": OrderOut.model_validate(o).model_dump(mode="json"), "payment": payment, "me": _me(user)}
+
+
+@router.post("/orders/{code}/mcv")
+def renew_mcv_payment(code: str, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    """Tạo (lại) mã QR MCV cho đơn đang chờ — dùng khi QR cũ hết hạn hoặc lần tạo trước bị lỗi."""
+    cfg = get_settings()
+    o = _my_order(db, user, code)
+    payments.expire_if_due(o)
+    db.commit()
+    if o.provider != "mcv":
+        raise HTTPException(404, "Không tồn tại.")
+    if o.status != "pending":
+        raise HTTPException(409, "Đơn không còn chờ thanh toán — vui lòng tạo đơn mới.")
+    try:
+        mcv_payments.start_payment(db, cfg, o)
+    except McvError as e:
+        raise HTTPException(429 if e.status == 429 else 502, _mcv_error_text(e)) from None
+    return {"order": OrderOut.model_validate(o).model_dump(mode="json"), "payment": _payment_info(db, o)}
 
 
 @router.post("/orders/{code}/cancel")
@@ -387,8 +442,22 @@ def cancel_order(code: str, user: MemberUser = Depends(current_member), db: Sess
 
 @router.post("/orders/{code}/simulate-paid")
 def simulate_paid(code: str, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
-    """Chỉ có khi payment_provider = mock (chạy thử). Production dùng webhook InfoCMS."""
+    """Chỉ cho môi trường chạy thử: provider mock (giả lập tại chỗ) hoặc MCV với khoá test + cho phép test_mode.
+    Production dùng webhook MCV/InfoCMS."""
     cfg = get_settings()
+    if cfg.payment_provider == "mcv" and mcv_payments.can_simulate(cfg):
+        o = _my_order(db, user, code)
+        mp = mcv_payments.latest(db, o) if o.provider == "mcv" else None
+        if not mp or mp.status == "paid":
+            raise HTTPException(409, "Đơn không có mã thanh toán MCV đang chờ.")
+        try:
+            # MCV gửi webhook thật (test_mode: true). Máy dev thường không nhận được webhook (localhost)
+            # → tra trạng thái ngay để ghi nhận; webhook tới sau sẽ là "duplicate".
+            McvClient(cfg).simulate_paid(mp.payment_code)
+        except McvError as e:
+            raise HTTPException(502, _mcv_error_text(e)) from None
+        mcv_payments.refresh(db, cfg, mp, force=True)
+        return {"ok": True}
     if cfg.payment_provider != "mock":
         raise HTTPException(404, "Không tồn tại.")
     o = _my_order(db, user, code)

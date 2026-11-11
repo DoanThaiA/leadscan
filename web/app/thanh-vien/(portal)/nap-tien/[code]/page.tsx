@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { CopyField, Field, Icon, Skeleton } from "@/components/admin/ui";
+import { McvPayPanel } from "@/components/member/McvPayPanel";
 import { type MemberMe, useMember } from "@/components/member/MemberContext";
 import { fmtDateTime } from "@/lib/admin/format";
 import { fmtPts, fmtVnd, ORDER_KIND, ORDER_STATUS, ORDER_STATUS_CLASS, type Order, type PaymentInfo } from "@/lib/commerce";
@@ -41,17 +42,17 @@ export default function OrderPage() {
     load();
   }, [load]);
 
-  // Đang chờ thanh toán: hỏi lại trạng thái mỗi 4 giây
+  // Đang chờ thanh toán: hỏi lại trạng thái mỗi 5 giây (backend LeadScan tra MCV — trình duyệt không gọi MCV)
   useEffect(() => {
-    if (d?.order.status !== "pending") return;
-    const t = setInterval(load, 4000);
+    if (d?.order.status !== "pending" || d.payment.mcv_status === "needs_attention") return;
+    const t = setInterval(load, 5000);
     return () => clearInterval(t);
-  }, [d?.order.status, load]);
+  }, [d?.order.status, d?.payment.mcv_status, load]);
 
   useEffect(() => {
     document.title = `Thanh toán ${code} · LeadScan B2B`;
-    if (d?.payment.qr_payload) QRCode.toDataURL(d.payment.qr_payload, { width: 456, margin: 1, errorCorrectionLevel: "M" }).then(setQr);
-  }, [d?.payment.qr_payload, code]);
+    if (d?.payment.provider !== "mcv" && d?.payment.qr_payload) QRCode.toDataURL(d.payment.qr_payload, { width: 456, margin: 1, errorCorrectionLevel: "M" }).then(setQr);
+  }, [d?.payment.provider, d?.payment.qr_payload, code]);
 
   async function simulate() {
     setSimBusy(true);
@@ -92,7 +93,22 @@ export default function OrderPage() {
       </div>
       {error ? <div className="adm-alert" style={{ marginBottom: 16 }}>{error}</div> : null}
 
-      {o.status === "pending" ? (
+      {o.status === "pending" && p.provider === "mcv" ? (
+        <section className="adm-card">
+          <div className="hd">
+            <h2>Quét mã VietQR để thanh toán</h2>
+            <span className="muted" style={{ fontSize: 12.5 }}>Đơn giữ tới {fmtDateTime(o.expires_at)}</span>
+          </div>
+          <div className="bd">
+            <McvPayPanel code={o.code} payment={p} onChange={load} onCancel={cancel} />
+            <ol className="adm-steps" style={{ fontSize: 13, marginTop: 16 }}>
+              <li>Quét QR bằng app ngân hàng (hoặc mở trang thanh toán MCV), giữ nguyên số tiền và nội dung.</li>
+              <li>Cổng MCV tự đối soát; trang này cập nhật khi LeadScan nhận được tiền.</li>
+              <li>Điểm được cộng ngay vào ví, sau đó bạn có thể yêu cầu xuất hoá đơn.</li>
+            </ol>
+          </div>
+        </section>
+      ) : o.status === "pending" ? (
         <section className="adm-card">
           <div className="hd">
             <h2>Quét mã VietQR để thanh toán</h2>
