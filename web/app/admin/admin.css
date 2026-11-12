@@ -47,20 +47,28 @@
 
 /* ---------- Khung ---------- */
 .adm-shell { display: grid; grid-template-columns: 236px 1fr; min-height: 100vh; }
-.adm-side { background: #fff; border-right: 1px solid var(--line); padding: 18px 12px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh; }
+.adm-side { background: #fff; border-right: 1px solid var(--line); padding: 18px 12px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh; min-width: 0; }
 .adm-logo { display: flex; align-items: center; gap: 10px; padding: 6px 10px 20px; }
 .adm-logo small { font: 600 11px Inter, sans-serif; color: var(--brand-600); background: var(--brand-50); padding: 2px 6px; border-radius: 4px; margin-left: 2px; }
 .adm-nav a { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 6px; color: var(--ink-2); font-weight: 500; }
 .adm-nav a:hover { background: var(--line-2); }
 .adm-nav a.on { background: var(--brand-50); color: var(--brand-600); }
-.adm-side-foot { margin-top: auto; border-top: 1px solid var(--line); padding: 12px 10px 0; display: grid; gap: 8px; }
-.adm-me { display: flex; align-items: center; gap: 10px; }
+/* minmax(0, 1fr): cột không giãn theo nội dung → tên dài (doanh nghiệp) xuống dòng / cắt "…" trong khung sidebar, không tràn ra ngoài */
+.adm-side-foot { margin-top: auto; border-top: 1px solid var(--line); padding: 12px 10px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.adm-me { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.adm-me > div { min-width: 0; flex: 1; }
 .adm-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; font-weight: 600; font-size: 12px; flex: none; }
-.adm-me b { display: block; color: var(--ink); font-weight: 600; line-height: 1.3; }
+.adm-me b { display: block; color: var(--ink); font-weight: 600; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .adm-me span { font-size: 12px; color: var(--muted); }
+/* tên doanh nghiệp: tối đa 2 dòng rồi "…" (di chuột xem đủ tên) */
+.adm-me .adm-me-org { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; line-height: 1.35; }
 .adm-main { min-width: 0; padding: 24px 28px 48px; }
 .adm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
 .adm-head p { color: var(--muted); margin-top: 2px; }
+/* Lời chào cổng thành viên: tên doanh nghiệp dài tối đa 2 dòng rồi "…"; mã khách hàng không ngắt giữa chừng */
+.mt-hello { min-width: 0; flex: 1 1 320px; }
+.mt-hello .mt-org { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; max-width: 720px; }
+.mt-hello .mt-code { font-size: 12.5px; white-space: nowrap; margin-top: 2px; }
 .adm-mtop { display: none; }
 
 @media (max-width: 860px) {
@@ -137,6 +145,8 @@ select.adm-input { padding-right: 28px; }
 .adm-table tbody tr.link { cursor: pointer; }
 .adm-table tbody tr.link:hover td { background: #fcfcfd; }
 .adm-table .name { color: var(--ink); font-weight: 600; }
+/* Tên (doanh nghiệp…) trong bảng: tối đa 2 dòng rồi "…" — tên dài không kéo cao dòng; cột có bề rộng tối thiểu trên mobile */
+.adm-table a.name, .adm-table div.name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; min-width: 180px; max-width: 420px; }
 .adm-table .sub { color: var(--muted); font-size: 12.5px; }
 .adm-empty { padding: 40px 16px; text-align: center; color: var(--muted); }
 

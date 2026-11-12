@@ -79,8 +79,8 @@ function Shell({ children }: { children: ReactNode }) {
           <div className="adm-me">
             <span className="adm-avatar">{initials(me.full_name)}</span>
             <div style={{ minWidth: 0 }}>
-              <b>{me.full_name}</b>
-              <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{me.company.name}</span>
+              <b title={me.full_name}>{me.full_name}</b>
+              <span className="adm-me-org" title={me.company.name}>{me.company.name}</span>
             </div>
           </div>
           <button className="adm-btn sm ghost" onClick={logout}><Icon name="logout" size={14} /> Đăng xuất</button>

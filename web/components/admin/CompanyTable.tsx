@@ -45,7 +45,7 @@ export function CompanyTable({
             return (
               <tr key={c.id} className="link" onClick={() => router.push(href)}>
                 <td>
-                  <a className="name" href={href} onClick={(e) => { e.preventDefault(); router.push(href); }}>
+                  <a className="name" href={href} title={c.name} onClick={(e) => { e.preventDefault(); router.push(href); }}>
                     {c.name}
                   </a>
                   <div className="sub mono">{c.code} · MST {c.tax_code}</div>

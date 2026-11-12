@@ -35,9 +35,10 @@ export default function MemberHome() {
   return (
     <>
       <div className="adm-head">
-        <div>
+        <div className="mt-hello">
           <h1>Xin chào, {me.full_name}</h1>
-          <p>{c.name} · <span className="mono">{c.code}</span></p>
+          <p className="mt-org" title={c.name}>{c.name}</p>
+          <p className="mono mt-code">Mã khách hàng {c.code}</p>
         </div>
         <div className="adm-actions">
           <Link className="adm-btn" href="/thanh-vien/nap-tien">Nạp điểm</Link>
