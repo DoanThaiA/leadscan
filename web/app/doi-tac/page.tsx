@@ -174,7 +174,7 @@ export default async function PartnerLandingPage() {
               <p>Chỉ cần thông tin liên hệ. CCCD, mã số thuế cá nhân và tài khoản ngân hàng chỉ cần khi bạn rút tiền lần đầu.</p>
               <ol className="reg-next">
                 <li><b>Đăng ký</b>Điền form đăng ký, khoảng 1 phút.</li>
-                <li><b>Xác thực số điện thoại</b>Nhập mã OTP để kích hoạt tài khoản.</li>
+                <li><b>Xác thực email</b>Nhập mã OTP gửi tới email để kích hoạt tài khoản.</li>
                 <li><b>Gửi cơ hội đầu tiên</b>Trong cổng đối tác, theo dõi trạng thái và số dư theo thời gian thực.</li>
               </ol>
               <p className="ptl-login-hint">Đã có tài khoản? <a href="/doi-tac/dang-nhap">Đăng nhập cổng đối tác</a></p>

@@ -35,7 +35,7 @@ function validate(f: FormData, kind: string): Errors {
   return e;
 }
 
-/** Form đăng ký đối tác — 7 trường (brief mục 7.2). Thành công → đã đăng nhập, chuyển sang bước nhập OTP. */
+/** Form đăng ký đối tác — 7 trường (brief mục 7.2). Thành công → đã đăng nhập, chuyển sang bước nhập mã OTP gửi qua email. */
 export default function SignupForm() {
   const formRef = useRef<HTMLFormElement>(null);
   const startedAt = useRef(0);
@@ -202,7 +202,7 @@ export default function SignupForm() {
           <span className="spin" aria-hidden="true"></span>
           <span>{busy ? "Đang gửi…" : "Đăng ký đối tác"}</span>
         </button>
-        <small>Miễn phí. Sau khi đăng ký, nhập mã OTP gửi tới số điện thoại để kích hoạt tài khoản. Không hỏi CCCD hay tài khoản ngân hàng ở bước này.</small>
+        <small>Miễn phí. Sau khi đăng ký, nhập mã OTP gửi tới email của bạn để kích hoạt tài khoản. Không hỏi CCCD hay tài khoản ngân hàng ở bước này.</small>
       </div>
     </form>
   );

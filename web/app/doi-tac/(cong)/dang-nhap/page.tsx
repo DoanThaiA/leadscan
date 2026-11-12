@@ -20,7 +20,7 @@ function LoginForm() {
     setError("");
     try {
       const me = await papi.post<PartnerMe>("/auth/login", { email: String(fd.get("email")), password: String(fd.get("password")) });
-      if (!me.phone_verified) return router.replace("/doi-tac/xac-thuc");
+      if (!me.email_verified) return router.replace("/doi-tac/xac-thuc");
       const next = params.get("next");
       const ok = next && next.startsWith("/doi-tac/") && !/dang-nhap|xac-thuc/.test(next);
       router.replace(ok ? next : "/doi-tac/tong-quan");

@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   },
 };
 
-const CONTACT = "mailto:contact@leadscanb2b.com";
+const CONTACT = "mailto:contact@leadscan.net";
 
 /* Biểu tượng nét (cùng phong cách sprite landing: stroke 2, bo tròn) cho các mục chưa có trong IconSprite */
 const P: Record<string, ReactNode> = {
@@ -141,7 +141,7 @@ const jsonLd = {
   "@type": "AboutPage",
   name: "Giới thiệu LeadScan B2B",
   url: "https://leadscan.net/gioi-thieu",
-  about: { "@type": "Organization", name: "LeadScan B2B", url: "https://leadscan.net/", email: "contact@leadscanb2b.com" },
+  about: { "@type": "Organization", name: "LeadScan B2B", url: "https://leadscan.net/", email: "contact@leadscan.net", telephone: "+84877770788" },
   mainEntity: {
     "@type": "Person",
     name: "Tony Phúc",

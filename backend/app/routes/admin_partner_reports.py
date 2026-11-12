@@ -7,8 +7,9 @@ Thuế TNCN theo kỳ: /api/admin/partner-withdrawals/tax-report.
 from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.auth import current_user
@@ -52,11 +53,47 @@ def performance(group: Literal["partner", "industry", "province"] = "partner", d
 
 @router.get("/fraud")
 def fraud(_: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
-    return {"items": rep.fraud_flags(db)}
+    items = rep.fraud_flags(db)
+    return {"items": items, "open": sum(1 for f in items if f["status"] == "open")}
+
+
+class FlagReviewIn(BaseModel):
+    key: str = Field(min_length=3, max_length=255)
+    note: str = Field("", max_length=300)
+
+
+def _admin_only(user: AdminUser) -> None:
+    if user.role != "admin":
+        raise HTTPException(403, "Chỉ quản trị viên được xử lý cờ gian lận.")
+
+
+@router.post("/fraud/review")
+def review_flag(body: FlagReviewIn, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    """Kết luận cờ không phải gian lận (bỏ qua). Cờ tự hiện lại khi có dấu hiệu mới."""
+    _admin_only(user)
+    if not body.note.strip():
+        raise HTTPException(422, "Vui lòng ghi lý do bỏ qua cờ.")
+    try:
+        rep.review_flag(db, body.key, body.note.strip(), user)
+    except rep.FlagError as e:
+        raise HTTPException(409, str(e)) from None
+    return {"ok": True}
+
+
+@router.post("/fraud/reopen")
+def reopen_flag(body: FlagReviewIn, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    _admin_only(user)
+    try:
+        rep.reopen_flag(db, body.key, user, body.note.strip())
+    except rep.FlagError as e:
+        raise HTTPException(409, str(e)) from None
+    return {"ok": True}
 
 
 @router.get("/events")
 def events(kind: str = "", partner_id: int | None = None, q: str = Query("", max_length=100), page: int = Query(1, ge=1),
            page_size: int = Query(50, ge=1, le=200), d_from: date | None = Query(None, alias="from"), d_to: date | None = Query(None, alias="to"),
-           _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+           format: Literal["json", "csv"] = "json", _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    if format == "csv":
+        return _csv("nhat-ky-doi-tac", rep.events_csv(db, kind, partner_id, q, d_from, d_to))
     return rep.events(db, kind, partner_id, q, page, page_size, d_from, d_to)

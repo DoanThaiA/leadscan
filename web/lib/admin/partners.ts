@@ -5,9 +5,22 @@ export interface AdminPartner extends PartnerMe {
   status: "active" | "locked";
   status_label: string;
   last_login_at: string | null;
+  flags?: string[];
 }
 
-export interface AdminPartnerDetail extends AdminPartner {
+/** Cờ gian lận (/partner-reports/fraud) — chỉ là dấu hiệu, quản trị viên xem xét rồi khoá hoặc bỏ qua. */
+export interface FraudFlag {
+  key: string;
+  type: string;
+  severity: "high" | "medium";
+  label: string;
+  detail: string;
+  status: "open" | "reviewed";
+  review: { note: string; detail: string; actor: string | null; created_at: string } | null;
+  partners: { id: number; code: string; full_name: string; status: string }[];
+}
+
+export interface AdminPartnerDetail extends Omit<AdminPartner, "flags"> {
   note: string;
   terms_version: string;
   terms_accepted_at: string | null;
@@ -17,6 +30,7 @@ export interface AdminPartnerDetail extends AdminPartner {
   custom_cafe_quota: number | null;
   wallet: WalletSummary;
   payout_profile: PayoutProfile | null;
+  flags: FraudFlag[];
   events: { id: number; kind: string; content: string; actor: string | null; created_at: string }[];
 }
 

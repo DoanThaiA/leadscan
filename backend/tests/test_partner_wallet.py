@@ -11,7 +11,7 @@ from sqlalchemy import select
 from app.db import new_session, utcnow
 from app.models import Company, Contact, PartnerCredit, PartnerSubmission, PartnerUser, Purchase
 from app.services import catalog, partner_wallet
-from tests.test_partner import new_client, sms  # noqa: F401
+from tests.test_partner import new_client, otp_mail  # noqa: F401
 from tests.test_partner_submissions import published_body, sub_form, submit, verified_partner
 
 
@@ -24,7 +24,7 @@ def no_vat(monkeypatch):
 
 
 @pytest.fixture
-def partner(sms):  # noqa: F811
+def partner(otp_mail):  # noqa: F811
     return verified_partner()
 
 

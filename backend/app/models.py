@@ -794,7 +794,10 @@ PARTNER_TIERS = {"new": "Mới", "silver": "Bạc", "strategic": "Chiến lượ
 
 
 class PartnerUser(Base):
-    """Tài khoản cổng đối tác. Kích hoạt (gửi được cơ hội) sau khi xác thực SĐT bằng OTP — phone_verified_at."""
+    """Tài khoản cổng đối tác. Kích hoạt (gửi được cơ hội) sau khi xác thực email bằng mã OTP — email_verified_at.
+
+    phone_verified_at: dữ liệu cũ (thời xác thực SĐT qua SMS) — SĐT giờ chỉ để liên hệ, không xác thực.
+    """
 
     __tablename__ = "partner_users"
 
@@ -804,6 +807,7 @@ class PartnerUser(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(100))
     phone: Mapped[str] = mapped_column(String(20), unique=True)  # dạng 0xxxxxxxxx — 1 SĐT chỉ 1 tài khoản đối tác
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)  # kích hoạt tài khoản
     phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime)
     phone_verified_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))  # admin xác nhận tay
     kind: Mapped[str] = mapped_column(String(10), default="personal")
@@ -850,13 +854,14 @@ class PartnerPasswordReset(Base):
 
 
 class PartnerOtp(Base):
-    """Mã OTP xác thực SĐT. DB chỉ lưu sha256(mã + id đối tác); mỗi mã nhập sai tối đa vài lần rồi phải xin mã mới."""
+    """Mã OTP xác thực email đối tác. DB chỉ lưu sha256(mã + id đối tác); mỗi mã nhập sai tối đa vài lần rồi phải xin mã mới."""
 
     __tablename__ = "partner_otps"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     partner_id: Mapped[int] = mapped_column(ForeignKey("partner_users.id", ondelete="CASCADE"), index=True)
-    phone: Mapped[str] = mapped_column(String(20))
+    phone: Mapped[str] = mapped_column(String(20), default="")  # dữ liệu cũ (OTP qua SMS)
+    email: Mapped[str] = mapped_column(String(150), default="")  # email nhận mã — đổi email thì mã cũ vô hiệu
     code_hash: Mapped[str] = mapped_column(String(64))
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     expires_at: Mapped[datetime] = mapped_column(DateTime)
@@ -877,6 +882,26 @@ class PartnerEvent(Base):
     content: Mapped[str] = mapped_column(String(500), default="")
     actor_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    actor: Mapped[AdminUser | None] = relationship(lazy="joined")
+
+
+class PartnerFlagReview(Base):
+    """Quản trị viên đã xem xét 1 cờ gian lận và kết luận bỏ qua (vd. cùng mạng văn phòng).
+
+    key = loại cờ + danh sách đối tác liên quan; detail = nội dung cờ lúc xem xét — cờ hiện lại khi có dấu hiệu mới (detail đổi).
+    Lịch sử xem xét / mở lại ghi vào partner_events (kind fraud_flag).
+    """
+
+    __tablename__ = "partner_flag_reviews"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(255), unique=True)
+    flag_type: Mapped[str] = mapped_column(String(24))
+    detail: Mapped[str] = mapped_column(String(500), default="")
+    note: Mapped[str] = mapped_column(String(500), default="")
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     actor: Mapped[AdminUser | None] = relationship(lazy="joined")
 

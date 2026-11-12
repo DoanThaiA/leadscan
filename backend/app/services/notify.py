@@ -192,12 +192,24 @@ def send_partner_welcome(cfg: Settings, email: str, name: str, code: str) -> boo
         f"Mã đối tác của bạn: {code}\n\n"
         f"  • Đăng nhập cổng đối tác: {base}/dang-nhap\n"
         f"  • Email đăng nhập: {email}\n\n"
-        "Bước tiếp theo: xác thực số điện thoại bằng mã OTP để kích hoạt tài khoản, rồi gửi cơ hội đầu tiên.\n"
+        "Bước tiếp theo: nhập mã xác thực (gửi trong email riêng) để kích hoạt tài khoản, rồi gửi cơ hội đầu tiên.\n"
         "Mỗi cơ hội đạt xác minh nhận ít nhất 1 ly cafe cảm ơn; khi phiếu được bán, bạn nhận hoa hồng theo từng lượt bán.\n\n"
         f"Quên mật khẩu? Đặt lại tại {base}/quen-mat-khau\n\n"
         "Trân trọng,\nĐội ngũ LeadScan\n"
     )
     return send_mail(cfg, "[Đối tác LeadScan] Chào mừng bạn", body, to=email)
+
+
+def send_partner_otp(cfg: Settings, email: str, name: str, code: str) -> bool:
+    body = (
+        f"Chào {name},\n\n"
+        f"Mã xác thực tài khoản Đối tác LeadScan của bạn là:\n\n    {code}\n\n"
+        f"Mã có hiệu lực {cfg.otp_ttl_minutes} phút. Nhập mã tại {cfg.partner_url.rstrip('/')}/xac-thuc để kích hoạt tài khoản.\n"
+        "Không chia sẻ mã này với bất kỳ ai, kể cả nhân viên LeadScan.\n\n"
+        "Nếu bạn không đăng ký Đối tác LeadScan, hãy bỏ qua email này.\n\n"
+        "Trân trọng,\nĐội ngũ LeadScan\n"
+    )
+    return send_mail(cfg, f"[Đối tác LeadScan] Mã xác thực {code}", body, to=email)
 
 
 def send_partner_submission_update(cfg: Settings, s) -> bool:

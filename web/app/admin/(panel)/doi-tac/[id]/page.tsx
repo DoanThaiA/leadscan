@@ -12,7 +12,7 @@ import { fmtDateTime, fromNow } from "@/lib/admin/format";
 import type { AdminPartnerDetail } from "@/lib/admin/partners";
 
 const TIERS = { new: "Mới", silver: "Bạc", strategic: "Chiến lược" } as const;
-const EV_ICON: Record<string, string> = { created: "plus", phone_verified: "phone", status: "lock", tier: "target", note: "note", password: "key" };
+const EV_ICON: Record<string, string> = { created: "plus", email_verified: "mail", phone_verified: "phone", status: "lock", tier: "target", note: "note", password: "key" };
 
 export default function PartnerDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -71,7 +71,7 @@ export default function PartnerDetailPage() {
           <p className="mono">{p.code} · {p.kind_label}{p.kind === "org" ? ` · ${p.org_name}` : ""}</p>
         </div>
         <div className="adm-actions">
-          {!p.phone_verified ? <button className="adm-btn primary" onClick={() => setDlg("verify")}><Icon name="phone" size={14} /> Xác nhận SĐT</button> : null}
+          {!p.email_verified ? <button className="adm-btn primary" onClick={() => setDlg("verify")}><Icon name="mail" size={14} /> Kích hoạt tay</button> : null}
           {isAdmin ? <button className="adm-btn" onClick={() => setDlg("tier")}><Icon name="target" size={14} /> Đổi hạng</button> : null}
           {isAdmin ? (
             p.status === "active"
@@ -82,6 +82,13 @@ export default function PartnerDetailPage() {
       </div>
 
       {msg ? <div className={msg.ok ? "adm-alert ok" : "adm-alert"} style={{ marginBottom: 16 }} role="status">{msg.text}</div> : null}
+      {p.flags.length ? (
+        <div className="adm-alert" style={{ marginBottom: 16 }}>
+          <b>⚠ Cờ gian lận cần xem xét:</b>
+          <ul style={{ margin: "4px 0 0 18px" }}>{p.flags.map((f) => <li key={f.key}>{f.label} — {f.detail}</li>)}</ul>
+          <Link href="/admin/doi-tac/gian-lan" style={{ textDecoration: "underline" }}>Xem xét / bỏ qua cờ</Link>
+        </div>
+      ) : null}
 
       <div className="adm-grid side">
         <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
@@ -91,9 +98,10 @@ export default function PartnerDetailPage() {
             </div>
             <div className="bd">
               <dl className="adm-kv">
-                <dt>Email đăng nhập</dt><dd>{p.email}</dd>
+                <dt>Email đăng nhập</dt>
+                <dd>{p.email} {p.email_verified ? <StatusBadge status="active" label={`Đã xác thực ${fmtDateTime(p.email_verified_at)}`} /> : <StatusBadge status="contacted" label="Chưa xác thực" />}</dd>
                 <dt>Điện thoại / Zalo</dt>
-                <dd>{p.phone} {p.phone_verified ? <StatusBadge status="active" label={`Đã xác thực ${fmtDateTime(p.phone_verified_at)}`} /> : <StatusBadge status="contacted" label="Chưa xác thực" />}</dd>
+                <dd>{p.phone}</dd>
                 {p.kind === "org" ? (<><dt>Tổ chức</dt><dd>{p.org_name}</dd><dt>MST tổ chức</dt><dd className="mono">{p.org_tax_code}</dd></>) : null}
                 <dt>Hạng</dt><dd>{p.tier_label}</dd>
                 <dt>Ngành tiếp xúc</dt><dd>{p.industries.length ? p.industries.join(", ") : "—"}</dd>
@@ -125,7 +133,9 @@ export default function PartnerDetailPage() {
         </div>
 
         <section className="adm-card">
-          <div className="hd"><h2>Nhật ký</h2></div>
+          <div className="hd"><h2>Nhật ký</h2>
+            <Link href={`/admin/doi-tac/nhat-ky?partner_id=${p.id}`} style={{ color: "var(--brand-600)", fontSize: 13, fontWeight: 600 }}>Toàn bộ nhật ký →</Link>
+          </div>
           <div className="bd">
             <ul className="adm-timeline">
               {p.events.map((e) => (
@@ -142,11 +152,11 @@ export default function PartnerDetailPage() {
         </section>
       </div>
 
-      <Dialog open={dlg === "verify"} title="Xác nhận số điện thoại" onClose={() => setDlg(null)}
+      <Dialog open={dlg === "verify"} title="Kích hoạt tài khoản (xác nhận email)" onClose={() => setDlg(null)}
         footer={<><button className="adm-btn" onClick={() => setDlg(null)}>Huỷ</button>
-          <button className="adm-btn primary" disabled={busy} onClick={() => run(() => api.post<AdminPartnerDetail>(`/partners/${p.id}/verify-phone`, { note: reason }), "Đã xác nhận SĐT — đối tác vào được cổng.")}>Xác nhận</button></>}>
-        <p style={{ marginBottom: 12 }}>Chỉ xác nhận khi đã gọi hoặc nhắn Zalo đúng số <b>{p.phone}</b> và người nghe là <b>{p.full_name}</b>.</p>
-        <Field label="Ghi chú (không bắt buộc)" htmlFor="v-note"><input id="v-note" className="adm-input" value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} placeholder="vd. Đã gọi xác nhận 12/11" /></Field>
+          <button className="adm-btn primary" disabled={busy} onClick={() => run(() => api.post<AdminPartnerDetail>(`/partners/${p.id}/verify-email`, { note: reason }), "Đã kích hoạt — đối tác vào được cổng.")}>Xác nhận</button></>}>
+        <p style={{ marginBottom: 12 }}>Dùng khi đối tác báo không nhận được mã OTP qua email. Chỉ kích hoạt khi đã liên hệ (số <b>{p.phone}</b>) và xác nhận <b>{p.full_name}</b> đúng là chủ email <b>{p.email}</b>.</p>
+        <Field label="Ghi chú (không bắt buộc)" htmlFor="v-note"><input id="v-note" className="adm-input" value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} placeholder="vd. Không nhận được email — đã gọi xác nhận 12/11" /></Field>
       </Dialog>
 
       <Dialog open={dlg === "lock" || dlg === "unlock"} title={dlg === "lock" ? "Khoá tài khoản đối tác" : "Mở khoá tài khoản"} onClose={() => setDlg(null)}

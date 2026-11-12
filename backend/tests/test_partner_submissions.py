@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app.db import new_session, utcnow
 from app.models import Opportunity, PartnerSubmission, PartnerUser
 from app.services.partner_submissions import name_key, sla_due
-from tests.test_partner import new_client, signup_form, sms  # noqa: F401  (fixture sms)
+from tests.test_partner import new_client, signup_form, otp_mail  # noqa: F401  (fixture otp_mail)
 
 
 def verified_partner(**over) -> TestClient:
@@ -18,18 +18,18 @@ def verified_partner(**over) -> TestClient:
     assert r.status_code == 201, r.text
     with new_session() as db:
         p = db.get(PartnerUser, r.json()["me"]["id"])
-        p.phone_verified_at = utcnow()
+        p.email_verified_at = utcnow()
         db.commit()
     return c
 
 
 @pytest.fixture
-def partner(sms) -> TestClient:
+def partner(otp_mail) -> TestClient:
     return verified_partner()
 
 
 @pytest.fixture
-def partner2(sms) -> TestClient:
+def partner2(otp_mail) -> TestClient:
     return verified_partner(email="khac@gmail.com", phone="0987654321")
 
 
@@ -78,11 +78,11 @@ def published_body(o: dict, **over) -> dict:
 # ------------------------------------------------------------------ gửi cơ hội
 
 
-def test_requires_verified_phone(sms):
+def test_requires_verified_email(otp_mail):
     c = new_client()
     assert c.post("/api/partner/auth/register", json=signup_form()).status_code == 201
     r = c.post("/api/partner/submissions", json=sub_form())
-    assert r.status_code == 403 and "xác thực số điện thoại" in r.json()["detail"]
+    assert r.status_code == 403 and "xác thực email" in r.json()["detail"]
     assert c.get("/api/partner/submissions").status_code == 403
     assert new_client().post("/api/partner/submissions", json=sub_form()).status_code == 401
 

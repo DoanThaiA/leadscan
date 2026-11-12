@@ -6,10 +6,15 @@ import { type FormEvent, useEffect, useState } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { ApiError, errMsg, type OtpSent, papi, type PartnerMe } from "@/lib/partner/api";
 
-const mask = (p: string) => (p.length > 6 ? p.slice(0, 3) + "•".repeat(p.length - 6) + p.slice(-3) : p);
+/** "nguyenvana@gmail.com" → "ng•••••••a@gmail.com" (khớp backend). */
+function mask(email: string) {
+  const [name, domain = ""] = email.split("@");
+  if (name.length <= 2) return name.slice(0, 1) + "•".repeat(Math.max(0, name.length - 1)) + "@" + domain;
+  return name.slice(0, 2) + "•".repeat(name.length - 3) + name.slice(-1) + "@" + domain;
+}
 
-/** Bước kích hoạt: nhập mã OTP gửi tới SĐT đăng ký. Đã xác thực → vào cổng; chưa đăng nhập → trang đăng nhập. */
-export default function VerifyPhonePage() {
+/** Bước kích hoạt: nhập mã OTP gửi tới email đăng ký. Đã xác thực → vào cổng; chưa đăng nhập → trang đăng nhập. */
+export default function VerifyEmailPage() {
   const router = useRouter();
   const [me, setMe] = useState<PartnerMe | null>(null);
   const [wait, setWait] = useState(0);
@@ -20,7 +25,7 @@ export default function VerifyPhonePage() {
   useEffect(() => {
     papi.get<PartnerMe>("/auth/me").then(
       (m) => {
-        if (m.phone_verified) return router.replace("/doi-tac/tong-quan");
+        if (m.email_verified) return router.replace("/doi-tac/tong-quan");
         setMe(m);
         setWait(m.otp_resend_after ?? 0);
       },
@@ -39,7 +44,7 @@ export default function VerifyPhonePage() {
     try {
       const r = await papi.post<OtpSent>("/auth/otp/send");
       setWait(r.resend_after ?? 60);
-      setMsg({ ok: true, text: `Đã gửi mã mới tới ${r.phone}. Mã có hiệu lực ${r.ttl_minutes} phút.` });
+      setMsg({ ok: true, text: `Đã gửi mã mới tới ${r.email}. Mã có hiệu lực ${r.ttl_minutes} phút.` });
     } catch (err) {
       const m = err instanceof ApiError ? /(\d+) giây/.exec(err.message) : null;
       if (m) setWait(Number(m[1]));
@@ -74,9 +79,9 @@ export default function VerifyPhonePage() {
         <a href="/doi-tac" className="adm-logo"><Logo height={28} /></a>
         <span className="ptn-label">Cổng Đối tác</span>
         <div style={{ textAlign: "center" }}>
-          <h1>Xác thực số điện thoại</h1>
+          <h1>Xác thực email</h1>
           <p className="muted" style={{ marginTop: 4 }}>
-            Nhập mã 6 số LeadScan gửi tới <b style={{ color: "var(--ink)" }}>{mask(me.phone)}</b> để kích hoạt tài khoản đối tác.
+            Nhập mã 6 số LeadScan gửi tới email <b style={{ color: "var(--ink)" }}>{mask(me.email)}</b> để kích hoạt tài khoản đối tác.
           </p>
         </div>
         {msg ? <div className={msg.ok ? "adm-alert ok" : "adm-alert"} role="status">{msg.text}</div> : null}
@@ -97,7 +102,7 @@ export default function VerifyPhonePage() {
           </button>
         </div>
         <p className="muted" style={{ fontSize: 12.5, textAlign: "center" }}>
-          Vẫn không nhận được tin nhắn? LeadScan sẽ gọi tới số trên để xác nhận trong giờ làm việc. Sai số điện thoại? Liên hệ LeadScan để cập nhật.
+          Không thấy email? Kiểm tra thư mục Spam / Quảng cáo, hoặc liên hệ LeadScan (hotline +848 7777 0788) để được kích hoạt. Sai email? Liên hệ LeadScan để cập nhật.
         </p>
         <p className="ptn-switch">
           Đăng nhập: {me.email} · <button type="button" className="ptn-linkbtn" onClick={logout}>Đăng xuất</button>

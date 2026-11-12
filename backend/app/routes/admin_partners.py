@@ -49,7 +49,7 @@ def _detail(db: Session, p: PartnerUser) -> dict:
         custom_cafe_quota=p.custom_cafe_quota,
         wallet=partner_wallet.wallet_summary(db, p),
         payout_profile=_payout_profile(db, p),
-        flags=[f for f in partner_reports.fraud_flags(db) if any(x["id"] == p.id for x in f["partners"])],
+        flags=[f for f in partner_reports.open_flags(db) if any(x["id"] == p.id for x in f["partners"])],
         phone_verified_by=p.phone_verified_by_id,
         events=[
             {"id": e.id, "kind": e.kind, "content": e.content, "actor": e.actor.full_name if e.actor else None, "created_at": _iso(e.created_at)}
@@ -85,7 +85,7 @@ def meta(_: AdminUser = Depends(current_user)):
 def list_partners(
     q: str = Query("", max_length=100),
     status: str = "",
-    verified: str = "",  # "" tất cả · "yes" đã xác thực SĐT · "no" chưa
+    verified: str = "",  # "" tất cả · "yes" đã xác thực email · "no" chưa
     tier: str = "",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -105,14 +105,14 @@ def list_partners(
     if tier:
         stmt = stmt.where(PartnerUser.tier == tier)
     if verified == "yes":
-        stmt = stmt.where(PartnerUser.phone_verified_at.is_not(None))
+        stmt = stmt.where(PartnerUser.email_verified_at.is_not(None))
     elif verified == "no":
-        stmt = stmt.where(PartnerUser.phone_verified_at.is_(None))
+        stmt = stmt.where(PartnerUser.email_verified_at.is_(None))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(PartnerUser.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
     counts = {
         "all": db.scalar(select(func.count()).select_from(PartnerUser)) or 0,
-        "unverified": db.scalar(select(func.count()).select_from(PartnerUser).where(PartnerUser.phone_verified_at.is_(None), PartnerUser.status == "active")) or 0,
+        "unverified": db.scalar(select(func.count()).select_from(PartnerUser).where(PartnerUser.email_verified_at.is_(None), PartnerUser.status == "active")) or 0,
     }
     flags = partner_reports.flags_by_partner(db)
     items = [{**_item(p), "flags": flags.get(p.id, [])} for p in rows]
@@ -124,19 +124,19 @@ def get_partner(partner_id: int, _: AdminUser = Depends(current_user), db: Sessi
     return _detail(db, _get(db, partner_id))
 
 
-class VerifyPhoneIn(BaseModel):
-    note: str = Field("", max_length=200)  # vd "Đã gọi xác nhận 12/11"
+class VerifyEmailIn(BaseModel):
+    note: str = Field("", max_length=200)  # vd "Đối tác không nhận được email — đã gọi đối chiếu 12/11"
 
 
-@router.post("/{partner_id}/verify-phone")
-def verify_phone(partner_id: int, body: VerifyPhoneIn, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
-    """Xác nhận SĐT bằng tay (đã gọi điện / nhắn Zalo đúng số) — dùng khi chưa có nhà cung cấp OTP."""
+@router.post("/{partner_id}/verify-email")
+def verify_email(partner_id: int, body: VerifyEmailIn, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    """Kích hoạt tay (xác nhận email) — khi đối tác không nhận được mã OTP qua email và đã liên hệ đối chiếu."""
     p = _get(db, partner_id)
-    if p.phone_verified_at:
-        raise HTTPException(409, "Số điện thoại đã được xác thực.")
-    p.phone_verified_at, p.phone_verified_by_id = utcnow(), user.id
+    if p.email_verified_at:
+        raise HTTPException(409, "Email đã được xác thực.")
+    p.email_verified_at = utcnow()
     note = f": {body.note.strip()}" if body.note.strip() else ""
-    db.add(PartnerEvent(partner_id=p.id, kind="phone_verified", actor_id=user.id, content=f"Quản trị xác nhận SĐT {p.phone} bằng tay{note}"[:500]))
+    db.add(PartnerEvent(partner_id=p.id, kind="email_verified", actor_id=user.id, content=f"Quản trị kích hoạt tay — xác nhận email {p.email}{note}"[:500]))
     db.commit()
     return _detail(db, p)
 

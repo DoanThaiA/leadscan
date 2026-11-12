@@ -44,7 +44,7 @@ function PartnerList() {
   const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
   const tabs: [string, string, string, number | undefined][] = [
     ["", "", "Tất cả", data?.counts.all],
-    ["no", "active", "Chờ xác thực SĐT", data?.counts.unverified],
+    ["no", "active", "Chờ xác thực email", data?.counts.unverified],
     ["yes", "", "Đã kích hoạt", undefined],
     ["", "locked", "Tạm khoá", undefined],
   ];
@@ -57,6 +57,9 @@ function PartnerList() {
           <p>Người giới thiệu cơ hội qua cổng /doi-tac — tài khoản tách riêng với thành viên</p>
         </div>
         <div className="adm-actions">
+          <a className="adm-btn" href="/admin/doi-tac/bao-cao"><Icon name="gauge" size={14} /> Báo cáo</a>
+          <a className="adm-btn" href="/admin/doi-tac/gian-lan"><Icon name="flag" size={14} /> Cờ gian lận</a>
+          <a className="adm-btn" href="/admin/doi-tac/nhat-ky"><Icon name="note" size={14} /> Nhật ký</a>
           <a className="adm-btn" href="/admin/doi-tac/cau-hinh"><Icon name="target" size={14} /> Cấu hình thưởng</a>
           <a className="adm-btn" href="/doi-tac" target="_blank" rel="noopener"><Icon name="external" size={14} /> Trang đối tác</a>
         </div>
@@ -65,7 +68,7 @@ function PartnerList() {
       {error ? <div className="adm-alert" style={{ marginBottom: 16 }}>{error}</div> : null}
       {data && data.counts.unverified > 0 ? (
         <div className="adm-alert warn" style={{ marginBottom: 16 }}>
-          {fmtNum(data.counts.unverified)} đối tác chưa xác thực SĐT. Khi chưa có nhà cung cấp SMS, gọi/nhắn Zalo đúng số rồi bấm <b>Xác nhận SĐT</b> trong trang chi tiết.
+          {fmtNum(data.counts.unverified)} đối tác chưa xác thực email. Nếu đối tác báo không nhận được mã, liên hệ đối chiếu rồi bấm <b>Kích hoạt tay</b> trong trang chi tiết.
         </div>
       ) : null}
 
@@ -95,7 +98,7 @@ function PartnerList() {
         ) : (
           <div className="adm-table-wrap">
             <table className="adm-table">
-              <thead><tr><th>Đối tác</th><th>Liên hệ</th><th>Hình thức</th><th>SĐT</th><th>Hạng</th><th>Trạng thái</th><th>Đăng ký</th></tr></thead>
+              <thead><tr><th>Đối tác</th><th>Liên hệ</th><th>Hình thức</th><th>Email</th><th>Hạng</th><th>Trạng thái</th><th>Đăng ký</th></tr></thead>
               <tbody>
                 {data.items.map((p: AdminPartner) => {
                   const href = `/admin/doi-tac/${p.id}`;
@@ -104,10 +107,11 @@ function PartnerList() {
                       <td>
                         <a className="name" href={href} onClick={(e) => { e.preventDefault(); router.push(href); }}>{p.full_name}</a>
                         <div className="sub mono">{p.code}</div>
+                        {p.flags?.length ? <div style={{ color: "var(--danger)", fontSize: 12 }} title={p.flags.join("\n")}>⚠ {p.flags.length} cờ gian lận</div> : null}
                       </td>
                       <td><div>{p.email}</div><div className="sub">{p.phone}</div></td>
                       <td>{p.kind_label}{p.kind === "org" ? <div className="sub">{p.org_name}</div> : null}</td>
-                      <td>{p.phone_verified ? <StatusBadge status="active" label="Đã xác thực" /> : <StatusBadge status="contacted" label="Chờ xác thực" />}</td>
+                      <td>{p.email_verified ? <StatusBadge status="active" label="Đã xác thực" /> : <StatusBadge status="contacted" label="Chờ xác thực" />}</td>
                       <td>{p.tier_label}</td>
                       <td><StatusBadge status={p.status === "locked" ? "suspended" : "active"} label={p.status_label} /></td>
                       <td title={fmtDateTime(p.created_at)} style={{ whiteSpace: "nowrap" }}>{fromNow(p.created_at)}</td>

@@ -200,6 +200,13 @@ def send_partner_password_reset_task(email: str, name: str, token: str) -> None:
     send_partner_password_reset(get_settings(), email, name, token)
 
 
+@celery_app.task(name="leadscan.send_partner_otp")
+def send_partner_otp_task(email: str, name: str, code: str) -> None:
+    from app.services.notify import send_partner_otp
+
+    send_partner_otp(get_settings(), email, name, code)
+
+
 @celery_app.task(name="leadscan.send_partner_welcome")
 def send_partner_welcome_task(email: str, name: str, code: str) -> None:
     from app.services.notify import send_partner_welcome

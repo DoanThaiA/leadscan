@@ -8,6 +8,7 @@ Kỳ báo cáo lọc theo ngày phát sinh (giờ Việt Nam): cơ hội theo ng
 """
 
 import csv
+import hashlib
 import io
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -21,7 +22,9 @@ from app.models import (
     SUBMISSION_OPEN,
     Opportunity,
     PartnerCredit,
+    AdminUser,
     PartnerEvent,
+    PartnerFlagReview,
     PartnerPayoutProfile,
     PartnerSubmission,
     PartnerUser,
@@ -82,7 +85,7 @@ def cost_rows(db: Session, start=None, end=None) -> list[tuple[int | None, int, 
 
 def kpi(db: Session, d_from: date | None = None, d_to: date | None = None) -> dict:
     start, end = _range(d_from, d_to)
-    partners = db.execute(select(PartnerUser.id, PartnerUser.created_at).where(PartnerUser.phone_verified_at.is_not(None), *_between(PartnerUser.created_at, start, end))).all()
+    partners = db.execute(select(PartnerUser.id, PartnerUser.created_at).where(PartnerUser.email_verified_at.is_not(None), *_between(PartnerUser.created_at, start, end))).all()
     first = dict(db.execute(select(PartnerSubmission.partner_id, func.min(PartnerSubmission.created_at)).group_by(PartnerSubmission.partner_id)).all())
     now = utcnow()
     activated = sum(1 for pid, created in partners if first.get(pid) and first[pid] <= created + timedelta(days=30))
@@ -102,7 +105,7 @@ def kpi(db: Session, d_from: date | None = None, d_to: date | None = None) -> di
 
     items = [
         {"key": "partners", "label": "Đối tác đăng ký", "value": len(partners), "unit": "", "target": KPI_TARGETS["partners"], "better": "higher",
-         "note": "Tài khoản đã xác thực SĐT"},
+         "note": "Tài khoản đã xác thực email"},
         {"key": "activation", "label": "Tỷ lệ kích hoạt", "value": _pct(activated, eligible), "unit": "%", "target": KPI_TARGETS["activation"], "better": "higher",
          "note": f"{activated}/{eligible} đối tác gửi ≥ 1 cơ hội trong 30 ngày đầu"},
         {"key": "pass_rate", "label": "Tỷ lệ đạt xác minh", "value": _pct(ok_all, sent), "unit": "%", "target": KPI_TARGETS["pass_rate"], "better": "higher",
@@ -276,24 +279,82 @@ def fraud_flags(db: Session) -> list[dict]:
         flags.append({"type": "fraud_marked", "severity": "high", "label": "Đã có cơ hội bị đánh dấu gian lận",
                       "detail": ", ".join(codes), "partners": [ref(pid)]})
 
+    # Gắn kết quả xem xét: cờ đã được bỏ qua mà chưa có dấu hiệu mới → "reviewed"; detail đổi → hiện lại "open"
+    reviews = {r.key: r for r in db.scalars(select(PartnerFlagReview))}
+    for f in flags:
+        f["key"] = flag_key(f["type"], [p["id"] for p in f["partners"]])
+        r = reviews.get(f["key"])
+        f["review"] = {"note": r.note, "detail": r.detail, "actor": r.actor.full_name if r.actor else None,
+                       "created_at": r.created_at.isoformat() + "Z"} if r else None
+        f["status"] = "reviewed" if r and r.detail == f["detail"][:500] else "open"
+
     order = {"high": 0, "medium": 1}
-    flags.sort(key=lambda f: (order.get(f["severity"], 2), f["type"]))
+    flags.sort(key=lambda f: (f["status"] != "open", order.get(f["severity"], 2), f["type"]))
     return flags
 
 
+def flag_key(flag_type: str, partner_ids: list[int]) -> str:
+    ids = ",".join(str(i) for i in sorted(set(partner_ids)))
+    if len(ids) > 200:
+        ids = "h" + hashlib.sha1(ids.encode()).hexdigest()
+    return f"{flag_type}:{ids}"
+
+
+def open_flags(db: Session) -> list[dict]:
+    return [f for f in fraud_flags(db) if f["status"] == "open"]
+
+
 def flags_by_partner(db: Session) -> dict[int, list[str]]:
+    """Cờ còn cần xem xét của từng đối tác (danh sách đối tác)."""
     out: dict[int, list[str]] = defaultdict(list)
-    for f in fraud_flags(db):
+    for f in open_flags(db):
         for p in f["partners"]:
             out[p["id"]].append(f["label"])
     return out
 
 
+class FlagError(ValueError):
+    pass
+
+
+def review_flag(db: Session, key: str, note: str, actor: AdminUser) -> dict:
+    """Đánh dấu cờ đã xem xét — bỏ qua (không gian lận). Ghi nhật ký cho từng đối tác liên quan."""
+    f = next((x for x in fraud_flags(db) if x["key"] == key), None)
+    if not f:
+        raise FlagError("Cờ không còn tồn tại — tải lại danh sách.")
+    if f["status"] == "reviewed":
+        raise FlagError("Cờ này đã được xem xét.")
+    r = db.scalar(select(PartnerFlagReview).where(PartnerFlagReview.key == key))
+    if r:  # cờ hiện lại do có dấu hiệu mới → cập nhật lần xem xét
+        r.detail, r.note, r.actor_id, r.created_at = f["detail"][:500], note, actor.id, utcnow()
+    else:
+        db.add(PartnerFlagReview(key=key, flag_type=f["type"], detail=f["detail"][:500], note=note, actor_id=actor.id))
+    for p in f["partners"]:
+        db.add(PartnerEvent(partner_id=p["id"], kind="fraud_flag", actor_id=actor.id,
+                            content=f"Xem xét cờ “{f['label']}” ({f['detail']}): bỏ qua — {note}"[:500]))
+    db.commit()
+    return f
+
+
+def reopen_flag(db: Session, key: str, actor: AdminUser, reason: str = "") -> None:
+    r = db.scalar(select(PartnerFlagReview).where(PartnerFlagReview.key == key))
+    if not r:
+        raise FlagError("Cờ này chưa được xem xét.")
+    f = next((x for x in fraud_flags(db) if x["key"] == key), None)
+    ids = [p["id"] for p in f["partners"]] if f else [int(i) for i in key.split(":", 1)[1].split(",") if i.isdigit()]
+    label = f["label"] if f else r.flag_type
+    why = f" — {reason}" if reason else ""
+    for pid in ids:
+        if db.get(PartnerUser, pid):
+            db.add(PartnerEvent(partner_id=pid, kind="fraud_flag", actor_id=actor.id, content=f"Mở lại cờ “{label}” để xem xét{why}"[:500]))
+    db.delete(r)
+    db.commit()
+
+
 # ================================================================== nhật ký chung
 
 
-def events(db: Session, kind: str = "", partner_id: int | None = None, q: str = "", page: int = 1, page_size: int = 50,
-           d_from: date | None = None, d_to: date | None = None) -> dict:
+def _events_stmt(kind: str, partner_id: int | None, q: str, d_from: date | None, d_to: date | None):
     start, end = _range(d_from, d_to)
     stmt = select(PartnerEvent).where(*_between(PartnerEvent.created_at, start, end))
     if kind:
@@ -304,6 +365,12 @@ def events(db: Session, kind: str = "", partner_id: int | None = None, q: str = 
         like = f"%{q.strip()}%"
         stmt = stmt.join(PartnerUser, PartnerUser.id == PartnerEvent.partner_id).where(
             or_(PartnerEvent.content.ilike(like), PartnerUser.code.ilike(like), PartnerUser.full_name.ilike(like)))
+    return stmt
+
+
+def events(db: Session, kind: str = "", partner_id: int | None = None, q: str = "", page: int = 1, page_size: int = 50,
+           d_from: date | None = None, d_to: date | None = None) -> dict:
+    stmt = _events_stmt(kind, partner_id, q, d_from, d_to)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(PartnerEvent.id.desc()).offset((page - 1) * page_size).limit(page_size)).unique().all()
     people = {p.id: p for p in db.scalars(select(PartnerUser).where(PartnerUser.id.in_({e.partner_id for e in rows})))} if rows else {}
@@ -311,7 +378,7 @@ def events(db: Session, kind: str = "", partner_id: int | None = None, q: str = 
     return {
         "total": total, "page": page, "page_size": page_size,
         "items": [{
-            "id": e.id, "kind": e.kind, "content": e.content, "actor": e.actor.full_name if e.actor else None,
+            "id": e.id, "kind": e.kind, "kind_label": EVENT_LABELS.get(e.kind, e.kind), "content": e.content, "actor": e.actor.full_name if e.actor else None,
             "partner": {"id": e.partner_id, "code": people[e.partner_id].code, "full_name": people[e.partner_id].full_name} if e.partner_id in people else None,
             "submission": {"id": e.submission_id, "code": subs.get(e.submission_id, "")} if e.submission_id else None,
             "created_at": e.created_at.isoformat() + "Z",
@@ -319,11 +386,38 @@ def events(db: Session, kind: str = "", partner_id: int | None = None, q: str = 
     }
 
 
+EVENTS_CSV_MAX = 20_000
+
+
+def events_csv(db: Session, kind: str = "", partner_id: int | None = None, q: str = "",
+               d_from: date | None = None, d_to: date | None = None) -> bytes:
+    """Xuất nhật ký (tối đa EVENTS_CSV_MAX dòng mới nhất) theo đúng bộ lọc đang xem — giờ Việt Nam."""
+    stmt = _events_stmt(kind, partner_id, q, d_from, d_to)
+    rows = db.scalars(stmt.order_by(PartnerEvent.id.desc()).limit(EVENTS_CSV_MAX)).unique().all()
+    people = {p.id: p for p in db.scalars(select(PartnerUser).where(PartnerUser.id.in_({e.partner_id for e in rows})))} if rows else {}
+    subs = {s.id: s.code for s in db.scalars(select(PartnerSubmission).where(PartnerSubmission.id.in_({e.submission_id for e in rows if e.submission_id})))} if rows else {}
+    out = []
+    for e in rows:
+        p = people.get(e.partner_id)
+        out.append([(e.created_at + timedelta(hours=7)).strftime("%d/%m/%Y %H:%M:%S"), p.code if p else "", p.full_name if p else "",
+                    EVENT_LABELS.get(e.kind, e.kind), e.content, subs.get(e.submission_id, "") if e.submission_id else "",
+                    e.actor.full_name if e.actor else "Đối tác / hệ thống"])
+    return to_csv(["Thời điểm (giờ VN)", "Mã đối tác", "Đối tác", "Loại", "Nội dung", "Cơ hội", "Người thực hiện"], out)
+
+
 # Nhóm loại nhật ký cho bộ lọc
 EVENT_GROUPS = {
-    "account": ("created", "phone_verified", "password", "status", "tier", "note"),
+    "account": ("created", "email_verified", "phone_verified", "password", "status", "tier", "note"),
     "submission": ("sub_created", "sub_verifying", "sub_assign", "sub_decided", "sub_opp", "sub_published"),
     "money": ("credit", "cafe_quota", "sale_skip", "credit_error"),
     "payout": ("withdraw", "payout_profile"),
     "fraud": ("fraud_flag",),
+}
+
+EVENT_LABELS = {
+    "created": "Đăng ký", "email_verified": "Xác thực email", "phone_verified": "Xác thực SĐT", "password": "Mật khẩu", "status": "Khoá / mở", "tier": "Hạng & thoả thuận",
+    "note": "Ghi chú", "sub_created": "Gửi cơ hội", "sub_verifying": "Xác minh", "sub_assign": "Giao xác minh", "sub_decided": "Kết quả xác minh",
+    "sub_opp": "Tạo phiếu", "sub_published": "Đăng phiếu", "credit": "Ví & hoa hồng", "cafe_quota": "Hạn mức ly cafe",
+    "sale_skip": "Lượt bán không tính", "credit_error": "Lỗi tính thưởng", "withdraw": "Rút tiền", "payout_profile": "Hồ sơ thanh toán",
+    "fraud_flag": "Cờ gian lận",
 }

@@ -66,8 +66,8 @@ def me_out(p: PartnerUser) -> dict:
         "email": p.email,
         "full_name": p.full_name,
         "phone": p.phone,
-        "phone_verified": bool(p.phone_verified_at),
-        "phone_verified_at": _iso(p.phone_verified_at),
+        "email_verified": bool(p.email_verified_at),
+        "email_verified_at": _iso(p.email_verified_at),
         "kind": p.kind,
         "kind_label": PARTNER_KINDS.get(p.kind, p.kind),
         "org_name": p.org_name,
@@ -190,7 +190,7 @@ def register(request: Request, response: Response, raw: dict | None = Body(None)
     if p is None:
         return _fail(500, "Hệ thống bận, vui lòng thử lại.")
 
-    create_session(db, p, request, response)  # đăng nhập luôn để nhập OTP ngay
+    create_session(db, p, request, response)  # đăng nhập luôn để nhập mã OTP (gửi qua email) ngay
     enqueue(send_partner_welcome_task, p.email, p.full_name, p.code)
     try:
         sent = otp.send(db, cfg, p)
@@ -230,7 +230,7 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
 @router.get("/auth/me")
 def me(p: PartnerUser = Depends(current_partner), db: Session = Depends(get_db)):
     out = me_out(p)
-    out["otp_resend_after"] = 0 if p.phone_verified_at else otp.resend_after(db, get_settings(), p.id)
+    out["otp_resend_after"] = 0 if p.email_verified_at else otp.resend_after(db, get_settings(), p.id)
     return out
 
 
@@ -288,7 +288,7 @@ def reset(body: ResetIn, db: Session = Depends(get_db)):
     db.commit()
 
 
-# ================================================================== xác thực SĐT (OTP)
+# ================================================================== xác thực email (OTP)
 
 
 class OtpVerifyIn(BaseModel):

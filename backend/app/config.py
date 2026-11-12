@@ -51,10 +51,9 @@ class Settings(BaseSettings):
     # Cổng đối tác (/doi-tac) — tài khoản, phiên, dữ liệu tách hẳn cổng thành viên
     partner_url: str = "https://leadscan.net/doi-tac"  # link trong email gửi đối tác
     partner_terms_version: str = "2026-11"  # phiên bản Điều khoản đối tác — lưu lại khi đối tác bấm đồng ý
-    # Gửi OTP xác thực SĐT. "log" = chỉ ghi mã vào log máy chủ (chưa có nhà cung cấp SMS/Zalo ZNS) —
-    # khi đó admin xác nhận SĐT bằng tay trong trang quản trị Đối tác.
-    sms_provider: str = "log"
-    otp_ttl_minutes: int = 5
+    # Mã OTP kích hoạt tài khoản đối tác — gửi qua email (Resend/SMTP như các email khác). Chưa cấu hình gửi mail
+    # thì mã chỉ ghi vào log máy chủ; admin có thể kích hoạt tay trong trang quản trị Đối tác.
+    otp_ttl_minutes: int = 15
     otp_resend_seconds: int = 60  # chờ tối thiểu giữa 2 lần gửi mã
     otp_max_per_hour: int = 5  # số mã tối đa mỗi tài khoản / giờ
     otp_max_attempts: int = 5  # số lần nhập sai tối đa mỗi mã

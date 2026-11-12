@@ -51,7 +51,7 @@ export default function PartnerAccountPage() {
               <dt>Hình thức</dt><dd>{me.kind_label}</dd>
               {me.kind === "org" ? (<><dt>Tổ chức</dt><dd>{me.org_name}</dd><dt>Mã số thuế</dt><dd className="mono">{me.org_tax_code}</dd></>) : null}
               <dt>Email đăng nhập</dt><dd>{me.email}</dd>
-              <dt>Điện thoại / Zalo</dt><dd>{me.phone} <span className="muted">· đã xác thực {fmtDate(me.phone_verified_at)}</span></dd>
+              <dt>Điện thoại / Zalo</dt><dd>{me.phone}</dd>
               <dt>Hạng</dt><dd>{me.tier_label}</dd>
               <dt>Ngành hay tiếp xúc</dt><dd>{me.industries.length ? me.industries.join(", ") : "—"}</dd>
               <dt>Khu vực</dt><dd>{me.regions.length ? me.regions.join(", ") : "—"}</dd>

@@ -11,8 +11,8 @@ export interface PartnerMe {
   email: string;
   full_name: string;
   phone: string;
-  phone_verified: boolean;
-  phone_verified_at: string | null;
+  email_verified: boolean;
+  email_verified_at: string | null;
   kind: "personal" | "org";
   kind_label: string;
   org_name: string;
@@ -27,7 +27,7 @@ export interface PartnerMe {
 
 export interface OtpSent {
   sent: boolean;
-  phone?: string;
+  email?: string;
   resend_after?: number;
   ttl_minutes?: number;
 }

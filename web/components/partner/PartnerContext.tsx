@@ -20,7 +20,7 @@ export function usePartner(): Ctx {
   return v;
 }
 
-/** Tải đối tác đang đăng nhập + mức thưởng đang áp dụng. Chưa xác thực SĐT → chuyển sang bước nhập OTP. */
+/** Tải đối tác đang đăng nhập + mức thưởng đang áp dụng. Chưa xác thực email → chuyển sang bước nhập OTP. */
 export function PartnerProvider({ children, fallback }: { children: ReactNode; fallback: ReactNode }) {
   const router = useRouter();
   const [me, setMe] = useState<PartnerMe | null>(null);
@@ -33,8 +33,8 @@ export function PartnerProvider({ children, fallback }: { children: ReactNode; f
     papi.get<RewardConfig>("/reward-config").then((c) => setReward(rewardFrom(c)), () => {});
   }, [refresh]);
   useEffect(() => {
-    if (me && !me.phone_verified) router.replace("/doi-tac/xac-thuc");
+    if (me && !me.email_verified) router.replace("/doi-tac/xac-thuc");
   }, [me, router]);
-  if (!me || !me.phone_verified) return <>{fallback}</>;
+  if (!me || !me.email_verified) return <>{fallback}</>;
   return <PartnerCtx.Provider value={{ me, reward, refresh }}>{children}</PartnerCtx.Provider>;
 }

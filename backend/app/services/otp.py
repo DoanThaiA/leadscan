@@ -1,8 +1,8 @@
-"""OTP xác thực số điện thoại đối tác.
+"""Mã OTP kích hoạt tài khoản đối tác — gửi qua email đăng nhập (không dùng SMS).
 
-Nhà cung cấp chọn bằng LEADSCAN_SMS_PROVIDER. Hiện chỉ có "log": mã được ghi vào log máy chủ (chạy thử / chờ ký hợp đồng
-SMS brandname hoặc Zalo ZNS). Thêm nhà cung cấp thật = thêm 1 nhánh trong deliver().
-Khi chưa có nhà cung cấp, admin xác nhận SĐT bằng tay ở trang quản trị Đối tác (gọi điện / nhắn Zalo đối chiếu).
+Email gửi qua Resend/SMTP như các email khác (hàng đợi Celery; không có Redis thì gửi ngay trong request).
+Chưa cấu hình gửi mail (máy dev) → mã chỉ ghi vào log máy chủ. Đối tác không nhận được mã → admin kích hoạt tay
+ở trang quản trị Đối tác.
 """
 
 import logging
@@ -25,17 +25,25 @@ def _hash(partner_id: int, code: str) -> str:
     return sha256(f"{partner_id}:{code}")
 
 
-def mask_phone(phone: str) -> str:
-    return phone[:3] + "•" * max(0, len(phone) - 6) + phone[-3:] if len(phone) > 6 else phone
+def mask_email(email: str) -> str:
+    """"nguyenvana@gmail.com" → "ng•••••••a@gmail.com"."""
+    name, _, domain = email.partition("@")
+    if len(name) <= 2:
+        return name[:1] + "•" * max(0, len(name) - 1) + "@" + domain
+    return name[:2] + "•" * (len(name) - 3) + name[-1] + "@" + domain
 
 
-def deliver(cfg: Settings, phone: str, code: str) -> str:
-    """Gửi mã tới SĐT; trả về tên nhà cung cấp đã dùng."""
-    provider = (cfg.sms_provider or "log").lower()
-    msg = f"Ma xac thuc Doi tac LeadScan cua ban la {code}. Hieu luc {cfg.otp_ttl_minutes} phut. Khong chia se ma nay."
-    # Nhà cung cấp thật (eSMS, SpeedSMS, Zalo ZNS…) thêm ở đây khi có tài khoản + brandname/template đã duyệt.
-    log.warning("[OTP:%s] %s → %s", provider, phone, msg)
-    return "log"
+def deliver(cfg: Settings, email: str, code: str, name: str = "") -> str:
+    """Gửi mã tới email; trả về kênh đã dùng ("email" hoặc "log")."""
+    from app.services.notify import mail_provider, send_partner_otp
+    from app.worker import enqueue, send_partner_otp_task
+
+    if not mail_provider(cfg):
+        log.warning("[OTP:log] Chưa cấu hình gửi email — mã kích hoạt đối tác %s: %s", email, code)
+        return "log"
+    if not enqueue(send_partner_otp_task, email, name, code):
+        send_partner_otp(cfg, email, name, code)  # không có Redis → gửi ngay
+    return "email"
 
 
 def resend_after(db: Session, cfg: Settings, partner_id: int) -> int:
@@ -48,8 +56,8 @@ def resend_after(db: Session, cfg: Settings, partner_id: int) -> int:
 
 
 def send(db: Session, cfg: Settings, p: PartnerUser) -> dict:
-    if p.phone_verified_at:
-        raise HTTPException(409, "Số điện thoại đã được xác thực.")
+    if p.email_verified_at:
+        raise HTTPException(409, "Email đã được xác thực.")
     wait = resend_after(db, cfg, p.id)
     if wait:
         raise HTTPException(429, f"Vui lòng chờ {wait} giây rồi gửi lại mã.")
@@ -59,14 +67,15 @@ def send(db: Session, cfg: Settings, p: PartnerUser) -> dict:
     if (hour or 0) >= cfg.otp_max_per_hour:
         raise HTTPException(429, "Bạn đã yêu cầu quá nhiều mã. Vui lòng thử lại sau 1 giờ hoặc liên hệ LeadScan.")
     code = f"{secrets.randbelow(10**6):06d}"
-    provider = deliver(cfg, p.phone, code)
-    db.add(PartnerOtp(partner_id=p.id, phone=p.phone, code_hash=_hash(p.id, code), expires_at=utcnow() + timedelta(minutes=cfg.otp_ttl_minutes), provider=provider))
+    provider = deliver(cfg, p.email, code, p.full_name)
+    db.add(PartnerOtp(partner_id=p.id, email=p.email, phone="", code_hash=_hash(p.id, code),
+                      expires_at=utcnow() + timedelta(minutes=cfg.otp_ttl_minutes), provider=provider))
     db.commit()
-    return {"sent": True, "phone": mask_phone(p.phone), "resend_after": cfg.otp_resend_seconds, "ttl_minutes": cfg.otp_ttl_minutes}
+    return {"sent": True, "email": mask_email(p.email), "resend_after": cfg.otp_resend_seconds, "ttl_minutes": cfg.otp_ttl_minutes}
 
 
 def verify(db: Session, cfg: Settings, p: PartnerUser, code: str) -> None:
-    if p.phone_verified_at:
+    if p.email_verified_at:
         return
     otp = db.scalar(
         select(PartnerOtp)
@@ -74,7 +83,7 @@ def verify(db: Session, cfg: Settings, p: PartnerUser, code: str) -> None:
         .order_by(PartnerOtp.created_at.desc(), PartnerOtp.id.desc())
         .limit(1)
     )
-    if not otp or otp.expires_at < utcnow() or otp.phone != p.phone:
+    if not otp or otp.expires_at < utcnow() or otp.email != p.email:
         raise HTTPException(400, "Mã đã hết hạn. Vui lòng bấm gửi lại mã.")
     if otp.attempts >= cfg.otp_max_attempts:
         raise HTTPException(400, "Bạn đã nhập sai quá nhiều lần. Vui lòng bấm gửi lại mã.")
@@ -83,6 +92,6 @@ def verify(db: Session, cfg: Settings, p: PartnerUser, code: str) -> None:
         db.commit()
         left = cfg.otp_max_attempts - otp.attempts
         raise HTTPException(400, f"Mã xác thực không đúng. Còn {left} lần thử." if left else "Mã xác thực không đúng. Vui lòng bấm gửi lại mã.")
-    otp.used_at = p.phone_verified_at = utcnow()
-    db.add(PartnerEvent(partner_id=p.id, kind="phone_verified", content=f"Xác thực SĐT {mask_phone(p.phone)} bằng OTP"))
+    otp.used_at = p.email_verified_at = utcnow()
+    db.add(PartnerEvent(partner_id=p.id, kind="email_verified", content=f"Xác thực email {mask_email(p.email)} bằng mã OTP"))
     db.commit()

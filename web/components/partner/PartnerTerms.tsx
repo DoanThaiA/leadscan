@@ -13,7 +13,7 @@ export function PartnerTerms({ reward: R }: { reward: Reward }) {
       </div>
 
       <h2>1. Đối tác là ai</h2>
-      <p>Cá nhân hoặc tổ chức đăng ký tại leadscan.net/doi-tac, đã xác thực số điện thoại, giới thiệu thông tin cơ hội kinh doanh B2B cho LeadScan. Đối tác không phải nhân viên và không đại diện cho LeadScan.</p>
+      <p>Cá nhân hoặc tổ chức đăng ký tại leadscan.net/doi-tac, đã xác thực email, giới thiệu thông tin cơ hội kinh doanh B2B cho LeadScan. Đối tác không phải nhân viên và không đại diện cho LeadScan.</p>
 
       <h2>2. LeadScan trả thưởng cho gì</h2>
       <p>LeadScan trả thưởng cho <b>thông tin cơ hội kinh doanh</b> đã được xác minh là đúng, mới và đạt điểm chất lượng, không trả theo số lượng liên hệ hay dữ liệu cá nhân.</p>

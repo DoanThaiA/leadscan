@@ -52,7 +52,7 @@ def end_all_sessions(db: Session, partner_id: int) -> None:
 
 
 def current_partner(request: Request, db: Session = Depends(get_db)) -> PartnerUser:
-    """Đối tác đã đăng nhập (kể cả chưa xác thực SĐT — chỉ dùng cho các bước kích hoạt tài khoản)."""
+    """Đối tác đã đăng nhập (kể cả chưa xác thực email — chỉ dùng cho các bước kích hoạt tài khoản)."""
     token = request.cookies.get(COOKIE)
     if token:
         sess = db.scalar(select(PartnerSession).where(PartnerSession.token_hash == sha256(token), PartnerSession.expires_at > utcnow()))
@@ -64,7 +64,7 @@ def current_partner(request: Request, db: Session = Depends(get_db)) -> PartnerU
 
 
 def verified_partner(partner: PartnerUser = Depends(current_partner)) -> PartnerUser:
-    """Đối tác đã kích hoạt (xác thực SĐT) — điều kiện để gửi cơ hội, xem ví, rút tiền."""
-    if not partner.phone_verified_at:
-        raise HTTPException(403, "Vui lòng xác thực số điện thoại để kích hoạt tài khoản đối tác.")
+    """Đối tác đã kích hoạt (xác thực email) — điều kiện để gửi cơ hội, xem ví, rút tiền."""
+    if not partner.email_verified_at:
+        raise HTTPException(403, "Vui lòng xác thực email để kích hoạt tài khoản đối tác.")
     return partner

@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app.db import new_session
 from app.models import PartnerEvent, PartnerPayoutProfile, PartnerUser, PartnerWithdrawal
 from app.services import partner_payouts as pay
-from tests.test_partner import new_client, signup_form, sms  # noqa: F401
+from tests.test_partner import new_client, signup_form, otp_mail  # noqa: F401
 from tests.test_partner_submissions import verified_partner
 
 PROFILE = {"legal_name": "Trần Thị Bình", "id_number": "001190012345", "tax_code": "", "bank_bin": "970436",
@@ -25,7 +25,7 @@ def secret(monkeypatch):
 
 
 @pytest.fixture
-def partner(sms):  # noqa: F811
+def partner(otp_mail):  # noqa: F811
     return verified_partner()
 
 
@@ -81,7 +81,7 @@ def test_profile_validation_and_encryption(partner):
         assert pay.decrypt(row.account_enc) == "0011004455667"
 
 
-def test_org_partner_profile_uses_org_tax_code(sms):  # noqa: F811
+def test_org_partner_profile_uses_org_tax_code(otp_mail):  # noqa: F811
     c = verified_partner(kind="org", org_name="Hiệp hội Bao bì Việt Nam", org_tax_code="0101234567", email="hh@gmail.com", phone="0911222333")
     r = c.put("/api/partner/payout-profile", json={"bank_bin": "970418", "account_no": "12345678", "account_holder": "HIEP HOI BAO BI VIET NAM"})
     assert r.status_code == 200, r.text
@@ -128,7 +128,7 @@ def test_cancel_returns_money_and_monthly_limit(partner, admin):
     assert other.post(f"/api/partner/withdrawals/{a['id']}/cancel").status_code == 404
 
 
-def test_tax_withholding_threshold(partner, admin, sms):  # noqa: F811
+def test_tax_withholding_threshold(partner, admin, otp_mail):  # noqa: F811
     with_profile(partner)
     fund(admin, partner, 20_000_000)
     w = withdraw(partner, 6_000_000)  # brief 6.3: rút 6tr → khấu trừ 600k, thực nhận 5,4tr
@@ -166,7 +166,7 @@ def test_approve_reject_admin_only(partner, admin, staff, monkeypatch):
     assert partner.post(f"/api/partner/withdrawals/{w2['id']}/cancel").status_code == 409  # đã duyệt: không tự huỷ
 
 
-def test_batch_export_and_paid(partner, admin, staff, sms, monkeypatch):  # noqa: F811
+def test_batch_export_and_paid(partner, admin, staff, otp_mail, monkeypatch):  # noqa: F811
     from app.services import notify
 
     mails: list[str] = []
@@ -230,7 +230,7 @@ def test_reject_blocked_after_export(partner, admin):
 # ------------------------------------------------------------------ cờ gian lận, snapshot
 
 
-def test_shared_bank_account_flag(partner, admin, sms):  # noqa: F811
+def test_shared_bank_account_flag(partner, admin, otp_mail):  # noqa: F811
     with_profile(partner)
     other = verified_partner(email="b2@gmail.com", phone="0966777888", full_name="Trần Thị Bình")
     with_profile(other)  # cùng tài khoản ngân hàng
