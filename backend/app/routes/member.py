@@ -1,9 +1,11 @@
 """API cổng thành viên: /api/member/*"""
 
+import re
 import secrets
 from datetime import timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +17,7 @@ from app.member_auth import create_session, current_member, destroy_session
 from app.models import (
     OPP_SOURCES,
     Activity,
+    Contact,
     EnrichRequest,
     InvoiceRequest,
     MemberNotification,
@@ -31,7 +34,8 @@ from app.models import (
     UserOpportunity,
     WalletTransaction,
 )
-from app.registration_form import AREAS, CUSTOMER_SIZES, INDUSTRIES, REGIONS
+from app.registration_form import AREAS, CUSTOMER_SIZES, INDUSTRIES, MAX_INDUSTRIES, REGIONS, SIZES, clean1, pick_industries
+from app.registration_form import _valid_url as valid_url
 from app.schemas import LoginIn, PasswordChangeIn
 from app.schemas_commerce import EnrichIn, EnrichOut, InvoiceIn, OrderCreateIn, OrderOut, TxOut
 from app.security import DUMMY_HASH, add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
@@ -145,6 +149,106 @@ def reset(body: ResetIn, db: Session = Depends(get_db)):
     pr.used_at = utcnow()
     db.execute(delete(MemberSession).where(MemberSession.user_id == user.id))
     db.commit()
+
+
+# ================================================================== thông tin tài khoản & doanh nghiệp
+
+# Thành viên tự sửa được: tên người dùng, thông tin doanh nghiệp (trừ mã số thuế), người liên hệ chính.
+# Mã số thuế và email đăng nhập gắn với định danh / hoá đơn / đăng nhập → đổi qua LeadScan.
+PROFILE_LABELS = {
+    "full_name": "Họ tên người dùng", "company_name": "Tên doanh nghiệp", "industries": "Ngành hàng", "company_size": "Quy mô",
+    "province": "Tỉnh/thành", "address": "Địa chỉ", "website": "Website",
+    "contact_name": "Người liên hệ", "contact_position": "Chức vụ", "contact_phone": "SĐT liên hệ",
+}
+
+
+def _primary_contact(db: Session, company_id: int) -> Contact | None:
+    return db.scalar(select(Contact).where(Contact.company_id == company_id).order_by(Contact.is_primary.desc(), Contact.id).limit(1))
+
+
+def _profile(db: Session, user: MemberUser) -> dict:
+    c = user.company
+    ct = _primary_contact(db, c.id)
+    return {
+        "full_name": user.full_name,
+        "email": user.email,
+        "company_name": c.name,
+        "tax_code": c.tax_code,
+        "industries": [x.strip() for x in (c.industry or "").split(",") if x.strip()],
+        "company_size": c.company_size,
+        "province": c.province,
+        "address": c.address,
+        "website": c.website,
+        "contact_name": ct.full_name if ct else "",
+        "contact_position": ct.position if ct else "",
+        "contact_phone": ct.phone if ct else "",
+        "options": {"industries": INDUSTRIES, "sizes": SIZES, "max_industries": MAX_INDUSTRIES},
+    }
+
+
+@router.get("/profile")
+def get_profile(user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    return _profile(db, user)
+
+
+@router.put("/profile")
+def update_profile(raw: dict, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    """Lưu thông tin; lỗi → 422 {detail, fields}. Mỗi thay đổi ghi vào lịch sử khách hàng để LeadScan theo dõi."""
+    d = {
+        "full_name": clean1(raw.get("full_name"), 100),
+        "company_name": clean1(raw.get("company_name"), 150),
+        "industries": pick_industries(raw) if isinstance(raw.get("industries"), list) else [],
+        "company_size": clean1(raw.get("company_size"), 40),
+        "province": clean1(raw.get("province"), 80),
+        "address": clean1(raw.get("address"), 200),
+        "website": clean1(raw.get("website"), 200),
+        "contact_name": clean1(raw.get("contact_name"), 100),
+        "contact_position": clean1(raw.get("contact_position"), 100),
+        "contact_phone": re.sub(r"[\s.\-()]", "", clean1(raw.get("contact_phone"), 20)),
+    }
+    errors: dict[str, str] = {}
+    for k, msg in (("full_name", "Vui lòng nhập họ tên."), ("company_name", "Vui lòng nhập tên doanh nghiệp."),
+                   ("province", "Vui lòng nhập tỉnh/thành."), ("contact_name", "Vui lòng nhập họ tên người liên hệ.")):
+        if not d[k]:
+            errors[k] = msg
+    if not d["industries"]:
+        errors["industries"] = "Vui lòng chọn ít nhất 1 ngành hàng."
+    elif isinstance(raw.get("industries"), list) and len({str(x).strip().lower() for x in raw["industries"] if str(x).strip()}) > MAX_INDUSTRIES:
+        errors["industries"] = f"Chọn tối đa {MAX_INDUSTRIES} ngành hàng."
+    if d["company_size"] not in SIZES:
+        errors["company_size"] = "Vui lòng chọn quy mô."
+    if d["contact_phone"] and not re.fullmatch(r"(0|\+84)\d{9,10}", d["contact_phone"]):
+        errors["contact_phone"] = "Số điện thoại chưa đúng định dạng."
+    if d["website"]:
+        w = d["website"] if re.match(r"^https?://", d["website"], re.I) else "https://" + d["website"]
+        if valid_url(w):
+            d["website"] = w
+        else:
+            errors["website"] = "Website chưa đúng định dạng."
+    if errors:
+        return JSONResponse({"detail": "Vui lòng kiểm tra lại thông tin.", "fields": errors}, status_code=422)
+
+    c = user.company
+    ct = _primary_contact(db, c.id)
+    before = _profile(db, user)
+    user.full_name = d["full_name"]
+    c.name, c.industry, c.company_size = d["company_name"], ", ".join(d["industries"])[:300], d["company_size"]
+    c.province, c.address, c.website = d["province"], d["address"], d["website"]
+    if not ct:
+        ct = Contact(company_id=c.id, email=user.email, is_primary=True)
+        db.add(ct)
+    ct.full_name, ct.position, ct.phone = d["contact_name"], d["contact_position"], d["contact_phone"]
+
+    changes = []
+    for k, label in PROFILE_LABELS.items():
+        old, new = before[k], d[k]
+        if old != new:
+            fmt = (lambda v: ", ".join(v)) if k == "industries" else (lambda v: v or "(trống)")
+            changes.append(f"{label}: {fmt(old)} → {fmt(new)}")
+    if changes:
+        db.add(Activity(company_id=c.id, kind="update", content=f"{user.full_name} tự cập nhật thông tin — " + "; ".join(changes)[:3800]))
+    db.commit()
+    return {"me": _me(user), "profile": _profile(db, user), "changed": len(changes)}
 
 
 # ================================================================== tổng quan
