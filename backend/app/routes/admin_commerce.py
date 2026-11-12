@@ -223,8 +223,40 @@ def get_opp(opp_id: int, _: AdminUser = Depends(current_user), db: Session = Dep
     buyers = db.scalars(select(Purchase).where(Purchase.opportunity_id == o.id).order_by(Purchase.id.desc())).unique().all()
     return {
         "opportunity": _opp_detail(db, o),
-        "purchases": [{"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "company": _company_ref(p.company)} for p in buyers],
+        "purchases": [_purchase_admin_out(db, p) for p in buyers],
     }
+
+
+def _purchase_admin_out(db: Session, p: Purchase) -> dict:
+    """Người mua của 1 cơ hội: điểm lúc mua vs điểm hiện tại, các mục đã sửa sau khi mua, trạng thái hoàn điểm."""
+    now = catalog.user_match(db, p.company_id, p.opportunity_id)
+    return {
+        "id": p.id,
+        "price": p.price,
+        "created_at": _iso(p.created_at),
+        "company": _company_ref(p.company),
+        "score_at_purchase": (p.snapshot or {}).get("score"),
+        "score_now": now.score if now else None,
+        "changed_fields": catalog.changed_fields(p),
+        "refund_amount": p.refund_amount,
+        "refund_note": p.refund_note,
+        "refunded_at": _iso(p.refunded_at),
+    }
+
+
+class RefundIn(BaseModel):
+    note: str = Field(min_length=5, max_length=300)
+
+
+@router.post("/purchases/{purchase_id}/refund")
+def refund_purchase(purchase_id: int, body: RefundIn, user: AdminUser = Depends(require_admin), db: Session = Depends(get_db)):
+    """Duyệt hoàn điểm cho phiếu đã mua (vd. cơ hội bị sửa không còn phù hợp). Lịch sử mua giữ nguyên, ghi bút toán "Hoàn điểm"."""
+    p = db.get(Purchase, purchase_id)
+    if not p:
+        raise HTTPException(404, "Không tìm thấy giao dịch mua.")
+    catalog.refund(db, p, body.note.strip(), user.id)
+    db.commit()
+    return _purchase_admin_out(db, p)
 
 
 @router.put("/opportunities/{opp_id}")

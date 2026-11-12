@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from app.db import new_session
 from app.models import Opportunity, SearchRequestMatch, UserOpportunity
 from app.services import embedding as emb
-from app.services.matching import price_for
+from app.services.matching import parse_value_vnd, price_for
 from tests.conftest import register
 from tests.test_member import CARTON_NOTE, ask, make_opp, member, member_client, pay_membership, view  # noqa: F401
 
@@ -21,8 +21,24 @@ def other_member(client, n: int):
 def test_gia_dong_bien_voi_diem():
     prices = [price_for(29_000, s) for s in range(0, 101, 5)]
     assert prices == sorted(prices)  # điểm tăng → giá không giảm
-    assert price_for(29_000, 50) == 29_000 and price_for(29_000, 0) < 29_000 < price_for(29_000, 100)
+    # không bao giờ thấp hơn giá cơ bản / mức tối thiểu 29.000 (lỗi cũ: điểm < 50 ra 28.000)
+    assert price_for(29_000, 0) == price_for(29_000, 50) == 29_000 and price_for(10_000, 30) == 29_000
+    # điểm cao phải đắt hơn rõ rệt (lỗi cũ: 60 điểm 32k, 86 điểm 39k)
+    assert price_for(29_000, 86) >= 1.8 * price_for(29_000, 60)
+    # gấp hơn (hạn chót gần), đủ thông tin hơn, đơn hàng lớn hơn → giá cao hơn
+    assert price_for(29_000, 82, urgency=90) > price_for(29_000, 82, urgency=50)
+    assert price_for(29_000, 82, info=1.0) > price_for(29_000, 82, info=0.2)
+    assert price_for(29_000, 82, value_vnd=5_000_000_000) > price_for(29_000, 82)
     assert price_for(0, 80) == 0
+
+
+def test_doc_gia_tri_uoc_tinh():
+    assert parse_value_vnd("2–3 tỷ") == 3_000_000_000
+    assert parse_value_vnd("500 triệu") == 500_000_000
+    assert parse_value_vnd("khoảng 1.200.000.000đ") == 1_200_000_000
+    assert parse_value_vnd("1,5 tỷ") == 1_500_000_000
+    assert parse_value_vnd("120.000 USD") == 3_000_000_000
+    assert parse_value_vnd("") == 0
 
 
 def test_embedding_ngu_nghia_va_bo_dau():
@@ -50,7 +66,7 @@ def test_chi_xem_co_hoi_phu_hop_va_diem_rieng_tung_user(admin, member, client):
     strong = ask(member)
     assert strong["match_count"] == 1
     mine = view(member, oid)
-    assert mine["score"] >= 60 and mine["reasons"] and mine["price"] == price_for(1_250_000, mine["score"])
+    assert mine["score"] >= 60 and mine["reasons"] and mine["price"] >= price_for(1_250_000, mine["score"]) >= 1_250_000
 
     # user B: yêu cầu hoàn toàn khác → không thấy cơ hội, không mua/lưu được
     b = other_member(client, 2)
@@ -201,3 +217,70 @@ def test_doc_het_thong_bao(admin, member):
     assert member.post("/api/member/notifications/read-all").status_code == 204
     n = member.get("/api/member/notifications").json()
     assert n["unread"] == 0 and len(n["items"]) == 2 and all(i["read"] for i in n["items"])
+
+
+# ------------------------------------------------------------------ lỗi từ đợt test: túi giữ nhiệt / TP.HCM
+
+THERMAL_NOTE = (
+    "Tôi muốn tìm bên mua túi giữ nhiệt theo thiết kế riêng (OEM/ODM), đơn hàng từ 5.000 chiếc trở lên, "
+    "kích thước khoảng 60 × 90 cm, tải trọng 5kg, giao hàng tại TP. Hồ Chí Minh hoặc khu vực miền Nam."
+)
+
+
+def _bag_opp(admin, title: str, province: str = "TP. Hồ Chí Minh", region: str = "Miền Nam", **over) -> int:
+    return make_opp(admin, title=title, summary=title, province=province, region=region, buyer_name="Công ty X", detail="", **over)
+
+
+def test_cung_nganh_khac_san_pham_khong_duoc_diem_cao(admin, member):
+    """Ngành "Bao bì & in ấn" rộng: túi PP dệt / RPET / túi trồng cây không phải túi giữ nhiệt."""
+    right = _bag_opp(admin, "Cần đặt 5.000 túi giữ nhiệt in logo theo thiết kế riêng")
+    synonym = _bag_opp(admin, "Chuỗi giao đồ ăn cần 8.000 túi giữ lạnh shipper")
+    near = _bag_opp(admin, "Cần thùng giữ nhiệt đựng hải sản 3.000 chiếc")
+    wrong = [_bag_opp(admin, t) for t in ("Cần 10.000 túi PP dệt đựng gạo", "Mua túi RPET in logo cho siêu thị", "Đặt túi trồng cây vải 20.000 chiếc",
+                                          "Cần đơn vị thiết kế, giao hàng riêng cho khu vực miền Nam")]  # chỉ trùng từ chung chung
+    r = ask(member, THERMAL_NOTE, industries=["Bao bì & in ấn"], regions=["Quốc tế"])
+    assert r["understood"]["products"] == ["Túi giữ nhiệt"] and "TP. Hồ Chí Minh" in r["understood"]["places"]
+    assert r["understood"]["warning"]  # chọn "Quốc tế" nhưng mô tả ghi TP.HCM → cảnh báo
+    items = {i["id"]: i for i in member.get(f"/api/member/search-requests/{r['id']}/opportunities").json()["items"]}
+    assert right in items and synonym in items and near in items
+    assert not set(wrong) & set(items)  # sai sản phẩm → không vào kết quả
+    assert items[right]["score"] > items[near]["score"]  # đúng sản phẩm > sản phẩm tương đương
+    assert any(x.startswith("Đúng sản phẩm") for x in items[synonym]["reasons"])
+
+
+def test_uu_tien_dia_diem_ghi_trong_mo_ta(admin, member):
+    """Khách để ô Khu vực = Quốc tế nhưng mô tả cần giao tại TP.HCM → cơ hội ở TP.HCM / miền Nam xếp trên cơ hội quốc tế."""
+    hcm = _bag_opp(admin, "Cần 5.000 túi giữ nhiệt giao kho Thủ Đức", province="TP.HCM")
+    binh_duong = _bag_opp(admin, "Cần 5.000 túi giữ nhiệt cho nhà máy", province="Bình Dương")
+    intl = _bag_opp(admin, "Importer needs 5,000 túi giữ nhiệt (thermal bag) OEM", province="Nhật Bản", region="Quốc tế")
+    r = ask(member, THERMAL_NOTE, industries=["Bao bì & in ấn"], regions=["Quốc tế"])
+    items = {i["id"]: i["score"] for i in member.get(f"/api/member/search-requests/{r['id']}/opportunities").json()["items"]}
+    assert items[hcm] > items[intl] and items[binh_duong] > items[intl]
+
+
+def test_co_hoi_da_mua_bi_sua(admin, member):
+    """Đã mua → cơ hội bị sửa không còn phù hợp: khách vẫn xem bản đã mua (điểm lúc mua), điểm hiện tại cập nhật, admin hoàn điểm."""
+    from tests.test_member import balance, pay_membership
+
+    oid = _bag_opp(admin, "Cần đặt 5.000 túi giữ nhiệt in logo theo thiết kế riêng")
+    ask(member, THERMAL_NOTE)
+    pay_membership(member)
+    before = view(member, oid)
+    assert member.post(f"/api/member/opportunities/{oid}/purchase").status_code == 200
+    paid = 10_000_000 - balance()
+
+    body = admin.get(f"/api/admin/opportunities/{oid}").json()["opportunity"]
+    body.update(title="Cần 10.000 túi PP dệt đựng gạo", summary="Bao PP dệt cho nhà máy gạo", buyer_name="Công ty Y")
+    assert admin.put(f"/api/admin/opportunities/{oid}", json=body).status_code == 200
+
+    p = member.get(f"/api/member/opportunities/{oid}").json()["purchase"]
+    assert p["snapshot"]["title"] == "Cần đặt 5.000 túi giữ nhiệt in logo theo thiết kế riêng"
+    assert p["snapshot"]["buyer_name"] == "Công ty X" and p["snapshot"]["score"] == before["score"]
+    assert {"Tiêu đề", "Bên có nhu cầu"} <= set(p["changed_fields"])
+    assert view(member, oid)["score"] < before["score"]  # điểm hiện tại được chấm lại, không giữ điểm cũ
+
+    buyer = admin.get(f"/api/admin/opportunities/{oid}").json()["purchases"][0]
+    assert buyer["score_at_purchase"] == before["score"] and buyer["score_now"] < before["score"] and buyer["changed_fields"]
+    assert admin.post(f"/api/admin/purchases/{buyer['id']}/refund", json={"note": "Cơ hội đổi sản phẩm sau khi mua"}).status_code == 200
+    assert balance() == 10_000_000 and member.get("/api/member/purchases").json()["items"][0]["refund_amount"] == paid
+    assert admin.post(f"/api/admin/purchases/{buyer['id']}/refund", json={"note": "Hoàn lần hai"}).status_code == 409

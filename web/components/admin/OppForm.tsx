@@ -133,7 +133,7 @@ export function OppForm({ initial, onSubmit, submitLabel }: { initial?: Opp; onS
                   <option value="closed">Đã đóng</option>
                 </select>
               </Field>
-              <Field label="Giá cơ bản (điểm)" error={errors.price} htmlFor="o-price"><input id="o-price" className="adm-input" name="price" inputMode="numeric" defaultValue={o?.price ?? 29000} /></Field>
+              <Field label="Giá cơ bản (điểm)" error={errors.price} htmlFor="o-price"><input id="o-price" className="adm-input" name="price" inputMode="numeric" defaultValue={o?.price ?? 29000} aria-describedby="o-price-hint" /><small id="o-price-hint" className="muted" style={{ fontSize: 11.5 }}>Tối thiểu 29.000. Giá thành viên trả = giá cơ bản × hệ số điểm phù hợp (tới ×3) × độ gấp của hạn chót (tới ×1,4) × độ đủ thông tin (tới ×1,5) × giá trị đơn hàng ước tính (tới ×1,8).</small></Field>
               <Field label="Số lượt bán tối đa (1 = độc quyền)" error={errors.max_buyers} htmlFor="o-max"><input id="o-max" className="adm-input" name="max_buyers" inputMode="numeric" defaultValue={o?.max_buyers ?? 3} /></Field>
               <Field label="Vòng enrich" error={errors.enrich_round} htmlFor="o-er"><input id="o-er" className="adm-input" name="enrich_round" inputMode="numeric" defaultValue={o?.enrich_round ?? 0} /></Field>
               {o ? <p className="muted" style={{ fontSize: 12.5 }}>Đã bán {o.sold_count}/{o.max_buyers} lượt.</p> : null}

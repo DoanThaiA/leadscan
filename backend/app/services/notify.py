@@ -173,6 +173,70 @@ def send_password_reset(cfg: Settings, email: str, name: str, token: str) -> boo
     return send_mail(cfg, "[LeadScan] Đặt lại mật khẩu", body, to=email)
 
 
+def send_partner_password_reset(cfg: Settings, email: str, name: str, token: str) -> bool:
+    link = f"{cfg.partner_url.rstrip('/')}/dat-lai-mat-khau?token={token}"
+    body = (
+        f"Chào {name},\n\n"
+        "Bạn (hoặc ai đó) vừa yêu cầu đặt lại mật khẩu tài khoản Đối tác LeadScan.\n"
+        f"Mở liên kết sau trong 60 phút để đặt mật khẩu mới:\n\n{link}\n\n"
+        "Nếu không phải bạn, hãy bỏ qua email này — mật khẩu hiện tại vẫn giữ nguyên.\n"
+    )
+    return send_mail(cfg, "[Đối tác LeadScan] Đặt lại mật khẩu", body, to=email)
+
+
+def send_partner_welcome(cfg: Settings, email: str, name: str, code: str) -> bool:
+    base = cfg.partner_url.rstrip("/")
+    body = (
+        f"Chào {name},\n\n"
+        "Cảm ơn bạn đã đăng ký Đối tác LeadScan.\n"
+        f"Mã đối tác của bạn: {code}\n\n"
+        f"  • Đăng nhập cổng đối tác: {base}/dang-nhap\n"
+        f"  • Email đăng nhập: {email}\n\n"
+        "Bước tiếp theo: xác thực số điện thoại bằng mã OTP để kích hoạt tài khoản, rồi gửi cơ hội đầu tiên.\n"
+        "Mỗi cơ hội đạt xác minh nhận ít nhất 1 ly cafe cảm ơn; khi phiếu được bán, bạn nhận hoa hồng theo từng lượt bán.\n\n"
+        f"Quên mật khẩu? Đặt lại tại {base}/quen-mat-khau\n\n"
+        "Trân trọng,\nĐội ngũ LeadScan\n"
+    )
+    return send_mail(cfg, "[Đối tác LeadScan] Chào mừng bạn", body, to=email)
+
+
+def send_partner_submission_update(cfg: Settings, s) -> bool:
+    """Báo đối tác kết quả xác minh 1 cơ hội đã gửi (Đạt / Trùng / Không đạt / Đóng góp bổ sung)."""
+    from app.models import REJECT_REASONS, SUBMISSION_STATUSES
+
+    p = s.partner
+    link = f"{cfg.partner_url.rstrip('/')}/co-hoi/{s.id}"
+    status = SUBMISSION_STATUSES.get(s.status, s.status)
+    lines = [f"Chào {p.full_name},\n", f"Cơ hội {s.code} ({s.company_name}) đã có kết quả xác minh: {status}."]
+    if s.status == "rejected" and s.reject_reason:
+        lines.append(f"Lý do: {REJECT_REASONS.get(s.reject_reason, s.reject_reason)}.")
+    if s.status == "verified":
+        lines.append("LeadScan sẽ hoàn thiện và mở bán phiếu cơ hội; bạn theo dõi số lượt bán trong cổng đối tác.")
+    if s.partner_note:
+        lines.append(f"\nGhi chú từ LeadScan:\n{s.partner_note}")
+    lines.append(f"\nXem chi tiết: {link}\n\nTrân trọng,\nĐội ngũ LeadScan\n")
+    return send_mail(cfg, f"[Đối tác LeadScan] {s.code}: {status}", "\n".join(lines), to=p.email)
+
+
+def send_partner_withdrawal_update(cfg: Settings, w) -> bool:
+    """Báo đối tác: lệnh rút được duyệt / đã chi / bị từ chối."""
+    p = w.partner
+    link = f"{cfg.partner_url.rstrip('/')}/rut-tien"
+    vnd = lambda n: f"{n:,}đ".replace(",", ".")  # noqa: E731
+    head = {
+        "approved": f"Lệnh rút {w.code} ({vnd(w.amount)}) đã được duyệt và sẽ chi trong lô gần nhất.",
+        "paid": f"LeadScan đã chuyển {vnd(w.net_amount)} cho lệnh rút {w.code} về tài khoản {w.payee.get('bank_name', '')} ••••{w.payee.get('account_last4', '')}.",
+        "rejected": f"Lệnh rút {w.code} ({vnd(w.amount)}) không được duyệt. Lý do: {w.reject_reason}. Số tiền đã trở lại số dư Khả dụng.",
+    }.get(w.status)
+    if not head:
+        return False
+    lines = [f"Chào {p.full_name},\n", head]
+    if w.status == "paid" and w.tax_withheld:
+        lines.append(f"Thuế TNCN đã khấu trừ: {vnd(w.tax_withheld)} — LeadScan sẽ cấp chứng từ khấu trừ thuế.")
+    lines.append(f"\nXem chi tiết: {link}\n\nTrân trọng,\nĐội ngũ LeadScan\n")
+    return send_mail(cfg, f"[Đối tác LeadScan] Lệnh rút {w.code}", "\n".join(lines), to=p.email)
+
+
 def _member_base(cfg: Settings) -> str:
     return cfg.member_url.rstrip("/")
 

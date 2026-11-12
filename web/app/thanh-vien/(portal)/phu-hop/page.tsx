@@ -8,7 +8,7 @@ import { MultiSelect } from "@/components/member/MultiSelect";
 import { useNotices } from "@/components/member/Notifications";
 import { SearchReqDetail } from "@/components/member/SearchReqDetail";
 import { SearchReqSummary } from "@/components/member/SearchReqList";
-import { type Criteria, criteriaTags, isMatching, type SearchReq } from "@/lib/commerce";
+import { type Criteria, criteriaTags, isMatching, NOTE_TEMPLATE, type SearchReq, type Understood } from "@/lib/commerce";
 import { errMsg, mapi } from "@/lib/member/api";
 
 interface MatchResp {
@@ -43,6 +43,22 @@ function MatchPageInner() {
   const [error, setError] = useState("");
   const polls = useRef(0);
   const boardRef = useRef<HTMLDivElement>(null);
+  const [seen, setSeen] = useState<Understood | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Xem trước hệ thống hiểu mô tả thế nào (sản phẩm, địa điểm) khi khách đang gõ
+  const regionsKey = c?.regions.join("|") ?? "";
+  useEffect(() => {
+    if (note.trim().length < NOTE_MIN) { setSeen(null); return; }
+    const t = setTimeout(() => {
+      mapi.post<Understood>("/search-requests/understand", { note, regions: regionsKey ? regionsKey.split("|") : [] }).then(setSeen, () => setSeen(null));
+    }, 500);
+    return () => clearTimeout(t);
+  }, [note, regionsKey]);
+
+  function copyTemplate() {
+    navigator.clipboard?.writeText(NOTE_TEMPLATE).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }, () => {});
+  }
 
   const loadReqs = useCallback(() => {
     mapi.get<{ items: SearchReq[] }>("/search-requests").then((r) => setReqs(r.items), (e) => setError(errMsg(e)));
@@ -157,14 +173,38 @@ function MatchPageInner() {
               placeholder="Sản phẩm/dịch vụ bạn cung cấp, loại khách hàng cần tìm, số lượng, thị trường, thời gian… Ví dụ: Chúng tôi sản xuất bao PP dệt 25–50 kg, công suất 2 triệu bao/tháng. Cần tìm nhà nhập khẩu hoặc nhà máy phân bón, gạo, thức ăn chăn nuôi ở Châu Phi và Đông Nam Á, đơn hàng từ 1 container/tháng."
             />
             <div className="sr-count muted">{note.trim().length}/3000</div>
+            {seen ? (
+              <div className="sf-seen" role="status">
+                <span><b>Sản phẩm:</b> {seen.products.length ? seen.products.join(", ") : <em>chưa nhận ra sản phẩm cụ thể — hãy ghi tên sản phẩm (vd: túi giữ nhiệt)</em>}</span>
+                <span><b>Địa điểm:</b> {seen.places.length ? seen.places.join(", ") : <em>không ghi — dùng ô Khu vực</em>}</span>
+                {seen.warning ? <span className="warn">{seen.warning}</span> : null}
+              </div>
+            ) : null}
+            <details className="sf-guide">
+              <summary>Hướng dẫn viết mô tả để kết quả chính xác hơn</summary>
+              <table>
+                <thead><tr><th>Nên ghi</th><th>Vì sao</th></tr></thead>
+                <tbody>
+                  <tr><td>Tên <b>sản phẩm cụ thể</b> (túi giữ nhiệt), không chỉ ngành (bao bì)</td><td>Hệ thống đối chiếu đúng sản phẩm: cơ hội cùng ngành nhưng khác sản phẩm (túi PP, túi RPET…) bị loại</td></tr>
+                  <tr><td>Quy cách, số lượng</td><td>Giúp chấm điểm khớp và nhận ra cơ hội đủ lớn</td></tr>
+                  <tr><td>Địa điểm giao hàng</td><td>Được <b>ưu tiên hơn</b> ô Khu vực; nên chọn ô Khu vực cho khớp để tránh mâu thuẫn</td></tr>
+                  <tr><td>Loại khách cần tìm, thời gian</td><td>Lọc đúng bên mua và cơ hội còn hạn</td></tr>
+                </tbody>
+              </table>
+              <pre className="sf-tpl">{NOTE_TEMPLATE}</pre>
+              <div className="sf-tpl-actions">
+                <button type="button" className="adm-btn sm" onClick={copyTemplate}>{copied ? "Đã sao chép" : "Sao chép mẫu"}</button>
+                <button type="button" className="adm-btn sm" onClick={() => { setNote(NOTE_TEMPLATE); setMsg(null); }}>Dùng mẫu này</button>
+              </div>
+            </details>
           </div>
 
           {m && c ? (
             <div className="sf-crit">
-              <MultiSelect icon="factory" label="Ngành hàng" options={m.options.industries} value={c.industries} onChange={(v) => set({ industries: v })} placeholder="Gõ ngành hàng, vd: bao bì, nhựa…" allowCustom />
-              <MultiSelect icon="map" label="Khu vực" options={m.options.regions} value={c.regions} onChange={(v) => set({ regions: v })} placeholder="Gõ tỉnh/thành, miền, quốc tế…" allowCustom maxLength={80} />
-              <MultiSelect icon="users" label="Quy mô khách hàng" options={m.options.sizes} value={c.sizes} onChange={(v) => set({ sizes: v })} placeholder="Chọn quy mô…" />
-              <MultiSelect icon="layers" label="Loại cơ hội" options={m.options.sources} value={c.sources} onChange={(v) => set({ sources: v })} placeholder="Gõ loại cơ hội, vd: gói thầu…" />
+              <MultiSelect icon="factory" label="Ngành hàng (chọn nhiều)" options={m.options.industries} value={c.industries} onChange={(v) => set({ industries: v })} placeholder="Gõ ngành hàng, vd: bao bì, nhựa…" allowCustom />
+              <MultiSelect icon="map" label="Khu vực (chọn nhiều)" options={m.options.regions} value={c.regions} onChange={(v) => set({ regions: v })} placeholder="Gõ tỉnh/thành, miền, quốc tế…" allowCustom maxLength={80} />
+              <MultiSelect icon="users" label="Quy mô khách hàng (chọn nhiều)" options={m.options.sizes} value={c.sizes} onChange={(v) => set({ sizes: v })} placeholder="Chọn quy mô…" />
+              <MultiSelect icon="layers" label="Loại cơ hội (chọn nhiều)" options={m.options.sources} value={c.sources} onChange={(v) => set({ sources: v })} placeholder="Gõ loại cơ hội, vd: gói thầu…" />
               <div className="mt-group">
                 <label className="mt-label" htmlFor="sr-score"><Icon name="gauge" />Điểm phù hợp tối thiểu</label>
                 <select id="sr-score" className="adm-input" value={c.min_score} onChange={(e) => set({ min_score: Number(e.target.value) })}>

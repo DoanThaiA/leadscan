@@ -29,6 +29,8 @@ celery_app.conf.update(
         "cleanup-hourly": {"task": "leadscan.cleanup", "schedule": 3600.0},
         # quét thông báo cơ hội mới chưa gửi email (vd. nhập cơ hội hàng loạt bằng lệnh CLI)
         "match-digest": {"task": "leadscan.send_match_digest", "schedule": 900.0},
+        # hoa hồng đối tác hết thời gian giữ → Khả dụng
+        "partner-release": {"task": "leadscan.partner_release_due", "schedule": 3600.0},
     },
 )
 
@@ -84,11 +86,13 @@ def _cleanup_orphan_attachments(db) -> list[str]:
 def cleanup_task() -> None:
     """Xoá phiên đăng nhập hết hạn, lượt đếm rate limit cũ, tệp đính kèm upload bỏ dở."""
     from app.db import new_session, utcnow
-    from app.models import AdminSession, MemberSession, PaymentOrder, RateHit
+    from app.models import AdminSession, MemberSession, PartnerOtp, PartnerSession, PaymentOrder, RateHit
 
     with new_session() as db:
         s = db.execute(delete(AdminSession).where(AdminSession.expires_at < utcnow())).rowcount
         s += db.execute(delete(MemberSession).where(MemberSession.expires_at < utcnow())).rowcount
+        s += db.execute(delete(PartnerSession).where(PartnerSession.expires_at < utcnow())).rowcount
+        db.execute(delete(PartnerOtp).where(PartnerOtp.created_at < utcnow() - timedelta(days=1)))
         db.query(PaymentOrder).filter(PaymentOrder.status == "pending", PaymentOrder.expires_at < utcnow()).update(
             {"status": "expired"}, synchronize_session=False
         )
@@ -187,6 +191,56 @@ def send_password_reset_task(email: str, name: str, token: str) -> None:
     from app.services.notify import send_password_reset
 
     send_password_reset(get_settings(), email, name, token)
+
+
+@celery_app.task(name="leadscan.send_partner_password_reset")
+def send_partner_password_reset_task(email: str, name: str, token: str) -> None:
+    from app.services.notify import send_partner_password_reset
+
+    send_partner_password_reset(get_settings(), email, name, token)
+
+
+@celery_app.task(name="leadscan.send_partner_welcome")
+def send_partner_welcome_task(email: str, name: str, code: str) -> None:
+    from app.services.notify import send_partner_welcome
+
+    send_partner_welcome(get_settings(), email, name, code)
+
+
+@celery_app.task(name="leadscan.send_partner_submission_update")
+def send_partner_submission_update_task(sub_id: int) -> None:
+    """Email báo đối tác kết quả xác minh cơ hội đã gửi."""
+    from app.db import new_session
+    from app.models import PartnerSubmission
+    from app.services.notify import send_partner_submission_update
+
+    with new_session() as db:
+        s = db.get(PartnerSubmission, sub_id)
+        if s:
+            send_partner_submission_update(get_settings(), s)
+
+
+@celery_app.task(name="leadscan.send_partner_withdrawal_update")
+def send_partner_withdrawal_update_task(wid: int) -> None:
+    from app.db import new_session
+    from app.models import PartnerWithdrawal
+    from app.services.notify import send_partner_withdrawal_update
+
+    with new_session() as db:
+        w = db.get(PartnerWithdrawal, wid)
+        if w:
+            send_partner_withdrawal_update(get_settings(), w)
+
+
+@celery_app.task(name="leadscan.partner_release_due")
+def partner_release_due_task() -> None:
+    from app.db import new_session
+    from app.services.partner_wallet import release_due
+
+    with new_session() as db:
+        n = release_due(db)
+    if n:
+        log.info("Ví đối tác: %s khoản hoa hồng chuyển sang Khả dụng", n)
 
 
 @celery_app.task(name="leadscan.send_welcome")

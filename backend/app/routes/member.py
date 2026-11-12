@@ -36,6 +36,7 @@ from app.schemas import LoginIn, PasswordChangeIn
 from app.schemas_commerce import EnrichIn, EnrichOut, InvoiceIn, OrderCreateIn, OrderOut, TxOut
 from app.security import DUMMY_HASH, add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
 from app.services import attachments, catalog, mcv_payments, payments
+from app.services import products as prod
 from app.services.mcv import McvClient, McvError
 from app.worker import enqueue, issue_einvoice_task, match_request_now, send_invoice_request_task, send_password_reset_task, send_search_request_task
 
@@ -210,9 +211,6 @@ def list_opportunities(
         stmt = stmt.where(Opportunity.source_type == source)
     if min_score:
         stmt = stmt.where(UserOpportunity.score >= min_score)
-    price_expr = Opportunity.price * (50 + UserOpportunity.score) / 100  # xấp xỉ matching.price_for (bỏ làm tròn nghìn)
-    if max_price is not None:
-        stmt = stmt.where(price_expr <= max_price)
     mine = select(Purchase.opportunity_id).where(Purchase.company_id == cid)
     if only == "purchased":
         stmt = stmt.where(Opportunity.id.in_(mine))
@@ -221,14 +219,21 @@ def list_opportunities(
     else:
         # phiếu đã đóng chỉ hiện nếu mình đã mua
         stmt = stmt.where(or_(Opportunity.status == "published", Opportunity.id.in_(mine)))
-    order = {
-        "score": (UserOpportunity.score.desc(), Opportunity.id.desc()),
-        "price_asc": (price_expr.asc(), Opportunity.id.desc()),
-        "price_desc": (price_expr.desc(), Opportunity.id.desc()),
-    }.get(sort, (Opportunity.published_at.desc(), Opportunity.id.desc()))
+    stmt = stmt.options(selectinload(Opportunity.contacts))
 
-    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    rows = db.scalars(stmt.options(selectinload(Opportunity.contacts)).order_by(*order).offset((page - 1) * page_size).limit(page_size)).unique().all()
+    if max_price is not None or sort in ("price_asc", "price_desc"):
+        # Giá phụ thuộc điểm, hạn chót, độ đủ thông tin, giá trị đơn hàng (catalog.price_of) — lọc/sắp xếp đúng giá hiển thị
+        # bằng Python trên các cơ hội đã khớp của doanh nghiệp (số lượng nhỏ), rồi mới phân trang.
+        items = catalog.previews(db, cid, db.scalars(stmt.order_by(Opportunity.id.desc())).unique().all())
+        if max_price is not None:
+            items = [it for it in items if it["price"] <= max_price]
+        if sort in ("price_asc", "price_desc"):
+            items.sort(key=lambda it: it["price"], reverse=sort == "price_desc")
+        total, items = len(items), items[(page - 1) * page_size : page * page_size]
+    else:
+        order = {"score": (UserOpportunity.score.desc(), Opportunity.id.desc())}.get(sort, (Opportunity.published_at.desc(), Opportunity.id.desc()))
+        total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        items = catalog.previews(db, cid, db.scalars(stmt.order_by(*order).offset((page - 1) * page_size).limit(page_size)).unique().all())
     industries = db.scalars(
         select(Opportunity.industry).join(UserOpportunity, mine_join).where(Opportunity.status == "published", Opportunity.industry != "").distinct().order_by(Opportunity.industry)
     ).all()
@@ -236,7 +241,7 @@ def list_opportunities(
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": catalog.previews(db, cid, rows),
+        "items": items,
         "facets": {"industries": industries, "regions": REGIONS, "sources": OPP_SOURCES},
     }
 
@@ -270,7 +275,10 @@ def get_opportunity(opp_id: int, user: MemberUser = Depends(current_member), db:
     return {
         "opportunity": catalog.full(o, u),
         "attachments": [attachments.out(a) for a in attachments.for_opportunity(db, o.id)],  # link ký ngắn hạn
-        "purchase": {"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "enrich_requests": [EnrichOut.model_validate(e).model_dump(mode="json") for e in enrich]},
+        "purchase": {
+            **{k: v for k, v in catalog.purchase_out(p).items() if k != "opportunity"},
+            "enrich_requests": [EnrichOut.model_validate(e).model_dump(mode="json") for e in enrich],
+        },
     }
 
 
@@ -293,7 +301,7 @@ def list_purchases(
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": [{"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "opportunity": catalog.full(p.opportunity, mine.get(p.opportunity_id))} for p in rows],
+        "items": [catalog.purchase_out(p, mine.get(p.opportunity_id)) for p in rows],
     }
 
 
@@ -563,8 +571,23 @@ class SearchRequestIn(MatchCriteria):
     note: str = Field(max_length=3000)
 
 
+def _understood(note: str, regions: list[str]) -> dict:
+    """Hệ thống hiểu mô tả của khách thế nào: sản phẩm cụ thể, địa điểm — và cảnh báo khi mâu thuẫn với ô tiêu chí."""
+    products, places = prod.product_names(prod.find_products(note)), prod.find_places(note)
+    warning = ""
+    if places and regions:
+        place_regions = set(places) | {prod.province_region(x) for x in places}
+        if not place_regions & set(regions) and "Toàn quốc" not in regions:
+            warning = (
+                f"Bạn chọn khu vực {', '.join(regions)} nhưng mô tả ghi {', '.join(places)}. "
+                "Hệ thống sẽ ƯU TIÊN địa điểm trong mô tả; nếu không đúng ý, hãy sửa ô Khu vực cho khớp."
+            )
+    return {"products": products, "places": places, "warning": warning}
+
+
 def _search_out(r: SearchRequest, match_count: int = 0, new_count: int = 0) -> dict:
     return {
+        "understood": _understood(r.note or "", (r.criteria or {}).get("regions") or []),
         "new_count": new_count,  # cơ hội mới phù hợp khách chưa xem (tìm kiếm liên tục)
         "match_status": r.match_status,  # pending | running | done | error — so khớp chạy nền
         "matched_at": _iso(r.matched_at),
@@ -610,6 +633,17 @@ def _new_counts(db: Session, company_id: int, req_ids: list[int]) -> dict[int, i
         return {}
     sub = _live_notifications(company_id).where(MemberNotification.read_at.is_(None), MemberNotification.request_id.in_(req_ids)).subquery()
     return dict(db.execute(select(sub.c.request_id, func.count()).group_by(sub.c.request_id)).all())
+
+
+class UnderstandIn(BaseModel):
+    note: str = Field("", max_length=3000)
+    regions: list[str] = Field(default_factory=list, max_length=50)
+
+
+@router.post("/search-requests/understand")
+def understand_search_request(body: UnderstandIn, _: MemberUser = Depends(current_member)):
+    """Xem trước (khi khách đang gõ): hệ thống nhận ra sản phẩm, địa điểm nào trong mô tả."""
+    return _understood(body.note, _norm_list(body.regions))
 
 
 @router.get("/search-requests")

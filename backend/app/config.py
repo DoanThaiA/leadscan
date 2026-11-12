@@ -48,6 +48,26 @@ class Settings(BaseSettings):
     # Cổng thành viên
     member_url: str = "https://leadscan.net/thanh-vien"  # dùng cho link đặt lại mật khẩu trong email
 
+    # Cổng đối tác (/doi-tac) — tài khoản, phiên, dữ liệu tách hẳn cổng thành viên
+    partner_url: str = "https://leadscan.net/doi-tac"  # link trong email gửi đối tác
+    partner_terms_version: str = "2026-11"  # phiên bản Điều khoản đối tác — lưu lại khi đối tác bấm đồng ý
+    # Gửi OTP xác thực SĐT. "log" = chỉ ghi mã vào log máy chủ (chưa có nhà cung cấp SMS/Zalo ZNS) —
+    # khi đó admin xác nhận SĐT bằng tay trong trang quản trị Đối tác.
+    sms_provider: str = "log"
+    otp_ttl_minutes: int = 5
+    otp_resend_seconds: int = 60  # chờ tối thiểu giữa 2 lần gửi mã
+    otp_max_per_hour: int = 5  # số mã tối đa mỗi tài khoản / giờ
+    otp_max_attempts: int = 5  # số lần nhập sai tối đa mỗi mã
+    # Xác minh cơ hội đối tác gửi
+    partner_min_score: int = 60  # điểm chất lượng tối thiểu để "Đạt xác minh"
+    partner_dup_days: int = 90  # kiểm tra trùng (MST / tên + nhóm nhu cầu) trong N ngày gần nhất
+    partner_sla_workdays: int = 2  # hạn xác minh, tính theo ngày làm việc (T2–T6)
+    partner_submit_per_day: int = 20  # số cơ hội tối đa mỗi đối tác gửi trong 24 giờ
+    # Khoá Fernet mã hoá số định danh + số tài khoản ngân hàng trong hồ sơ thanh toán đối tác.
+    # Tạo: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # MẤT KHOÁ = không đọc lại được số tài khoản đã lưu. Để trống = chưa mở rút tiền.
+    partner_secret_key: str = ""
+
     # Gói thành viên & nạp điểm (1 điểm = 1đ)
     membership_fee: int = 89_000  # phí thành viên/năm
     membership_points: int = 89_000  # số điểm nạp vào ví khi đóng phí (bằng phí)

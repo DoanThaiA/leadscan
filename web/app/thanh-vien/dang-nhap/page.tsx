@@ -52,6 +52,9 @@ function LoginForm() {
       <p className="muted" style={{ textAlign: "center", fontSize: 13 }}>
         Chưa có tài khoản? <a href="/#dang-ky" style={{ color: "var(--brand-600)", fontWeight: 600 }}>Đăng ký thành viên</a>
       </p>
+      <p className="muted" style={{ textAlign: "center", fontSize: 13, borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+        Bạn là đối tác giới thiệu cơ hội? <a href="/doi-tac/dang-nhap" style={{ color: "var(--brand-600)", fontWeight: 600 }}>Đăng nhập cổng đối tác</a>
+      </p>
     </form>
   );
 }

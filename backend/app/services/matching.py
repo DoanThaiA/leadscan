@@ -16,7 +16,7 @@ Luồng:
      và tự thêm vào "Kho của tôi" (lần đầu tiên cơ hội xuất hiện với doanh nghiệp).
      Phiếu tìm "tìm kiếm liên tục": cơ hội MỚI mở bán / vừa sửa mà khớp phiếu lần đầu → MemberNotification
      (báo trong cổng + email gộp), mỗi cặp (phiếu tìm, cơ hội) báo đúng 1 lần.
-  5. Giá phiếu thành viên phải trả đồng biến với điểm của chính họ: price_for().
+  5. Giá phiếu thành viên phải trả: price_of() = giá cơ bản (tối thiểu 29.000) × hệ số điểm × cấp thiết × đủ thông tin × giá trị đơn.
 
 Kỹ thuật:
   - Embedding: Cohere (services/embedding.py), lưu cột pgvector vector(1024). Chỉ gọi lại API khi văn bản đổi (sha1).
@@ -29,6 +29,7 @@ Kỹ thuật:
 """
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -40,6 +41,7 @@ from app.db import EmbeddingVector
 from app.config import Settings, get_settings
 from app.models import MemberNotification, Opportunity, Purchase, SavedOpportunity, SearchRequest, SearchRequestMatch, UserOpportunity
 from app.services import embedding as emb
+from app.services import products as prod
 
 W_CRITERIA, W_SEMANTIC, W_KEYWORD = 0.40, 0.35, 0.25
 W_SEMANTIC_ONLY, W_KEYWORD_ONLY = 0.60, 0.40  # khách không chọn tiêu chí nào
@@ -62,11 +64,72 @@ TRUST_BY_SOURCE = {
 DOMESTIC_REGIONS = {"mien bac", "mien trung", "mien nam"}
 
 
-def price_for(base_price: int, score: int) -> int:
-    """Giá phiếu theo điểm của thành viên: đồng biến, 0 điểm = 50% giá cơ bản, 50 điểm = giá cơ bản, 100 điểm = 150%."""
+MIN_PRICE = 29_000  # giá thấp nhất của 1 phiếu (giá cơ bản admin đặt thấp hơn vẫn tính tối thiểu mức này)
+
+
+def _score_factor(score: int) -> float:
+    """≤50 điểm: ×1 · 60: ×1,18 · 70: ×1,51 · 80: ×1,93 · 86: ×2,22 · 90: ×2,43 · 100: ×3 — điểm càng cao càng tăng nhanh."""
+    s = max(0, min(100, score))
+    return 1 + 2 * (max(0, s - 50) / 50) ** 1.5
+
+
+def _urgency_factor(urgency: int) -> float:
+    """Không hạn chót (50): ×1 · ≤14 ngày (80): ×1,24 · ≤7 ngày (90): ×1,32 · ≤3 ngày (100): ×1,4."""
+    return 1 + 0.4 * max(0, min(100, urgency) - 50) / 50
+
+
+_UNITS = [("ty", 1_000_000_000), ("ti", 1_000_000_000), ("billion", 1_000_000_000), ("trieu", 1_000_000), ("tr", 1_000_000),
+          ("million", 1_000_000), ("nghin", 1_000), ("ngan", 1_000), ("k", 1_000)]
+_FX = {"usd": 25_000, "$": 25_000, "eur": 27_000, "€": 27_000}
+
+
+def parse_value_vnd(text_: str) -> int:
+    """Giá trị ước tính dạng chữ → VNĐ (khoảng thì lấy số lớn nhất). "2–3 tỷ" → 3 tỷ; "500 triệu"; "120.000 USD"; "$120k". Không đọc được → 0."""
+    raw = (text_ or "").lower().replace(",", ".")
+    fx = next((r for k, r in _FX.items() if k in raw), 1)
+    best = 0
+    for m in re.finditer(r"(\d+(?:\.\d+)*)\s*([^\W\d_]*)", raw):
+        num, unit = m.group(1), emb.fold(m.group(2))
+        parts = num.split(".")
+        # "1.200.000" / "120.000" là phân cách nghìn; "1.5" là số thập phân
+        val = float(num.replace(".", "")) if len(parts) > 2 or (len(parts) == 2 and len(parts[1]) == 3) else float(num)
+        mult = next((v for k, v in _UNITS if unit == k), 1)
+        best = max(best, int(val * mult * fx))
+    return best
+
+
+def _value_factor(value_vnd: int) -> float:
+    """Giá trị đơn hàng ước tính: <100 triệu ×1 · <1 tỷ ×1,15 · <5 tỷ ×1,3 · <20 tỷ ×1,5 · từ 20 tỷ ×1,8."""
+    for limit, f in ((100_000_000, 1.0), (1_000_000_000, 1.15), (5_000_000_000, 1.3), (20_000_000_000, 1.5)):
+        if value_vnd < limit:
+            return f
+    return 1.8
+
+
+def info_completeness(o: Opportunity) -> float:
+    """Tỷ lệ thông tin phiếu có đủ (0–1): bên mua, đầu mối (tên, chức vụ, SĐT, email), số lượng, giá trị, hạn chót, nguồn, chi tiết."""
+    cs = o.contacts or []
+    checks = [
+        bool(o.buyer_name), any(c.full_name for c in cs), any(c.title for c in cs), any(c.phone for c in cs), any(c.email for c in cs),
+        bool(o.scale), bool(o.estimated_value), o.deadline is not None, bool(o.source_url), len(o.detail or "") >= 100,
+    ]
+    return sum(checks) / len(checks)
+
+
+def price_for(base_price: int, score: int, urgency: int = 50, info: float = 0.0, value_vnd: int = 0) -> int:
+    """Giá phiếu thành viên phải trả = giá cơ bản × hệ số điểm × hệ số cấp thiết × hệ số đủ thông tin × hệ số giá trị đơn hàng.
+
+    Không bao giờ thấp hơn giá cơ bản (và MIN_PRICE). Giá cơ bản 0 = phiếu miễn phí."""
     if base_price <= 0:
         return 0
-    return max(1000, round(base_price * (0.5 + max(0, min(100, score)) / 100) / 1000) * 1000)
+    base = max(base_price, MIN_PRICE)
+    p = base * _score_factor(score) * _urgency_factor(urgency) * (1 + 0.5 * max(0.0, min(1.0, info))) * _value_factor(value_vnd)
+    return max(base, round(p / 1000) * 1000)
+
+
+def price_of(o: Opportunity, score: int, urgency: int) -> int:
+    """Giá phiếu o cho 1 doanh nghiệp có điểm score (độ cấp thiết urgency) — dùng ở mọi nơi hiển thị & khi mua."""
+    return price_for(o.price, score, urgency, info_completeness(o), parse_value_vnd(o.estimated_value))
 
 
 # ------------------------------------------------------------------ chuẩn bị văn bản
@@ -258,7 +321,8 @@ def _industry_score(wanted: list[str], o: Opportunity, bag: WordBag) -> tuple[fl
 
 
 def _region_score(wanted: list[str], o: Opportunity) -> tuple[float, str]:
-    prov, reg = emb.fold(o.province), emb.fold(o.region)
+    prov_name = prod.canonical_province(o.province or "")
+    prov, reg = emb.fold(prov_name), emb.fold(o.region or prod.province_region(prov_name))
     best, hit = 0.0, ""
     for w in wanted:
         wf = emb.fold(w)
@@ -270,14 +334,39 @@ def _region_score(wanted: list[str], o: Opportunity) -> tuple[float, str]:
             s = 100.0 if reg == "quoc te" or any(k in prov for k in ("toan cau", "quoc te")) else 0.0
         elif wf in DOMESTIC_REGIONS:
             s = 100.0 if reg == wf else (70.0 if reg == "toan quoc" else 0.0)
-        else:  # tỉnh/thành
-            s = 100.0 if (prov and (wf in prov or prov in wf)) else (35.0 if reg in ("toan quoc",) else 0.0)
+        else:  # tỉnh/thành ("TP.HCM" = "Hồ Chí Minh" = "Sài Gòn")
+            wf = emb.fold(prod.canonical_province(w))
+            w_reg = emb.fold(prod.province_region(w))
+            if prov and (wf in prov or prov in wf):
+                s = 100.0
+            elif w_reg and reg == w_reg:
+                s = 50.0  # tỉnh lân cận cùng miền (khách cần giao tại TP.HCM, cơ hội ở Bình Dương)
+            elif reg == "toan quoc":
+                s = 35.0
+            else:
+                s = 0.0
         if s > best:
             best, hit = s, w
     return best, hit
 
 
-def _criteria_score(c: dict, o: Opportunity, bag: WordBag) -> tuple[float | None, list[str]]:
+def _combined_region(q: "RequestCtx", o: Opportunity) -> tuple[float | None, str, bool]:
+    """Điểm khu vực từ tiêu chí đã chọn + địa danh khách ghi trong mô tả. Trả về (điểm, khu vực khớp, khớp theo mô tả).
+
+    Mô tả ghi rõ địa điểm (vd. "giao hàng tại TP.HCM") được ƯU TIÊN hơn ô tiêu chí cố định (vd. "Quốc tế"):
+    cơ hội đúng địa điểm trong mô tả được đủ điểm, cơ hội chỉ khớp ô tiêu chí được một nửa."""
+    chips = q.criteria.get("regions") or []
+    if not q.places:
+        return (_region_score(chips, o)[0], _region_score(chips, o)[1], False) if chips else (None, "", False)
+    ns, nhit = _region_score(q.places, o)
+    cs, chit = _region_score(chips, o) if chips else (0.0, "")
+    if ns >= cs / 2:
+        return ns, nhit, True
+    return cs / 2, chit, False
+
+
+def _criteria_score(q: "RequestCtx", o: Opportunity, bag: WordBag) -> tuple[float | None, list[str]]:
+    c = q.criteria
     total = weight = 0.0
     reasons: list[str] = []
     if c.get("industries"):
@@ -285,11 +374,13 @@ def _criteria_score(c: dict, o: Opportunity, bag: WordBag) -> tuple[float | None
         total, weight = total + s * CRITERIA_WEIGHTS["industries"], weight + CRITERIA_WEIGHTS["industries"]
         if s >= 45:
             reasons.append(f"Ngành hàng khớp: {hit}")
-    if c.get("regions"):
-        s, hit = _region_score(c["regions"], o)
+    s, hit, by_note = _combined_region(q, o)
+    if s is not None:
         total, weight = total + s * CRITERIA_WEIGHTS["regions"], weight + CRITERIA_WEIGHTS["regions"]
         if s >= 60:
-            reasons.append(f"Khu vực khớp: {hit}")
+            reasons.append(f"Khu vực khớp{' (theo mô tả)' if by_note else ''}: {hit}")
+        elif s >= 35 and by_note:
+            reasons.append(f"Gần khu vực bạn cần: {hit}")
     if c.get("sources"):
         want = {emb.fold(x) for x in c["sources"]}
         s = 100.0 if emb.fold(o.source_type) in want else 0.0
@@ -320,7 +411,8 @@ def _keyword_score(q_words: list[str], q_bigrams: set[str], bag: WordBag, strict
     return _clamp(100 * got_w / need if need else 0.0), hits
 
 
-def _urgency(o: Opportunity, today: date) -> int:
+def urgency_of(o: Opportunity, today: date) -> int:
+    """Độ cấp thiết theo hạn chót (tính tại thời điểm gọi — giá phiếu tăng dần khi hạn chót tới gần)."""
     if not o.deadline:
         return 50
     d = (o.deadline - today).days
@@ -347,6 +439,8 @@ class RequestCtx:
         self.accented = accented(r.note or "")
         self.min_score = int(self.criteria.get("min_score") or 0)
         self.has_criteria = any(self.criteria.get(k) for k in CRITERIA_WEIGHTS)
+        self.products = prod.find_products(r.note or "")  # sản phẩm cụ thể khách cần (túi giữ nhiệt…)
+        self.places = prod.find_places(r.note or "")  # địa điểm khách ghi trong mô tả (TP.HCM, miền Nam…)
 
 
 def cos_range(cfg: Settings, model: str) -> tuple[float, float]:
@@ -366,18 +460,34 @@ def score_pair(q: RequestCtx, o: Opportunity, cos: float | None, cfg: Settings, 
         sem = _clamp(100 * (cos - lo) / (hi - lo))
 
     reasons: list[str] = []
-    crit, crit_reasons = _criteria_score(q.criteria, o, bag)
+    crit, crit_reasons = _criteria_score(q, o, bag)
     if cos is None:  # dự phòng: chỉ tiêu chí + từ khoá
         fit = kw if crit is None else W_CRITERIA_NOSEM * crit + W_KEYWORD_NOSEM * kw
-        reasons += crit_reasons
     elif crit is None:
         fit = W_SEMANTIC_ONLY * sem + W_KEYWORD_ONLY * kw
     else:
         fit = W_CRITERIA * crit + W_SEMANTIC * sem + W_KEYWORD * kw
-        reasons += crit_reasons
     if crit is not None:
-        if q.criteria.get("regions") and _region_score(q.criteria["regions"], o)[0] == 0:
-            fit *= 0.8  # sai khu vực khách yêu cầu → trừ điểm
+        if _combined_region(q, o)[0] == 0:
+            fit *= 0.75 if q.places else 0.8  # sai khu vực khách yêu cầu → trừ điểm (ghi rõ trong mô tả thì trừ nặng hơn)
+
+    # Đối chiếu SẢN PHẨM cụ thể: cùng ngành nhưng khác sản phẩm thì không được điểm cao
+    # chỉ xét nội dung cơ hội — KHÔNG xét cột ngành (ngành rộng như "Bao bì & in ấn" chính là nguyên nhân khớp sai)
+    rel, rel_keys = prod.product_relation(q.products, ". ".join(p for p in (o.title, o.summary, o.scale, (o.detail or "")[:2000]) if p))
+    if rel == "direct":
+        fit = 0.6 * fit + 40
+        reasons.append("Đúng sản phẩm: " + ", ".join(prod.product_names(rel_keys)))
+    elif rel == "equivalent":
+        fit = min(0.6 * fit + 24, 70)
+        reasons.append(f"Sản phẩm tương đương: {', '.join(prod.product_names(rel_keys))} (bạn tìm {', '.join(prod.product_names(q.products))})")
+    elif rel == "unknown":
+        fit = min(fit, 50)
+        reasons.append("Chưa xác định được sản phẩm cụ thể trong cơ hội")
+    elif rel == "unrelated":
+        fit = min(fit, 20)  # dưới ngưỡng khớp → không đưa vào kết quả
+        reasons.append(f"Khác sản phẩm: {', '.join(prod.product_names(rel_keys))}" if rel_keys else "Không nhắc tới sản phẩm bạn cần")
+    if rel != "unrelated" and crit is not None:
+        reasons += crit_reasons  # lý do sản phẩm đứng đầu (thẻ cơ hội chỉ hiện 2 lý do đầu)
     shown = [h for h in hits if len(h) > 2]
     if shown:
         reasons.append("Từ khoá trùng: " + ", ".join(shown[:5]))
@@ -386,7 +496,7 @@ def score_pair(q: RequestCtx, o: Opportunity, cos: float | None, cfg: Settings, 
     elif sem >= 35:
         reasons.append("Nội dung có liên quan tới mô tả yêu cầu")
 
-    urgency, trust = _urgency(o, today), _trust(o)
+    urgency, trust = urgency_of(o, today), _trust(o)
     fit_i = round(_clamp(fit))
     total = round(W_FIT * fit_i + W_URGENCY * urgency + W_TRUST * trust)
     return Scored(score=int(_clamp(total)), fit=fit_i, urgency=urgency, trust=trust, reasons=reasons)
@@ -426,8 +536,13 @@ def _lock_company(db: Session, company_id: int) -> None:
         db.execute(text("SELECT pg_advisory_xact_lock(4242, :cid)"), {"cid": company_id})
 
 
-def refresh_company(db: Session, company_id: int, opp_ids: set[int], member_user_id: int | None = None) -> int:
-    """Gộp các phiếu tìm của doanh nghiệp thành "Tất cả cơ hội": mỗi cơ hội 1 dòng, điểm = điểm cao nhất. Trả về số dòng MỚI."""
+def refresh_company(
+    db: Session, company_id: int, opp_ids: set[int], member_user_id: int | None = None, below: dict[int, tuple[Scored, int]] | None = None
+) -> int:
+    """Gộp các phiếu tìm của doanh nghiệp thành "Tất cả cơ hội": mỗi cơ hội 1 dòng, điểm = điểm cao nhất. Trả về số dòng MỚI.
+
+    below: {opp_id: (điểm, phiếu tìm)} điểm mới nhất DƯỚI ngưỡng — dùng cho cơ hội đã mua nhưng sau khi sửa không còn khớp,
+    để điểm hiển thị là điểm hiện tại (điểm lúc mua nằm trong bản lưu của phiếu đã mua)."""
     if not opp_ids:
         return 0
     _lock_company(db, company_id)
@@ -458,6 +573,10 @@ def refresh_company(db: Session, company_id: int, opp_ids: set[int], member_user
             u.score, u.score_fit, u.score_urgency, u.score_trust, u.reasons, u.best_request_id = m.score, m.score_fit, m.score_urgency, m.score_trust, m.reasons, rid
         elif u is not None and oid not in bought:
             db.delete(u)  # không còn phiếu tìm nào khớp (phiếu bị từ chối, cơ hội sửa nội dung/đóng) — đã mua thì giữ
+        elif u is not None and below and oid in below:  # đã mua, nay không còn khớp → cập nhật điểm hiện tại
+            sc, rid = below[oid]
+            u.score, u.score_fit, u.score_urgency, u.score_trust, u.best_request_id = sc.score, sc.fit, sc.urgency, sc.trust, rid
+            u.reasons = ["Cơ hội đã được chỉnh sửa và không còn khớp yêu cầu của bạn", *sc.reasons]
     return new
 
 
@@ -498,6 +617,7 @@ def match_opportunity(db: Session, opp: Opportunity, cfg: Settings | None = None
     today = date.today()
     prev = {m.request_id: m for m in db.scalars(select(SearchRequestMatch).where(SearchRequestMatch.opportunity_id == opp.id)).unique()}
     by_company: dict[int, int | None] = {}
+    below: dict[int, tuple[Scored, int]] = {}  # doanh nghiệp từng khớp, nay dưới ngưỡng: điểm cao nhất hiện tại
     if prev:
         for r in db.scalars(select(SearchRequest).where(SearchRequest.id.in_(list(prev)))).unique():
             by_company[r.company_id] = r.member_user_id
@@ -516,10 +636,12 @@ def match_opportunity(db: Session, opp: Opportunity, cfg: Settings | None = None
                     _notify_new_match(db, r, opp, s.score)
                 by_company[r.company_id] = r.member_user_id
                 matched += 1
+            elif r.company_id in by_company and (r.company_id not in below or s.score > below[r.company_id][0].score):
+                below[r.company_id] = (s, r.id)
     for stale in prev.values():
         db.delete(stale)
     for cid in sorted(by_company):  # khoá theo thứ tự tăng dần → không khoá chéo giữa các việc nền
-        refresh_company(db, cid, {opp.id}, by_company[cid])
+        refresh_company(db, cid, {opp.id}, by_company[cid], {opp.id: below[cid]} if cid in below else None)
     db.flush()
     return matched
 

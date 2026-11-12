@@ -8,12 +8,12 @@ import { Dialog, Icon, ScoreChip, Skeleton } from "@/components/admin/ui";
 import { useMember } from "@/components/member/MemberContext";
 import { fmtDate, fmtDateTime, fromNow } from "@/lib/admin/format";
 import { AttachmentGallery } from "@/components/member/AttachmentGallery";
-import { type Attachment, ENRICH_STATUS, type EnrichReq, fmtPts, type Opp } from "@/lib/commerce";
+import { type Attachment, ENRICH_STATUS, type EnrichReq, fmtPts, type Opp, type PurchaseInfo } from "@/lib/commerce";
 import { ApiError, errMsg, mapi } from "@/lib/member/api";
 
 interface Resp {
   opportunity: Opp;
-  purchase: { id: number; price: number; created_at: string; enrich_requests: EnrichReq[] } | null;
+  purchase: (PurchaseInfo & { enrich_requests: EnrichReq[] }) | null;
   attachments?: Attachment[]; // chỉ khi đã mua — link xem/tải ký sẵn ngắn hạn
   attachment_counts?: { images: number; files: number }; // chưa mua: chỉ biết số lượng
 }
@@ -26,6 +26,7 @@ export default function OppDetailPage() {
   const [buying, setBuying] = useState(false);
   const [buyErr, setBuyErr] = useState<{ text: string; status: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showNow, setShowNow] = useState(false); // cơ hội bị sửa sau khi mua: xem bản hiện tại thay vì bản đã mua
 
   const load = useCallback(() => mapi.get<Resp>(`/opportunities/${id}`).then(setD, (e) => setError(errMsg(e))), [id]);
   useEffect(() => {
@@ -67,8 +68,13 @@ export default function OppDetailPage() {
   if (error) return <div className="adm-card adm-empty">{error} <p style={{ marginTop: 12 }}><Link className="adm-btn" href="/thanh-vien/co-hoi">← Tất cả cơ hội</Link></p></div>;
   if (!d) return <div style={{ display: "grid", gap: 16 }}><Skeleton h={32} w="50%" /><Skeleton h={260} /></div>;
 
-  const o = d.opportunity;
-  const owned = !!d.purchase;
+  const p = d.purchase;
+  const changed = p?.snapshot && p.changed_fields.length ? p.changed_fields : null;
+  const bought = !!(changed && !showNow); // đang xem bản tại thời điểm mua
+  const cur = d.opportunity;
+  // bản đã mua: nội dung + điểm lúc mua; số lượt bán luôn lấy hiện tại
+  const o = bought ? { ...cur, ...p!.snapshot!, sold_count: cur.sold_count, max_buyers: cur.max_buyers, sold_out: cur.sold_out } : cur;
+  const owned = !!p;
   const enough = me.company.points_balance >= o.price;
 
   return (
@@ -83,6 +89,23 @@ export default function OppDetailPage() {
         </div>
         <ScoreChip score={o.score} />
       </div>
+
+      {changed ? (
+        <div className="adm-alert" role="status" style={{ marginBottom: 16, display: "grid", gap: 8 }}>
+          <span>
+            <b>Cơ hội đã được chỉnh sửa sau khi bạn mua</b> ({changed.join(", ")}). Điểm phù hợp lúc mua: <b>{p!.snapshot!.score}</b> → hiện tại: <b>{d.opportunity.score}</b>.{" "}
+            {p!.refunded_at
+              ? <>LeadScan đã hoàn <b>{fmtPts(p!.refund_amount)}</b> lúc {fmtDateTime(p!.refunded_at)}{p!.refund_note ? ` — ${p!.refund_note}` : ""}.</>
+              : "Nếu cơ hội không còn phù hợp với yêu cầu của bạn, LeadScan sẽ xem xét và hoàn điểm."}
+          </span>
+          <div className="adm-seg" role="group" aria-label="Phiên bản cơ hội" style={{ display: "flex", gap: 6 }}>
+            <button className={`adm-btn sm${bought ? " primary" : ""}`} aria-pressed={bought} onClick={() => setShowNow(false)}>Bản bạn đã mua</button>
+            <button className={`adm-btn sm${!bought ? " primary" : ""}`} aria-pressed={!bought} onClick={() => setShowNow(true)}>Bản hiện tại</button>
+          </div>
+        </div>
+      ) : p?.refunded_at ? (
+        <div className="adm-alert ok" style={{ marginBottom: 16 }}>LeadScan đã hoàn {fmtPts(p.refund_amount)} cho phiếu này lúc {fmtDateTime(p.refunded_at)}{p.refund_note ? ` — ${p.refund_note}` : ""}.</div>
+      ) : null}
 
       <div className="adm-grid side">
         <div className="adm-grid">
@@ -149,7 +172,7 @@ export default function OppDetailPage() {
           <section className="adm-card">
             <div className="bd" style={{ display: "grid", gap: 14 }}>
               <div className="adm-price" style={{ fontSize: 26 }}>
-                {fmtPts(o.price)}
+                {fmtPts(owned ? p!.price : o.price)}
                 <small>{o.max_buyers === 1 ? "Phiếu độc quyền — chỉ 1 doanh nghiệp mua" : `Còn ${Math.max(0, o.max_buyers - o.sold_count)}/${o.max_buyers} lượt mua`}</small>
               </div>
               {owned ? (
@@ -173,7 +196,7 @@ export default function OppDetailPage() {
             </div>
           </section>
           <section className="adm-card">
-            <div className="hd"><h2>Điểm phù hợp với bạn</h2><ScoreChip score={o.score} /></div>
+            <div className="hd"><h2>{bought ? "Điểm tại thời điểm mua" : "Điểm phù hợp với bạn"}</h2><ScoreChip score={o.score} /></div>
             <div className="bd adm-meter">
               {[["Khớp yêu cầu của bạn", o.score_fit], ["Độ cấp thiết", o.score_urgency], ["Độ tin cậy nguồn", o.score_trust]].map(([label, v]) => (
                 <div key={label as string}>

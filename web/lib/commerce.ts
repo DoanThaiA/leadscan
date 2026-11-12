@@ -168,7 +168,35 @@ export interface SearchReq {
   new_count?: number; // cơ hội mới phù hợp chưa xem
   match_status?: "pending" | "running" | "done" | "error"; // so khớp chạy nền
   matched_at?: string | null;
+  understood?: Understood; // hệ thống hiểu mô tả thế nào
 }
+
+/** Phiếu đã mua: bản cơ hội tại thời điểm mua + các mục đã bị sửa sau đó + hoàn điểm */
+export interface PurchaseInfo {
+  id: number;
+  price: number;
+  created_at: string;
+  snapshot: Opp | null; // null = mua trước khi có bản lưu
+  changed_fields: string[];
+  refund_amount: number;
+  refund_note: string;
+  refunded_at: string | null;
+}
+
+/** Hệ thống nhận ra gì trong mô tả: sản phẩm cụ thể, địa điểm; cảnh báo khi mâu thuẫn với ô Khu vực */
+export interface Understood {
+  products: string[];
+  places: string[];
+  warning: string;
+}
+
+/** Mẫu mô tả chuẩn gợi ý cho thành viên (sao chép / dùng ngay) */
+export const NOTE_TEMPLATE = `Sản phẩm: [tên sản phẩm cụ thể, vd: túi giữ nhiệt in logo theo thiết kế riêng (OEM/ODM)]
+Quy cách: [kích thước, chất liệu, tải trọng, vd: 60 × 90 cm, tải trọng 5 kg]
+Số lượng: [vd: từ 5.000 chiếc/đơn]
+Khách hàng cần tìm: [vd: doanh nghiệp đang cần mua / đặt gia công, chuỗi giao đồ ăn, siêu thị]
+Địa điểm giao hàng: [vd: TP. Hồ Chí Minh hoặc khu vực miền Nam]
+Thời gian: [vd: cần giao trong quý 1/2027]`;
 
 /** Phiếu còn đang được hệ thống so khớp (chạy nền) */
 export const isMatching = (r: SearchReq) => r.match_status === "pending" || r.match_status === "running";

@@ -5,13 +5,10 @@ import { useEffect, useState } from "react";
 
 import { Icon, ScoreChip, Skeleton } from "@/components/admin/ui";
 import { fmtDateTime } from "@/lib/admin/format";
-import { fmtPts, type Opp } from "@/lib/commerce";
+import { fmtPts, type Opp, type PurchaseInfo } from "@/lib/commerce";
 import { errMsg, mapi, qs } from "@/lib/member/api";
 
-interface Row {
-  id: number;
-  price: number;
-  created_at: string;
+interface Row extends PurchaseInfo {
   opportunity: Opp;
 }
 
@@ -47,16 +44,19 @@ export default function PurchasesPage() {
           <div className="adm-table-wrap">
             <table className="adm-table">
               <thead>
-                <tr><th>Cơ hội</th><th>Bên có nhu cầu</th><th>Đầu mối chính</th><th>Điểm</th><th>Giá</th><th>Ngày mua</th></tr>
+                <tr><th>Cơ hội</th><th>Bên có nhu cầu</th><th>Đầu mối chính</th><th>Điểm lúc mua</th><th>Giá</th><th>Ngày mua</th></tr>
               </thead>
               <tbody>
-                {data.items.map(({ id, price, created_at, opportunity: o }) => {
+                {data.items.map(({ id, price, created_at, opportunity: now, snapshot, changed_fields, refunded_at, refund_amount }) => {
+                  const o = snapshot ? { ...now, ...snapshot } : now; // hiển thị đúng bản đã mua
                   const c = o.contacts?.[0];
                   return (
                     <tr key={id}>
                       <td>
                         <Link className="name" href={`/thanh-vien/co-hoi/${o.id}`}>{o.title}</Link>
                         <div className="sub mono">{o.code} · {o.industry} · {o.province}</div>
+                        {changed_fields.length ? <div className="sub" style={{ color: "#8a4b00" }}>Đã chỉnh sửa sau khi mua: {changed_fields.join(", ")}</div> : null}
+                        {refunded_at ? <div className="sub" style={{ color: "var(--ok)" }}>Đã hoàn {fmtPts(refund_amount)}</div> : null}
                       </td>
                       <td>{o.buyer_name || "—"}</td>
                       <td>

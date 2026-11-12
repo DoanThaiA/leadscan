@@ -225,7 +225,7 @@ def test_mua_phieu(admin, member, client):
     pay_membership(member)
 
     price = view(member, oid)["price"]  # giá theo điểm của chính thành viên này
-    assert 625_000 <= price <= 1_875_000
+    assert 1_250_000 <= price <= 10_000_000  # không thấp hơn giá cơ bản
     r = member.post(f"/api/member/opportunities/{oid}/purchase")
     assert r.status_code == 200 and r.json()["points_balance"] == 10_000_000 - price
     assert balance() == 10_000_000 - price

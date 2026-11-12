@@ -63,6 +63,13 @@ export function SearchReqDetail({ r, onSeen }: { r: SearchReq; onSeen: () => voi
 
       <p className="sr-note">{r.note}</p>
       {tags.length ? <div className="sr-tags">{tags.map((t) => <span className="adm-tag" key={t}>{t}</span>)}</div> : null}
+      {r.understood && (r.understood.products.length || r.understood.places.length) ? (
+        <div className="sf-seen">
+          {r.understood.products.length ? <span><b>Sản phẩm đối chiếu:</b> {r.understood.products.join(", ")}</span> : null}
+          {r.understood.places.length ? <span><b>Ưu tiên địa điểm:</b> {r.understood.places.join(", ")}</span> : null}
+          {r.understood.warning ? <span className="warn">{r.understood.warning}</span> : null}
+        </div>
+      ) : null}
       {r.reply ? <div className="sr-reply"><b>LeadScan phản hồi:</b> {r.reply}</div> : null}
       {r.status === "open" ? (
         <p className="sr-live-note">

@@ -24,6 +24,10 @@ ApiUsage                   đếm số lần gọi API ngoài theo tháng (Coher
 KnowledgeCompany           kho doanh nghiệp để AI quét (crawl từ bảng xếp hạng như PROFIT500 hoặc nhập tay)
 JobPost                    bài tuyển dụng đăng trên /tuyen-dung
   └─ JobApplication         hồ sơ ứng viên gửi qua form (đồng thời email về hộp thư tuyển dụng)
+PartnerUser                tài khoản cổng đối tác (/doi-tac) — tách hẳn MemberUser
+  ├─ PartnerSession / PartnerPasswordReset   phiên đăng nhập (cookie ls_partner) & đặt lại mật khẩu
+  ├─ PartnerOtp             mã OTP xác thực SĐT
+  └─ PartnerEvent           nhật ký thay đổi (ai, khi nào, vì sao)
 
 Điểm: 1 điểm = 1đ. Số dư lưu ở Company.points_balance và luôn bằng tổng WalletTransaction.amount.
 """
@@ -411,6 +415,10 @@ class Opportunity(Base):
 
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
     published_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    # Đối tác nguồn (phiếu tạo từ cơ hội đối tác gửi) — đi theo phiếu qua mọi vòng enrich, thành viên KHÔNG thấy.
+    source_partner_id: Mapped[int | None] = mapped_column(ForeignKey("partner_users.id", ondelete="SET NULL"), index=True)
+    source_submission_id: Mapped[int | None] = mapped_column(ForeignKey("partner_submissions.id", ondelete="SET NULL"), index=True)
+    buyer_tax_key: Mapped[str] = mapped_column(String(20), default="", index=True)  # MST bên có nhu cầu (chỉ số) — để kiểm tra trùng
     # Vector ngữ nghĩa (pgvector) của tiêu đề + mô tả — xem services/embedding.py. deferred: không tải khi liệt kê.
     embedding: Mapped[list | None] = mapped_column(EmbeddingVector(1024), deferred=True)
     embedding_model: Mapped[str] = mapped_column(String(80), default="")  # nhãn không gian vector
@@ -473,6 +481,12 @@ class Purchase(Base):
     opportunity_id: Mapped[int] = mapped_column(ForeignKey("opportunities.id", ondelete="CASCADE"), index=True)
     member_user_id: Mapped[int | None] = mapped_column(ForeignKey("member_users.id", ondelete="SET NULL"))
     price: Mapped[int] = mapped_column(BigInteger)
+    # Bản cơ hội tại thời điểm mua (nội dung, đầu mối, điểm/giá lúc mua) — cơ hội bị sửa sau đó thì khách vẫn xem được
+    # đúng bản đã mua, và quản trị so sánh để quyết định hoàn điểm. None = mua trước khi có tính năng này.
+    snapshot: Mapped[dict | None] = mapped_column(JSON)
+    refund_amount: Mapped[int] = mapped_column(BigInteger, default=0)
+    refund_note: Mapped[str] = mapped_column(String(300), default="")
+    refunded_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
     company: Mapped[Company] = relationship(lazy="joined")
@@ -767,3 +781,367 @@ class JobApplication(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
     job: Mapped[JobPost | None] = relationship(lazy="joined")
+
+
+# ====================================================================== Đối tác LeadScan
+# Người ngoài thực địa gửi cơ hội B2B → LeadScan xác minh, bán phiếu, chia doanh thu qua ví hoa hồng.
+# Tài khoản, phiên, dữ liệu TÁCH HẲN cổng thành viên: cùng một email có thể vừa là thành viên vừa là đối tác.
+
+PARTNER_STATUSES = {"active": "Đang hoạt động", "locked": "Tạm khoá"}
+PARTNER_KINDS = {"personal": "Cá nhân", "org": "Tổ chức"}
+# Hạn mức ly cafe/tháng và tỷ lệ hoa hồng theo hạng: cấu hình ở Mốc 3 (partner_settings)
+PARTNER_TIERS = {"new": "Mới", "silver": "Bạc", "strategic": "Chiến lược"}
+
+
+class PartnerUser(Base):
+    """Tài khoản cổng đối tác. Kích hoạt (gửi được cơ hội) sau khi xác thực SĐT bằng OTP — phone_verified_at."""
+
+    __tablename__ = "partner_users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(20), unique=True)  # mã đối tác nguồn, vd DT-7K2QX9
+    email: Mapped[str] = mapped_column(String(150), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    full_name: Mapped[str] = mapped_column(String(100))
+    phone: Mapped[str] = mapped_column(String(20), unique=True)  # dạng 0xxxxxxxxx — 1 SĐT chỉ 1 tài khoản đối tác
+    phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime)
+    phone_verified_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))  # admin xác nhận tay
+    kind: Mapped[str] = mapped_column(String(10), default="personal")
+    org_name: Mapped[str] = mapped_column(String(200), default="")
+    org_tax_code: Mapped[str] = mapped_column(String(20), default="")
+    industries: Mapped[list] = mapped_column(JSON, default=list)  # ngành hay tiếp xúc
+    regions: Mapped[list] = mapped_column(JSON, default=list)  # khu vực hay tiếp xúc
+    tier: Mapped[str] = mapped_column(String(12), default="new")
+    # Thoả thuận riêng (thường cho hạng Chiến lược): None = theo cấu hình chung của hạng
+    custom_rate: Mapped[int | None] = mapped_column(Integer)  # % hoa hồng phiếu thường
+    custom_cafe_quota: Mapped[int | None] = mapped_column(Integer)  # số ly cafe/tháng
+    status: Mapped[str] = mapped_column(String(12), default="active", index=True)
+    terms_version: Mapped[str] = mapped_column(String(20), default="")
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    note: Mapped[str] = mapped_column(Text, default="")  # ghi chú nội bộ
+    signup_ip: Mapped[str] = mapped_column(String(64), default="")
+    signup_ua: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class PartnerSession(Base):
+    __tablename__ = "partner_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    partner_id: Mapped[int] = mapped_column(ForeignKey("partner_users.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    user_agent: Mapped[str] = mapped_column(String(300), default="")
+
+    partner: Mapped[PartnerUser] = relationship(lazy="joined")
+
+
+class PartnerPasswordReset(Base):
+    __tablename__ = "partner_password_resets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    partner_id: Mapped[int] = mapped_column(ForeignKey("partner_users.id", ondelete="CASCADE"), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class PartnerOtp(Base):
+    """Mã OTP xác thực SĐT. DB chỉ lưu sha256(mã + id đối tác); mỗi mã nhập sai tối đa vài lần rồi phải xin mã mới."""
+
+    __tablename__ = "partner_otps"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    partner_id: Mapped[int] = mapped_column(ForeignKey("partner_users.id", ondelete="CASCADE"), index=True)
+    phone: Mapped[str] = mapped_column(String(20))
+    code_hash: Mapped[str] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime)
+    provider: Mapped[str] = mapped_column(String(20), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class PartnerEvent(Base):
+    """Nhật ký đối tác: đăng ký, xác thực SĐT, khoá/mở, đổi hạng… (ai, khi nào, vì sao) — chỉ thêm, không sửa/xoá."""
+
+    __tablename__ = "partner_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    partner_id: Mapped[int] = mapped_column(ForeignKey("partner_users.id", ondelete="CASCADE"), index=True)
+    submission_id: Mapped[int | None] = mapped_column(ForeignKey("partner_submissions.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(24))
+    content: Mapped[str] = mapped_column(String(500), default="")
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    actor: Mapped[AdminUser | None] = relationship(lazy="joined")
+
+
+# Cơ hội đối tác gửi (brief mục 4 & 8.3): Đã gửi → Đang xác minh → Đạt / Trùng / Không đạt / Đóng góp bổ sung
+# → (Đạt) admin tạo phiếu nháp gắn đối tác nguồn → phiếu mở bán → Đã xuất bản.
+SUBMISSION_STATUSES = {
+    "submitted": "Đã gửi",
+    "verifying": "Đang xác minh",
+    "duplicate": "Trùng",
+    "rejected": "Không đạt",
+    "verified": "Đạt xác minh",
+    "supplement": "Đóng góp bổ sung",
+    "published": "Đã xuất bản",
+}
+SUBMISSION_OPEN = ("submitted", "verifying")  # còn trong hàng đợi xác minh
+SUBMISSION_KINDS = {
+    "buy": "Đăng mua",
+    "tender": "Dự án / gói thầu",
+    "new_plant": "Nhà máy / FDI mới",
+    "expansion": "Mở rộng sản xuất",
+    "replace_supplier": "Tìm nhà cung cấp thay thế",
+}
+SUBMISSION_SOURCES = {"direct": "Trực tiếp", "relationship": "Mối quan hệ", "fair": "Hội chợ", "public": "Nguồn công khai"}
+SUBMISSION_CERTAINTY = {"confirmed": "Đã xác nhận với bên mua", "insider": "Nghe từ người trong cuộc", "public": "Thấy công khai"}
+# Lý do không đạt — chuẩn hoá để đối tác hiểu và để thống kê
+REJECT_REASONS = {
+    "wrong_info": "Thông tin sai",
+    "unverifiable": "Không xác minh được",
+    "low_score": "Điểm chất lượng dưới ngưỡng",
+    "vague": "Nhu cầu chung chung, thiếu cụ thể",
+    "outdated": "Nhu cầu đã cũ hoặc đã kết thúc",
+    "personal_data": "Là danh sách dữ liệu cá nhân",
+    "confidential": "Có dấu hiệu thông tin mật của nơi làm việc",
+    "fraud": "Gian lận — thu hồi thưởng",
+    "other": "Lý do khác",
+}
+
+
+class PartnerSubmission(Base):
+    """Một cơ hội đối tác gửi. Đối tác chỉ thấy trạng thái, lý do, ghi chú gửi đối tác — không thấy trùng với ai, ghi chú nội bộ."""
+
+    __tablename__ = "partner_submissions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(20), unique=True)  # GT-000123
+    partner_id: Mapped[int] = mapped_column(ForeignKey("partner_users.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(12), default="submitted", index=True)
+
+    # Doanh nghiệp có nhu cầu
+    company_name: Mapped[str] = mapped_column(String(200))
+    tax_code: Mapped[str] = mapped_column(String(20), default="")
+    tax_key: Mapped[str] = mapped_column(String(20), default="", index=True)
+    tax_lookup: Mapped[dict | None] = mapped_column(JSON)  # kết quả tra MST phía trình duyệt (gợi ý, chưa kiểm chứng)
+    province: Mapped[str] = mapped_column(String(80), default="")
+    industry: Mapped[str] = mapped_column(String(100), default="")
+    # Nhu cầu
+    kind: Mapped[str] = mapped_column(String(20))
+    need: Mapped[str] = mapped_column(Text)
+    scale: Mapped[str] = mapped_column(String(200), default="")
+    timing: Mapped[str] = mapped_column(String(200), default="")
+    # Nguồn & độ chắc chắn
+    source_type: Mapped[str] = mapped_column(String(16))
+    source_url: Mapped[str] = mapped_column(String(500), default="")
+    certainty: Mapped[str] = mapped_column(String(16))
+    evidence: Mapped[str] = mapped_column(Text, default="")  # link chứng minh, mỗi dòng 1 link
+    # Người liên hệ — chỉ khi người đó đồng ý được giới thiệu / là liên hệ công khai (contact_consent)
+    contact_name: Mapped[str] = mapped_column(String(100), default="")
+    contact_title: Mapped[str] = mapped_column(String(100), default="")
+    contact_phone: Mapped[str] = mapped_column(String(30), default="")
+    contact_email: Mapped[str] = mapped_column(String(150), default="")
+    contact_consent: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_connect: Mapped[str] = mapped_column(String(4), default="")  # "" / yes / no — thưởng kết nối ở Phase 2
+
+    # Xác minh
+    auto_score: Mapped[int] = mapped_column(Integer, default=0)  # điểm chất lượng tự động (theo quy tắc) lúc gửi
+    score_detail: Mapped[list] = mapped_column(JSON, default=list)  # [{label, points}]
+    final_score: Mapped[int | None] = mapped_column(Integer)  # điểm người duyệt chốt khi quyết định
+    dup_hints: Mapped[list] = mapped_column(JSON, default=list)  # nghi trùng lúc gửi (cơ hội / cơ hội đối tác khác)
+    is_large: Mapped[bool] = mapped_column(Boolean, default=False)  # cơ hội lớn — tỷ lệ hoa hồng riêng (Mốc 3)
+    reject_reason: Mapped[str] = mapped_column(String(20), default="")
+    partner_note: Mapped[str] = mapped_column(Text, default="")  # ghi chú gửi đối tác (đối tác thấy)
+    internal_note: Mapped[str] = mapped_column(Text, default="")  # ghi chú nội bộ
+    assigned_to_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"), index=True)
+    sla_due_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)  # hạn xác minh (2 ngày làm việc)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+    decided_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    partner: Mapped[PartnerUser] = relationship(lazy="joined")
+    assigned_to: Mapped[AdminUser | None] = relationship(foreign_keys=[assigned_to_id], lazy="joined")
+    decided_by: Mapped[AdminUser | None] = relationship(foreign_keys=[decided_by_id], lazy="joined")
+
+
+from sqlalchemy import event as _sa_event  # noqa: E402
+from sqlalchemy.orm import Session as _Session  # noqa: E402
+
+
+@_sa_event.listens_for(_Session, "before_flush")
+def _partner_submission_published(session, _ctx, _instances) -> None:
+    """Phiếu tạo từ cơ hội đối tác được mở bán (ở bất kỳ đâu: trang quản trị, CLI) → cơ hội đối tác chuyển "Đã xuất bản".
+
+    Đặt ở đây (không ở route) để mọi đường mở bán phiếu đều cập nhật đúng (kể cả chuyển ly cafe sang Khả dụng).
+    """
+    for o in list(session.new) + list(session.dirty):
+        if not isinstance(o, Opportunity) or not o.source_submission_id or o.status != "published":
+            continue
+        with session.no_autoflush:
+            s = session.get(PartnerSubmission, o.source_submission_id)
+            if s and s.status == "verified":
+                s.status, s.published_at = "published", o.published_at or utcnow()
+                session.add(PartnerEvent(partner_id=s.partner_id, submission_id=s.id, kind="sub_published", content=f"Phiếu cơ hội {o.code} đã mở bán"))
+                from app.services.partner_wallet import release_cafe_on_publish
+
+                release_cafe_on_publish(session, s)  # ly cafe Chờ duyệt → Khả dụng
+
+
+# ====================================================================== Ví hoa hồng đối tác (Mốc 3)
+# Ví là SỔ GHI CÔNG NỢ LeadScan phải trả đối tác (không phải ví điện tử): không nạp, không chuyển, chỉ rút về ngân hàng chính chủ.
+
+CREDIT_KINDS = {
+    "cafe": "Ly cafe cảm ơn",
+    "supplement": "Đóng góp bổ sung",
+    "commission": "Hoa hồng lượt bán",
+    "clawback": "Thu hồi hoa hồng (hoàn phiếu)",
+    "fraud": "Thu hồi do gian lận",
+    "adjust": "Điều chỉnh",
+}
+CREDIT_STATES = {"pending": "Chờ duyệt", "available": "Khả dụng", "void": "Đã huỷ"}
+
+
+class PartnerCredit(Base):
+    """1 khoản ghi vào ví đối tác. Số tiền KHÔNG sửa; chỉ đổi trạng thái pending → available (hết hạn giữ / phiếu xuất bản)
+    hoặc → void (quyết định bị đổi trước khi chi). Thu hồi = 1 khoản âm mới. Số dư = tổng theo trạng thái.
+    """
+
+    __tablename__ = "partner_credits"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    partner_id: Mapped[int] = mapped_column(ForeignKey("partner_users.id", ondelete="CASCADE"), index=True)
+    submission_id: Mapped[int | None] = mapped_column(ForeignKey("partner_submissions.id", ondelete="SET NULL"), index=True)
+    purchase_id: Mapped[int | None] = mapped_column(ForeignKey("purchases.id", ondelete="SET NULL"), index=True)
+    kind: Mapped[str] = mapped_column(String(12))
+    amount: Mapped[int] = mapped_column(BigInteger)  # đồng; âm = thu hồi
+    state: Mapped[str] = mapped_column(String(10), default="pending", index=True)
+    available_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)  # None = chờ sự kiện (vd. phiếu xuất bản)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime)
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime)
+    note: Mapped[str] = mapped_column(String(300), default="")
+    # Căn cứ tính (để đối soát): {"rate": 20, "net": 26364, "cum_net": ..., "target": ..., "mode": "max"}
+    calc: Mapped[dict | None] = mapped_column(JSON)
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    submission: Mapped["PartnerSubmission | None"] = relationship(lazy="joined")
+    actor: Mapped[AdminUser | None] = relationship(lazy="joined")
+
+
+class PartnerSetting(Base):
+    """Tham số thưởng chỉnh trên trang quản trị (không sửa code). Giá trị lưu dạng chuỗi; mặc định ở services/partner_wallet.py."""
+
+    __tablename__ = "partner_settings"
+
+    key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    value: Mapped[str] = mapped_column(String(100))
+    updated_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class PartnerSettingLog(Base):
+    __tablename__ = "partner_setting_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(40))
+    old_value: Mapped[str] = mapped_column(String(100), default="")
+    new_value: Mapped[str] = mapped_column(String(100))
+    reason: Mapped[str] = mapped_column(String(300), default="")
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    actor: Mapped[AdminUser | None] = relationship(lazy="joined")
+
+
+# ====================================================================== Rút tiền (Mốc 4)
+# Đối tác rút số dư Khả dụng về tài khoản ngân hàng CHÍNH CHỦ; LeadScan chi theo lô (mặc định ngày 5 và 20).
+
+WITHDRAWAL_STATUSES = {
+    "requested": "Chờ duyệt",
+    "approved": "Đã duyệt — chờ chi",
+    "paid": "Đã chi",
+    "rejected": "Từ chối",
+    "cancelled": "Đối tác huỷ",
+}
+WITHDRAWAL_OPEN = ("requested", "approved")  # đang giữ tiền (số dư "Đang rút")
+BATCH_STATUSES = {"draft": "Đang lập", "exported": "Đã xuất file", "paid": "Đã chi"}
+
+
+class PartnerPayoutProfile(Base):
+    """Hồ sơ thanh toán — chỉ thu khi rút tiền lần đầu. Số định danh và số tài khoản MÃ HOÁ khi lưu (Fernet,
+    khoá LEADSCAN_PARTNER_SECRET_KEY); DB chỉ để lộ 4 số cuối. account_hash để phát hiện nhiều đối tác dùng chung 1 tài khoản.
+    """
+
+    __tablename__ = "partner_payout_profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    partner_id: Mapped[int] = mapped_column(ForeignKey("partner_users.id", ondelete="CASCADE"), unique=True)
+    legal_name: Mapped[str] = mapped_column(String(200))  # họ tên trên CCCD (cá nhân) / tên tổ chức
+    id_number_enc: Mapped[str] = mapped_column(Text, default="")  # số định danh cá nhân (cá nhân)
+    id_last4: Mapped[str] = mapped_column(String(4), default="")
+    tax_code: Mapped[str] = mapped_column(String(20), default="")  # MST cá nhân (trống = dùng số định danh) / MST tổ chức
+    bank_bin: Mapped[str] = mapped_column(String(10), default="")
+    bank_name: Mapped[str] = mapped_column(String(100))
+    account_enc: Mapped[str] = mapped_column(Text)
+    account_last4: Mapped[str] = mapped_column(String(4))
+    account_hash: Mapped[str] = mapped_column(String(64), index=True)
+    account_holder: Mapped[str] = mapped_column(String(200))  # tên chủ tài khoản (in hoa, không dấu như trên ngân hàng)
+    name_match: Mapped[bool] = mapped_column(Boolean, default=False)  # tên chủ TK khớp tên hồ sơ (so sau khi bỏ dấu)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class PartnerPayoutBatch(Base):
+    """Lô chi: gom các lệnh rút đã duyệt → xuất file chi cho ngân hàng → đánh dấu đã chi."""
+
+    __tablename__ = "partner_payout_batches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(30), unique=True)  # LO-20261120
+    pay_date: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(10), default="draft", index=True)
+    note: Mapped[str] = mapped_column(String(300), default="")
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    exported_at: Mapped[datetime | None] = mapped_column(DateTime)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime)
+    paid_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class PartnerWithdrawal(Base):
+    """Lệnh rút. amount = số trừ khỏi ví; tax_withheld = thuế TNCN khấu trừ; net_amount = số thực chuyển khoản."""
+
+    __tablename__ = "partner_withdrawals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(20), unique=True)  # RT-000001
+    partner_id: Mapped[int] = mapped_column(ForeignKey("partner_users.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(10), default="requested", index=True)
+    amount: Mapped[int] = mapped_column(BigInteger)
+    tax_withheld: Mapped[int] = mapped_column(BigInteger, default=0)
+    net_amount: Mapped[int] = mapped_column(BigInteger)
+    # Ảnh chụp hồ sơ thanh toán lúc đặt lệnh (đổi hồ sơ sau đó không làm sai lệnh đang chi)
+    payee: Mapped[dict] = mapped_column(JSON, default=dict)  # {legal_name, bank_bin, bank_name, account_enc, account_last4, holder, kind}
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey("partner_payout_batches.id", ondelete="SET NULL"), index=True)
+    invoice_no: Mapped[str] = mapped_column(String(50), default="")  # đối tác tổ chức: số hoá đơn cho khoản hoa hồng
+    tax_cert_no: Mapped[str] = mapped_column(String(50), default="")  # số chứng từ khấu trừ thuế TNCN (kế toán phát hành)
+    bank_ref: Mapped[str] = mapped_column(String(100), default="")  # mã giao dịch ngân hàng khi chi
+    reject_reason: Mapped[str] = mapped_column(String(300), default="")
+    note: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    approved_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime)
+    decided_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+
+    partner: Mapped[PartnerUser] = relationship(lazy="joined")
+    batch: Mapped["PartnerPayoutBatch | None"] = relationship(lazy="joined")

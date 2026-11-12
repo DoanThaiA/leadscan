@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.routes import admin, admin_commerce, admin_jobs, admin_knowledge, careers, mcv, member, payments, public
+from app.routes import admin, admin_commerce, admin_jobs, admin_knowledge, admin_partner_payouts, admin_partner_reports, admin_partner_submissions, admin_partners, careers, mcv, member, partner, payments, public
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -21,6 +21,13 @@ app.include_router(admin_knowledge.router)
 app.include_router(admin_jobs.router)
 app.include_router(careers.router)
 app.include_router(member.router)
+app.include_router(partner.router)
+app.include_router(admin_partners.router)
+app.include_router(admin_partners.settings_router)
+app.include_router(admin_partner_submissions.router)
+app.include_router(admin_partner_payouts.router)
+app.include_router(admin_partner_payouts.batches)
+app.include_router(admin_partner_reports.router)
 app.include_router(payments.router)
 app.include_router(mcv.router)
 
@@ -42,6 +49,6 @@ async def security_headers(request: Request, call_next):
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
-    if request.url.path.startswith(("/api/admin", "/api/member")):
+    if request.url.path.startswith(("/api/admin", "/api/member", "/api/partner")):
         resp.headers.setdefault("Cache-Control", "no-store")
     return resp

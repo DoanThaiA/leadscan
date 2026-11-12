@@ -13,7 +13,20 @@ import { fmtPts, type Opp, OPP_STATUS } from "@/lib/commerce";
 
 interface Resp {
   opportunity: Opp;
-  purchases: { id: number; price: number; created_at: string; company: { id: number; code: string; name: string } }[];
+  purchases: Buyer[];
+}
+
+interface Buyer {
+  id: number;
+  price: number;
+  created_at: string;
+  company: { id: number; code: string; name: string };
+  score_at_purchase: number | null;
+  score_now: number | null;
+  changed_fields: string[];
+  refund_amount: number;
+  refund_note: string;
+  refunded_at: string | null;
 }
 
 export default function EditOppPage() {
@@ -32,6 +45,18 @@ export default function EditOppPage() {
   useEffect(() => {
     if (d) document.title = `${d.opportunity.code} · Quản trị LeadScan`;
   }, [d]);
+
+  async function refund(b: Buyer) {
+    const note = prompt(`Hoàn ${fmtPts(b.price)} cho ${b.company.name}.
+Lý do (khách sẽ thấy trong lịch sử điểm):`, "Cơ hội đã chỉnh sửa, không còn phù hợp yêu cầu");
+    if (note === null) return;
+    try {
+      await api.post(`/purchases/${b.id}/refund`, { note });
+      await load();
+    } catch (e) {
+      alert(errMsg(e));
+    }
+  }
 
   async function remove() {
     if (!confirm("Xoá vĩnh viễn cơ hội này?")) return;
@@ -66,6 +91,9 @@ export default function EditOppPage() {
         initial={o}
         submitLabel="Lưu thay đổi"
         onSubmit={async (body) => {
+          if (o.sold_count && !confirm(`Phiếu đã có ${o.sold_count} doanh nghiệp mua. Người mua vẫn xem được bản họ đã mua; hệ thống chấm điểm lại và báo "đã chỉnh sửa sau khi mua". Bạn có thể duyệt hoàn điểm ở bảng bên dưới. Tiếp tục lưu?`)) {
+            throw new Error("Chưa lưu thay đổi.");
+          }
           await api.put(`/opportunities/${id}`, body);
           await load();
           setVer((v) => v + 1);
@@ -79,12 +107,25 @@ export default function EditOppPage() {
         {d.purchases.length ? (
           <div className="adm-table-wrap">
             <table className="adm-table">
+              <thead><tr><th>Doanh nghiệp</th><th>Giá</th><th>Ngày mua</th><th>Điểm</th><th>Nội dung</th><th></th></tr></thead>
               <tbody>
                 {d.purchases.map((p) => (
                   <tr key={p.id}>
                     <td><Link className="name" href={`/admin/khach-hang/${p.company.id}`}>{p.company.name}</Link><div className="sub mono">{p.company.code}</div></td>
                     <td className="adm-neg">{fmtPts(p.price)}</td>
                     <td style={{ whiteSpace: "nowrap" }}>{fmtDateTime(p.created_at)}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {p.score_at_purchase ?? "—"} → {p.score_now ?? "—"}
+                      <div className="sub">điểm lúc mua → hiện tại</div>
+                    </td>
+                    <td>{p.changed_fields.length ? <span style={{ color: "#8a4b00" }}>Đã sửa: {p.changed_fields.join(", ")}</span> : <span className="muted">Chưa sửa</span>}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {p.refunded_at ? (
+                        <span className="adm-badge s-active" title={p.refund_note}>Đã hoàn {fmtPts(p.refund_amount)}</span>
+                      ) : user.role === "admin" ? (
+                        <button className="adm-btn sm" onClick={() => refund(p)}>Hoàn điểm</button>
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -24,6 +24,16 @@
 .sf-note { display: flex; flex-direction: column; min-width: 0; }
 .sf-note textarea { flex: 1; min-height: 230px; resize: vertical; line-height: 1.55; padding: 10px 12px; height: auto; }
 .sf-note .sr-count { margin-top: 4px; }
+.sf-seen { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; font-size: 12.5px; background: var(--line-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.sf-seen em { color: var(--muted); }
+.sf-seen .warn { color: #8a4b00; background: #fff6e5; border: 1px solid #f3dcae; border-radius: 5px; padding: 6px 8px; margin-top: 3px; }
+.sf-guide { margin-top: 8px; font-size: 12.5px; }
+.sf-guide summary { cursor: pointer; color: var(--brand, #1d4ed8); font-weight: 600; }
+.sf-guide table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+.sf-guide th, .sf-guide td { text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); padding: 5px 6px; }
+.sf-guide th { color: var(--muted); font-weight: 600; }
+.sf-tpl { white-space: pre-wrap; font: inherit; background: var(--line-2); border: 1px dashed var(--line); border-radius: 6px; padding: 8px 10px; margin: 0; }
+.sf-tpl-actions { display: flex; gap: 6px; margin-top: 6px; }
 .sf-crit { display: grid; gap: 12px; align-content: start; min-width: 0; }
 .sf-crit .mt-group { border-top: 0; padding: 0; }
 .sf-crit .mt-label { margin-bottom: 6px; }

@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 
 /** Thanh "Đăng ký" cố định ở đáy màn hình điện thoại; ẩn khi ở hero, form đăng ký hoặc footer. */
-export default function MobileCta() {
+type Props = { small?: string; value?: string; label?: string; href?: string };
+
+export default function MobileCta({ small = "Phiếu cơ hội chỉ từ", value = "29.000đ", label = "Đăng ký thành viên", href = "#dang-ky" }: Props = {}) {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
@@ -23,8 +25,8 @@ export default function MobileCta() {
 
   return (
     <div className={show ? "m-cta show" : "m-cta"} id="mcta" aria-hidden={!show}>
-      <div><small>Phiếu cơ hội chỉ từ</small><b>29.000đ</b></div>
-      <a href="#dang-ky" className="btn btn-primary" tabIndex={show ? 0 : -1}>Đăng ký thành viên</a>
+      <div><small>{small}</small><b>{value}</b></div>
+      <a href={href} className="btn btn-primary" tabIndex={show ? 0 : -1}>{label}</a>
     </div>
   );
 }
