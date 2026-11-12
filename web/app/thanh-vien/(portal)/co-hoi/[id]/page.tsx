@@ -10,6 +10,7 @@ import { fmtDate, fmtDateTime, fromNow } from "@/lib/admin/format";
 import { AttachmentGallery } from "@/components/member/AttachmentGallery";
 import { type Attachment, ENRICH_STATUS, type EnrichReq, fmtPts, type Opp, type PurchaseInfo } from "@/lib/commerce";
 import { ApiError, errMsg, mapi } from "@/lib/member/api";
+import { DEFAULT_BACK, oppBackLink } from "@/lib/member/back";
 
 interface Resp {
   opportunity: Opp;
@@ -26,6 +27,8 @@ export default function OppDetailPage() {
   const [buying, setBuying] = useState(false);
   const [buyErr, setBuyErr] = useState<{ text: string; status: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [back, setBack] = useState(DEFAULT_BACK);
+  useEffect(() => setBack(oppBackLink(id)), [id]); // đọc sessionStorage sau khi mount (tránh lệch SSR)
   const [showNow, setShowNow] = useState(false); // cơ hội bị sửa sau khi mua: xem bản hiện tại thay vì bản đã mua
 
   const load = useCallback(() => mapi.get<Resp>(`/opportunities/${id}`).then(setD, (e) => setError(errMsg(e))), [id]);
@@ -65,7 +68,7 @@ export default function OppDetailPage() {
     }
   }
 
-  if (error) return <div className="adm-card adm-empty">{error} <p style={{ marginTop: 12 }}><Link className="adm-btn" href="/thanh-vien/co-hoi">← Tất cả cơ hội</Link></p></div>;
+  if (error) return <div className="adm-card adm-empty">{error} <p style={{ marginTop: 12 }}><Link className="adm-btn" href={back.href}>← {back.label}</Link></p></div>;
   if (!d) return <div style={{ display: "grid", gap: 16 }}><Skeleton h={32} w="50%" /><Skeleton h={260} /></div>;
 
   const p = d.purchase;
@@ -79,8 +82,8 @@ export default function OppDetailPage() {
 
   return (
     <>
-      <Link href="/thanh-vien/co-hoi" className="muted" style={{ display: "inline-flex", gap: 6, alignItems: "center", marginBottom: 10 }}>
-        <Icon name="back" size={16} /> Tất cả cơ hội
+      <Link href={back.href} className="muted" style={{ display: "inline-flex", gap: 6, alignItems: "center", marginBottom: 10 }}>
+        <Icon name="back" size={16} /> {back.label}
       </Link>
       <div className="adm-head">
         <div style={{ minWidth: 0 }}>

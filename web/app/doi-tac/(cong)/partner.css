@@ -102,3 +102,14 @@
 .ptn .adm-grid > * { min-width: 0; }
 /* Số tiền lớn (vd 6.000.000đ) vừa ô thống kê 2 cột trên điện thoại */
 .ptn .adm-stat b { font-size: clamp(18px, 5.2vw, 28px); overflow-wrap: anywhere; }
+
+/* Ảnh gắn vào cơ hội gửi */
+.ptn-images { display: flex; flex-wrap: wrap; gap: 10px; }
+.ptn-images figure { position: relative; width: 104px; height: 104px; margin: 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--line-2); }
+.ptn-images img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ptn-images figure button { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 16px; line-height: 1; cursor: pointer; }
+.ptn-images figcaption { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0, 53, 95, 0.75); color: #fff; font-size: 11px; text-align: center; padding: 2px 0; }
+.ptn-images a { display: block; width: 104px; height: 104px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.ptn-images a img { width: 100%; height: 100%; object-fit: cover; }
+.ptn-image-add { width: 104px; height: 104px; border-radius: 8px; border: 1.5px dashed #b8bfc6; background: #fff; color: var(--brand); font: 600 13px Inter, sans-serif; cursor: pointer; }
+.ptn-image-add:hover { border-color: var(--brand); background: var(--accent-50); }

@@ -549,7 +549,7 @@ def refresh_company(
                 if oid not in saved:  # cơ hội phù hợp tự vào kho (lần đầu; khách bỏ khỏi kho thì không tự thêm lại)
                     db.add(SavedOpportunity(company_id=company_id, opportunity_id=oid, member_user_id=member_user_id))
             u.score, u.score_fit, u.score_urgency, u.score_trust, u.reasons, u.best_request_id = m.score, m.score_fit, m.score_urgency, m.score_trust, m.reasons, rid
-        elif u is not None and oid not in bought:
+        elif u is not None and oid not in bought and not u.via_share:  # mở từ link chia sẻ → giữ, không xoá
             db.delete(u)  # không còn phiếu tìm nào khớp (phiếu bị từ chối, cơ hội sửa nội dung/đóng) — đã mua thì giữ
         elif u is not None and below and oid in below:  # đã mua, nay không còn khớp → cập nhật điểm hiện tại
             sc, rid = below[oid]

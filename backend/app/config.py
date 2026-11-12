@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     partner_dup_days: int = 90  # kiểm tra trùng (MST / tên + nhóm nhu cầu) trong N ngày gần nhất
     partner_sla_workdays: int = 2  # hạn xác minh, tính theo ngày làm việc (T2–T6)
     partner_submit_per_day: int = 20  # số cơ hội tối đa mỗi đối tác gửi trong 24 giờ
+    # Lọc trùng theo ngữ nghĩa mô tả (Cohere, văn bản ↔ văn bản): cosine ≤ low → 0, ≥ high → 100. Chỉnh theo dữ liệu thật.
+    partner_dup_cos_low: float = 0.45
+    partner_dup_cos_high: float = 0.85
+    partner_attach_max: int = 6  # số ảnh tối đa mỗi cơ hội đối tác gửi
     # Khoá Fernet mã hoá số định danh + số tài khoản ngân hàng trong hồ sơ thanh toán đối tác.
     # Tạo: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     # MẤT KHOÁ = không đọc lại được số tài khoản đã lưu. Để trống = chưa mở rút tiền.

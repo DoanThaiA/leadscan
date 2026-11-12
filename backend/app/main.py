@@ -9,12 +9,13 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.routes import admin, admin_commerce, admin_jobs, admin_knowledge, admin_partner_payouts, admin_partner_reports, admin_partner_submissions, admin_partners, admin_pricing, careers, mcv, member, partner, payments, public
+from app.routes import admin, admin_commerce, admin_jobs, admin_knowledge, admin_partner_payouts, admin_partner_reports, admin_partner_submissions, admin_partners, admin_pricing, careers, mcv, member, partner, payments, public, public_opportunities
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 app = FastAPI(title="LeadScan B2B", docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(public.router)
+app.include_router(public_opportunities.router)
 app.include_router(admin.router)
 app.include_router(admin_commerce.router)
 app.include_router(admin_pricing.router)

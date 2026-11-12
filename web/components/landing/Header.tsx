@@ -18,7 +18,7 @@ const LINKS = [
 type NavLink = { href: string; label: string; active?: boolean };
 
 /** Trang riêng luôn có trên menu (không phải link neo trong trang chủ). */
-const PAGES: NavLink[] = [{ href: "/gioi-thieu", label: "Giới thiệu" }];
+const PAGES: NavLink[] = [{ href: "/gioi-thieu", label: "Giới thiệu" }, { href: "/co-hoi", label: "Cơ hội" }];
 
 export default function Header({ base = "", extra = [] }: { base?: string; extra?: NavLink[] }) {
   const links: NavLink[] = [...PAGES, ...LINKS.map(([href, label]) => ({ href: base + href, label }))];

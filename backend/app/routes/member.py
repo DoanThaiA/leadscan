@@ -386,6 +386,29 @@ def get_opportunity(opp_id: int, user: MemberUser = Depends(current_member), db:
     }
 
 
+@router.post("/opportunities/{opp_id}/open-shared")
+def open_shared(opp_id: int, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    """Thành viên bấm "Mua" trên trang công khai /co-hoi/<mã>: cơ hội chưa so khớp với doanh nghiệp → thêm vào "Tất cả cơ hội"
+    + Kho của tôi (đánh dấu via_share, so khớp lại không xoá) để xem & mua. Điểm phù hợp = 0 phần khớp yêu cầu → giá cơ bản."""
+    from datetime import date as _date
+
+    from app.services.matching import _trust, urgency_of
+
+    o = db.get(Opportunity, opp_id)
+    if not o or o.status != "published":
+        raise HTTPException(404, "Cơ hội không còn mở bán.")
+    cid = user.company_id
+    if catalog.user_match(db, cid, o.id) is None and not db.scalar(select(Purchase.id).where(Purchase.company_id == cid, Purchase.opportunity_id == o.id)):
+        urg, trust = urgency_of(o, _date.today()), _trust(o)
+        db.add(UserOpportunity(company_id=cid, opportunity_id=o.id, score=round(0.10 * urg + 0.15 * trust), score_fit=0,
+                               score_urgency=urg, score_trust=trust, via_share=True,
+                               reasons=["Bạn mở cơ hội này từ liên kết chia sẻ — chưa so khớp với yêu cầu tìm cơ hội của bạn"]))
+        if not catalog.saved_ids(db, cid, [o.id]):
+            db.add(SavedOpportunity(company_id=cid, opportunity_id=o.id, member_user_id=user.id))
+        db.commit()
+    return {"id": o.id}
+
+
 @router.post("/opportunities/{opp_id}/purchase")
 def purchase(opp_id: int, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
     p = catalog.buy(db, user, opp_id)

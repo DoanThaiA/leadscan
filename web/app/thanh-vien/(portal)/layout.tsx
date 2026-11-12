@@ -9,6 +9,7 @@ import { MemberProvider, useMember } from "@/components/member/MemberContext";
 import { NoticeBell, NoticeProvider, useNotices } from "@/components/member/Notifications";
 import { fmtPts } from "@/lib/commerce";
 import { mapi } from "@/lib/member/api";
+import { rememberOppSource } from "@/lib/member/back";
 import { Logo } from "@/components/brand/Logo";
 
 // Giữ khớp với ảnh minh hoạ dashboard ở trang chủ (components/landing/Hero.tsx)
@@ -30,6 +31,10 @@ function Shell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [path]);
+  useEffect(() => {
+    document.addEventListener("click", rememberOppSource, true); // nhớ trang đang xem khi bấm vào 1 phiếu → nút quay về đúng chỗ
+    return () => document.removeEventListener("click", rememberOppSource, true);
+  }, []);
 
   async function logout() {
     await mapi.post("/auth/logout").catch(() => {});

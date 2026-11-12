@@ -33,7 +33,7 @@ from app.schemas import LoginIn
 from app.security import DUMMY_HASH, add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
 from app.services import otp
 from app.services import partner_submissions as subs
-from app.services import partner_wallet
+from app.services import partner_attachments, partner_wallet
 from app.worker import enqueue, send_partner_password_reset_task, send_partner_welcome_task
 
 router = APIRouter(prefix="/api/partner")
@@ -338,8 +338,46 @@ def create_submission(raw: dict | None = Body(None), p: PartnerUser = Depends(ve
     d, errors = subs.normalize(raw)
     if errors:
         return _fail(422, "Vui lòng kiểm tra lại thông tin.", errors)
+    ids = raw.get("attachment_ids") or []
+    if not isinstance(ids, list):
+        return _fail(422, "Danh sách ảnh không hợp lệ.")
     s = subs.create(db, get_settings(), p, d)
-    return subs.partner_out(s)
+    if ids:
+        try:
+            purge = partner_attachments.link(db, p, s, ids)
+        except HTTPException as e:
+            # cơ hội đã lưu; ảnh lỗi thì báo nhưng không mất nội dung
+            return {**_sub_out(db, s), "warning": f"Đã gửi cơ hội nhưng chưa gắn được ảnh: {e.detail}"}
+        db.commit()
+        _purge(purge)
+    return _sub_out(db, s)
+
+
+@router.put("/submissions/{sub_id}")
+def update_submission(sub_id: int, raw: dict | None = Body(None), p: PartnerUser = Depends(verified_partner), db: Session = Depends(get_db)):
+    """Sửa cơ hội khi LeadScan chưa bắt đầu xác minh (trạng thái Đã gửi)."""
+    s = db.get(PartnerSubmission, sub_id)
+    if not s or s.partner_id != p.id:
+        raise HTTPException(404, "Không tìm thấy cơ hội.")
+    if not isinstance(raw, dict):
+        return _fail(400, "Dữ liệu gửi lên không hợp lệ.")
+    if not subs.editable(s):
+        raise HTTPException(409, "LeadScan đã bắt đầu xác minh cơ hội này nên không sửa được nữa. Cần bổ sung thông tin? Liên hệ LeadScan.")
+    d, errors = subs.normalize(raw)
+    if errors:
+        return _fail(422, "Vui lòng kiểm tra lại thông tin.", errors)
+    changed = subs.update(db, get_settings(), p, s, d)
+    s = db.get(PartnerSubmission, sub_id)
+    if isinstance(raw.get("attachment_ids"), list):
+        before = [a.id for a in partner_attachments.for_submission(db, s.id)]
+        purge = partner_attachments.link(db, p, s, raw["attachment_ids"])
+        if before != [int(i) for i in dict.fromkeys(raw["attachment_ids"])]:
+            changed = [*changed, "Ảnh"]
+            if changed == ["Ảnh"]:
+                db.add(PartnerEvent(partner_id=p.id, submission_id=s.id, kind="sub_edited", content=f"Sửa cơ hội {s.code}: Ảnh"))
+        db.commit()
+        _purge(purge)
+    return {**_sub_out(db, s), "changed": changed}
 
 
 @router.get("/submissions")
@@ -369,9 +407,9 @@ def get_submission(sub_id: int, p: PartnerUser = Depends(verified_partner), db: 
         raise HTTPException(404, "Không tìm thấy cơ hội.")
     events = db.scalars(select(PartnerEvent).where(PartnerEvent.submission_id == s.id).order_by(PartnerEvent.id)).unique().all()
     # Đối tác chỉ thấy các mốc trạng thái, không thấy ai giao việc cho ai
-    events = [e for e in events if e.kind in ("sub_created", "sub_verifying", "sub_decided", "sub_published", "credit", "cafe_quota")]
+    events = [e for e in events if e.kind in ("sub_created", "sub_edited", "sub_verifying", "sub_decided", "sub_published", "credit", "cafe_quota")]
     (_, money, until), = subs.with_money(db, [s])
-    return subs.partner_out(s, events, money=money, until=until)
+    return {**subs.partner_out(s, events, money=money, until=until), "images": [partner_attachments.out(a) for a in partner_attachments.for_submission(db, s.id)]}
 
 
 @router.get("/dashboard")
@@ -487,3 +525,44 @@ def cancel_withdrawal(wid: int, p: PartnerUser = Depends(verified_partner), db: 
         raise HTTPException(404, "Không tìm thấy lệnh rút.")
     pay.cancel(db, p, w)
     return pay.withdrawal_out(w)
+
+
+# ================================================================== ảnh gắn vào cơ hội gửi
+
+
+def _sub_out(db: Session, s: PartnerSubmission) -> dict:
+    return {**subs.partner_out(s), "images": [partner_attachments.out(a) for a in partner_attachments.for_submission(db, s.id)]}
+
+
+def _purge(keys: list[str]) -> None:
+    if keys:
+        from app.worker import purge_files_task
+
+        if not enqueue(purge_files_task, keys):
+            purge_files_task.apply(args=[keys])
+
+
+@router.get("/attachments/config")
+def attachment_config(_: PartnerUser = Depends(verified_partner)):
+    return partner_attachments.config()
+
+
+class AttachInitIn(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    size: int = Field(gt=0)
+
+
+@router.post("/attachments/init", status_code=201)
+def attachment_init(body: AttachInitIn, p: PartnerUser = Depends(verified_partner), db: Session = Depends(get_db)):
+    a, url = partner_attachments.init_upload(db, p, body.filename, body.size)
+    return {"id": a.id, "upload_url": url, "content_type": a.content_type}
+
+
+@router.post("/attachments/{att_id}/complete")
+def attachment_complete(att_id: int, p: PartnerUser = Depends(verified_partner), db: Session = Depends(get_db)):
+    from app.models import PartnerAttachment
+
+    a = db.get(PartnerAttachment, att_id)
+    if not a:
+        raise HTTPException(404, "Không tìm thấy ảnh.")
+    return partner_attachments.out(partner_attachments.complete_upload(db, p, a))

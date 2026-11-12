@@ -76,6 +76,12 @@ export default function RegisterForm() {
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState<string | null>(null);
   const [loggedIn, setLoggedIn] = useState(false);
+  // Đến từ nút "Mua" trên trang cơ hội công khai (/?next=/co-hoi/<mã>?mua=1#dang-ky) → sau khi đăng ký cho quay lại
+  const [backTo, setBackTo] = useState("");
+  useEffect(() => {
+    const n = new URLSearchParams(location.search).get("next") ?? "";
+    if (n.startsWith("/co-hoi/") && !n.startsWith("//")) setBackTo(n);
+  }, []);
   const [lookup, setLookup] = useState<Lookup>({ state: "idle" });
   const lookupCtl = useRef<AbortController | null>(null);
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -324,6 +330,7 @@ export default function RegisterForm() {
         <a href={loggedIn ? "/thanh-vien/nap-tien" : "/thanh-vien/dang-nhap"} className="btn btn-primary">
           {loggedIn ? "Thanh toán phí thành viên" : "Đăng nhập cổng thành viên"}
         </a>
+        {backTo ? <><br /><a href={backTo} className="link-arrow" style={{ marginTop: 14 }}>Quay lại cơ hội đang xem →</a></> : null}
       </div>
     </>
   );

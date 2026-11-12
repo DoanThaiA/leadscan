@@ -118,7 +118,10 @@ function Queue() {
                       </td>
                       <td><div>{s.partner.full_name}</div><div className="sub mono">{s.partner.code}</div></td>
                       <td><ScoreChip score={s.score ?? s.auto_score} /></td>
-                      <td>{s.dup_count ? <StatusBadge status={s.dup_strong ? "rejected" : "contacted"} label={s.dup_strong ? `Nghi trùng (${s.dup_count})` : `${s.dup_count} liên quan`} /> : <span className="muted">—</span>}</td>
+                      <td>{s.dup_same ? <StatusBadge status="rejected" label={`Nghi trùng (${s.dup_same})`} />
+                        : s.dup_similar ? <StatusBadge status="contacted" label={`Gần giống (${s.dup_similar})`} />
+                        : s.dup_count ? <span className="muted" title="Cùng doanh nghiệp, nhu cầu khác">{s.dup_count} cơ hội khác</span>
+                        : <span className="muted">—</span>}</td>
                       <td><StatusBadge status={SUB_BADGE[s.status]} label={s.status_label} /></td>
                       <td>{s.assigned_to?.full_name ?? <span className="muted">Chưa giao</span>}</td>
                       <td style={{ whiteSpace: "nowrap" }}>

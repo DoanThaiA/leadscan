@@ -1,5 +1,5 @@
 import type { Credit, PartnerMe, PayoutProfile, Withdrawal, WalletSummary } from "@/lib/partner/api";
-import type { Submission } from "@/lib/partner/submissions";
+import type { PartnerImage, Submission } from "@/lib/partner/submissions";
 
 export interface AdminPartner extends PartnerMe {
   status: "active" | "locked";
@@ -53,6 +53,10 @@ export interface DupHint {
   created_at: string;
   partner_id?: number;
   status?: string;
+  similarity?: number; // độ giống nhu cầu 0–100 (cơ hội gửi trước khi có so theo nhu cầu: không có)
+  relation?: "same" | "similar" | "different";
+  relation_label?: string;
+  basis?: string[];
 }
 
 export interface AdminSubmission extends Submission {
@@ -61,6 +65,8 @@ export interface AdminSubmission extends Submission {
   final_score: number | null;
   dup_count: number;
   dup_strong: boolean;
+  dup_same?: number; // số cơ hội trùng nhu cầu (cùng doanh nghiệp)
+  dup_similar?: number; // gần giống / trùng mô tả khác tên doanh nghiệp
   is_large: boolean;
   assigned_to: { id: number; full_name: string } | null;
   overdue: boolean;
@@ -78,6 +84,7 @@ export interface AdminSubmissionDetail extends AdminSubmission {
   partner_stats: { total: number; ok: number; pass_rate: number | null; by_status: Record<string, number> };
   events: { kind: string; content: string; actor: string | null; created_at: string }[];
   credits: Credit[];
+  images: PartnerImage[];
 }
 
 export interface SubmissionQueue {

@@ -21,21 +21,29 @@ const DECISIONS: [string, string][] = [
 ];
 const OPEN = ["submitted", "verifying"];
 
+const REL_CLASS: Record<string, string> = { same: "adm-alert", similar: "adm-alert warn", different: "adm-alert ok" };
+
 function Dups({ title, items }: { title: string; items: DupHint[] }) {
   if (!items.length) return null;
   return (
     <div style={{ display: "grid", gap: 6 }}>
       <b style={{ fontSize: 13 }}>{title}</b>
-      {items.map((h) => (
-        <div key={`${h.type}-${h.id}`} className={h.same_group ? "adm-alert" : "adm-alert warn"} style={{ display: "grid", gap: 2 }}>
-          <span>
-            <Link href={h.type === "opportunity" ? `/admin/co-hoi/${h.id}` : `/admin/xac-minh-doi-tac/${h.id}`} className="mono" style={{ fontWeight: 600, textDecoration: "underline" }}>{h.code}</Link>
-            {" · "}{h.type === "opportunity" ? "phiếu cơ hội" : "cơ hội đối tác khác"} · khớp {h.match === "tax" ? "MST" : "tên doanh nghiệp"}
-            {h.same_group ? " · cùng nhóm nhu cầu" : " · khác ngành"} · {fromNow(h.created_at)}
-          </span>
-          <span style={{ fontSize: 12.5, opacity: 0.85 }}>{h.title}</span>
-        </div>
-      ))}
+      {items.map((h) => {
+        // cơ hội cũ (trước khi so theo nhu cầu) chưa có relation → dùng same_group như trước
+        const rel = h.relation ?? (h.same_group ? "same" : "different");
+        return (
+          <div key={`${h.type}-${h.id}`} className={REL_CLASS[rel]} style={{ display: "grid", gap: 2 }}>
+            <span>
+              <b>{h.relation_label ?? (rel === "same" ? "Nghi trùng" : "Liên quan")}{h.similarity !== undefined ? ` · giống ${h.similarity}%` : ""}</b>
+              {" — "}
+              <Link href={h.type === "opportunity" ? `/admin/co-hoi/${h.id}` : `/admin/xac-minh-doi-tac/${h.id}`} className="mono" style={{ fontWeight: 600, textDecoration: "underline" }}>{h.code}</Link>
+              {" · "}{h.type === "opportunity" ? "phiếu cơ hội" : "cơ hội đối tác khác"} · {h.match === "tax" ? "cùng MST" : h.match === "name" ? "cùng tên doanh nghiệp" : "khác doanh nghiệp, cùng tỉnh + ngành"} · {fromNow(h.created_at)}
+            </span>
+            <span style={{ fontSize: 12.5, opacity: 0.85 }}>{h.title}</span>
+            {h.basis?.length ? <span style={{ fontSize: 12, opacity: 0.8 }}>Căn cứ: {h.basis.join(" · ")}</span> : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -146,6 +154,12 @@ export default function PartnerSubmissionDetailPage() {
                   <>{[s.contact_name, s.contact_title, s.contact_phone, s.contact_email].filter(Boolean).join(" · ")}
                     <div style={{ fontSize: 12.5, color: s.contact_consent ? "var(--ok)" : "var(--danger)" }}>{s.contact_consent ? "✓ Đối tác xác nhận người này đồng ý được giới thiệu" : "Chưa có xác nhận đồng ý"}</div></>
                 ))}
+                {row("Ảnh", s.images?.length ? (
+                  <div className="adm-sub-images">{s.images.map((im) => (
+                    <a key={im.id} href={im.url ?? "#"} target="_blank" rel="noopener noreferrer" title={im.filename}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={im.thumb_url ?? im.url ?? ""} alt={im.filename} />
+                    </a>))}</div>) : null)}
                 {row("Kết nối trực tiếp", s.can_connect === "yes" ? "Đối tác kết nối được" : s.can_connect === "no" ? "Không" : "")}
               </dl>
             </div>
@@ -154,10 +168,10 @@ export default function PartnerSubmissionDetailPage() {
           <section className="adm-card">
             <div className="hd"><h2>Kiểm tra trùng ({m.dup_days} ngày)</h2></div>
             <div className="bd" style={{ display: "grid", gap: 12 }}>
-              {!s.dup_hints.length && !otherHints.length ? <p className="muted">Không thấy cơ hội nào cùng doanh nghiệp (theo MST hoặc tên).</p> : null}
+              {!s.dup_hints.length && !otherHints.length ? <p className="muted">Không thấy cơ hội nào cùng doanh nghiệp (theo MST hoặc tên), hay nhu cầu giống trong cùng tỉnh + ngành.</p> : null}
               <Dups title="Lúc đối tác gửi" items={s.dup_hints} />
               <Dups title="Phát sinh sau khi gửi" items={otherHints} />
-              <p className="muted" style={{ fontSize: 12.5 }}>Ai gửi trước được ghi nhận. Cơ hội đã có nhưng đối tác bổ sung thông tin mới có giá trị (người ra quyết định, ngân sách, thời điểm) → chọn <b>Đóng góp bổ sung</b>.</p>
+              <p className="muted" style={{ fontSize: 12.5 }}>Kết luận theo độ giống của mô tả nhu cầu (ngữ nghĩa + từ khoá + sản phẩm): ≥ 70% trùng, 45–70% gần giống, dưới 45% là nhu cầu khác — cùng doanh nghiệp nhưng nhu cầu khác KHÔNG tính trùng. Ai gửi trước được ghi nhận. Cơ hội đã có nhưng đối tác bổ sung thông tin mới có giá trị (người ra quyết định, ngân sách, thời điểm) → chọn <b>Đóng góp bổ sung</b>.</p>
             </div>
           </section>
 

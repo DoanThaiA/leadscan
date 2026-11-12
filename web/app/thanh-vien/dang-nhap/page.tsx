@@ -21,7 +21,10 @@ function LoginForm() {
     try {
       await mapi.post("/auth/login", { email: String(fd.get("email")), password: String(fd.get("password")) });
       const next = params.get("next");
-      router.replace(next && next.startsWith("/thanh-vien") && !next.includes("dang-nhap") ? next : "/thanh-vien");
+      // quay lại trang trong cổng, hoặc trang cơ hội công khai đang xem (/co-hoi/<mã>?mua=1 → tiếp tục mua)
+      const ok = next && (next.startsWith("/thanh-vien") || next.startsWith("/co-hoi/")) && !next.includes("dang-nhap") && !next.startsWith("//");
+      if (ok && next.startsWith("/co-hoi/")) location.href = next;
+      else router.replace(ok ? next : "/thanh-vien");
     } catch (err) {
       setError(errMsg(err));
       setBusy(false);

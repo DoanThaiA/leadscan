@@ -60,3 +60,8 @@
   .at-lightbox { padding: 10px 10px 20px; }
   .at-lb-nav { top: auto; bottom: 16px; transform: none; }
 }
+
+/* Ảnh đối tác gửi kèm cơ hội (trang xác minh) */
+.adm-sub-images { display: flex; flex-wrap: wrap; gap: 8px; }
+.adm-sub-images a { display: block; width: 96px; height: 96px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.adm-sub-images img { width: 100%; height: 100%; object-fit: cover; display: block; }

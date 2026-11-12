@@ -8,8 +8,8 @@ import re
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import Session, noload, undefer
 
 from app.config import Settings
 from app.db import utcnow
@@ -29,6 +29,8 @@ from app.models import (
     PartnerUser,
 )
 from app.registration_form import _EMAIL, INDUSTRIES, clean, clean1, tax_key
+from app.services import partner_attachments
+from app.services import partner_dedup as dedup
 from app.services import partner_wallet
 from app.services.embedding import fold
 
@@ -131,49 +133,96 @@ def normalize(raw: dict) -> tuple[dict, dict[str, str]]:
 # ================================================================== kiểm tra trùng
 
 
-def find_duplicates(db: Session, cfg: Settings, d: dict, exclude_id: int | None = None) -> list[dict]:
-    """Cơ hội trong CSDL (phiếu) hoặc cơ hội đối tác khác cùng doanh nghiệp trong N ngày.
+def find_duplicates(db: Session, cfg: Settings, d: dict, exclude_id: int | None = None,
+                    vec: list[float] | None = None, model: str = "") -> list[dict]:
+    """Cơ hội có thể trùng trong N ngày — chấm theo ĐỘ GIỐNG NHU CẦU (services/partner_dedup.py), không chỉ theo doanh nghiệp.
 
-    Khớp theo MST, hoặc theo tên doanh nghiệp (đã bỏ từ chung) khi không có MST. same_group = cùng ngành (nhóm nhu cầu).
+    Ứng viên: (1) phiếu / cơ hội đối tác khác CÙNG DOANH NGHIỆP (MST, hoặc tên đã bỏ từ chung) — luôn liệt kê kèm độ giống;
+    (2) cùng tỉnh + cùng ngành nhưng khác tên doanh nghiệp — chỉ liệt kê khi độ giống ≥ NEED_ONLY.
+    same_group = True khi trùng nhu cầu (relation "same") — giữ tên khoá cũ để các chỗ đang dùng ("nghi trùng") vẫn đúng.
     """
     since = utcnow() - timedelta(days=cfg.partner_dup_days)
-    hints: list[dict] = []
     nk = name_key(d["company_name"])
+    text = dedup.need_text(d["need"], d.get("scale", ""), d.get("timing", ""))
+    cands: list[tuple[str, object, str]] = []  # (loại, dòng, cách khớp)
 
-    # Chỉ đọc vài cột (không tải đầu mối, embedding); so tên phải làm ở Python vì cần bỏ dấu + bỏ từ chung
-    cols = (Opportunity.id, Opportunity.code, Opportunity.title, Opportunity.buyer_name, Opportunity.buyer_tax_key, Opportunity.industry, Opportunity.created_at)
-    conds = []
+    # Phiếu: chỉ đọc các cột cần (không tải đầu mối); so tên ở Python vì cần bỏ dấu + bỏ từ chung
+    conds = [Opportunity.buyer_name != ""]
     if d["tax_key"]:
         conds.append(Opportunity.buyer_tax_key == d["tax_key"])
-    if nk:
-        conds.append(Opportunity.buyer_name != "")
-    rows = db.execute(select(*cols).where(Opportunity.created_at >= since, or_(*conds))).all() if conds else []
-    for o in rows:
+    conds.append(and_(Opportunity.province == d["province"], Opportunity.industry == d["industry"]))
+    for o in db.scalars(select(Opportunity).options(undefer(Opportunity.embedding), noload(Opportunity.contacts))
+                        .where(Opportunity.created_at >= since, or_(*conds)).limit(500)):
         by_tax = bool(d["tax_key"]) and o.buyer_tax_key == d["tax_key"]
         by_name = bool(nk) and nk == name_key(o.buyer_name)
         if by_tax or by_name:
-            hints.append({
-                "type": "opportunity", "id": o.id, "code": o.code, "title": o.title[:120], "match": "tax" if by_tax else "name",
-                "same_group": o.industry == d["industry"], "created_at": _iso(o.created_at),
-            })
+            cands.append(("opportunity", o, "tax" if by_tax else "name"))
+        elif o.province == d["province"] and o.industry == d["industry"]:
+            cands.append(("opportunity", o, "need"))
 
-    sub_q = select(PartnerSubmission).where(PartnerSubmission.created_at >= since, PartnerSubmission.status != "rejected")
+    sub_q = select(PartnerSubmission).options(undefer(PartnerSubmission.embedding)).where(
+        PartnerSubmission.created_at >= since, PartnerSubmission.status != "rejected",
+        or_(PartnerSubmission.province == d["province"], *([PartnerSubmission.tax_key == d["tax_key"]] if d["tax_key"] else [])),
+    )
     if exclude_id:
         sub_q = sub_q.where(PartnerSubmission.id != exclude_id)
-    if d["tax_key"]:
-        sub_q = sub_q.where(or_(PartnerSubmission.tax_key == d["tax_key"], PartnerSubmission.province == d["province"]))
-    else:
-        sub_q = sub_q.where(PartnerSubmission.province == d["province"])
-    for s in db.scalars(sub_q).unique():
+    for s in db.scalars(sub_q.limit(500)).unique():
         by_tax = bool(d["tax_key"]) and s.tax_key == d["tax_key"]
         by_name = bool(nk) and nk == name_key(s.company_name) and s.province == d["province"]
         if by_tax or by_name:
-            hints.append({
-                "type": "submission", "id": s.id, "code": s.code, "title": s.need[:120], "match": "tax" if by_tax else "name",
-                "same_group": s.industry == d["industry"], "created_at": _iso(s.created_at), "partner_id": s.partner_id,
-                "status": s.status,
-            })
+            cands.append(("submission", s, "tax" if by_tax else "name"))
+        elif s.industry == d["industry"]:
+            cands.append(("submission", s, "need"))
+
+    # Vector: dùng vector đã lưu; thiếu thì nhúng 1 lần cho cả lô (chỉ ứng viên cùng doanh nghiệp — tiết kiệm lượt Cohere)
+    company = [r for t, r, m in cands if m != "need"]
+    opp_text = lambda o: dedup.opp_need_text(o.title, o.summary, o.scale, o.detail)  # noqa: E731
+    sub_text = lambda x: dedup.need_text(x.need, x.scale, x.timing)  # noqa: E731
+    opp_vecs: dict[int, list[float]] = {}
+    if vec is not None and model:
+        # Vector của phiếu (opportunities.embedding) phục vụ so khớp với yêu cầu thành viên → KHÔNG ghi đè; chỉ tính tạm.
+        # Vector hash: tính lại theo phần nhu cầu (miễn phí, chính xác hơn); Cohere: dùng vector đã lưu nếu cùng mô hình.
+        opps = [r for r in cands if r[0] == "opportunity"]
+        if not model.startswith("hash"):
+            opp_vecs = {o.id: o.embedding for _, o, _ in opps if o.embedding is not None and o.embedding_model == model}
+        miss = [o for _, o, m in opps if o.id not in opp_vecs and (m != "need" or model.startswith("hash"))]
+        if miss:
+            vs, got = dedup.embed(cfg, [opp_text(o) for o in miss])
+            if vs and got == model:
+                opp_vecs.update({o.id: v for o, v in zip(miss, vs)})
+        dedup.ensure_vectors(db, cfg, [r for r in company if isinstance(r, PartnerSubmission)], sub_text)
+
+    hints: list[dict] = []
+    for kind, r, match in cands:
+        rtext = opp_text(r) if kind == "opportunity" else sub_text(r)
+        if vec is None:
+            rvec = None
+        elif kind == "opportunity":
+            rvec = opp_vecs.get(r.id)
+        else:
+            rvec = r.embedding if (r.embedding is not None and r.embedding_model == model) else None
+        score, basis = dedup.similarity(cfg, text, vec, rtext, rvec, model)
+        if match == "need" and score < dedup.NEED_ONLY:
+            continue
+        rel = dedup.relation(score)
+        h = {
+            "type": kind, "id": r.id, "code": r.code, "title": (r.title if kind == "opportunity" else r.need)[:160], "match": match,
+            "similarity": score, "relation": rel, "relation_label": dedup.RELATION_LABELS[rel], "basis": basis,
+            # "nghi trùng" (chặn đối tác gửi lại, trừ 30 điểm): cùng doanh nghiệp + trùng nhu cầu. Khác tên doanh nghiệp mà mô tả
+            # giống hệt → chỉ cảnh báo người duyệt (có thể 2 doanh nghiệp cùng nhu cầu, hoặc gửi lại dưới tên khác).
+            "same_group": rel == "same" and match != "need", "same_industry": r.industry == d["industry"], "created_at": _iso(r.created_at),
+        }
+        if kind == "submission":
+            h.update(partner_id=r.partner_id, status=r.status)
+        hints.append(h)
+    hints.sort(key=lambda h: -h["similarity"])
     return hints
+
+
+def embed_need(cfg: Settings, d: dict) -> tuple[list[float] | None, str]:
+    """Vector mô tả nhu cầu của cơ hội đang gửi / sửa (1 lần gọi Cohere). Lỗi → (None, "") — vẫn lọc trùng bằng từ khoá."""
+    vecs, model = dedup.embed(cfg, [dedup.need_text(d["need"], d.get("scale", ""), d.get("timing", ""))])
+    return (vecs[0], model) if vecs else (None, "")
 
 
 # ================================================================== điểm chất lượng tự động
@@ -198,10 +247,13 @@ def auto_score(d: dict, hints: list[dict]) -> tuple[int, list[dict]]:
         parts.append(("Có link / tài liệu chứng minh", 5))
     if d["contact_consent"] and (d["contact_phone"] or d["contact_email"]):
         parts.append(("Có người liên hệ đồng ý được giới thiệu", 5))
+    rels = {h.get("relation") for h in hints}
     if any(h["same_group"] for h in hints):
-        parts.append(("Nghi trùng cơ hội đã có (cùng doanh nghiệp, cùng nhóm nhu cầu)", -30))
+        parts.append(("Nghi trùng: nhu cầu giống cơ hội đã có", -30))
+    elif rels & {"same", "similar"}:
+        parts.append(("Nhu cầu gần giống / giống cơ hội đã có — cần kiểm tra", -10))
     elif hints:
-        parts.append(("Doanh nghiệp đã có cơ hội khác gần đây", -5))
+        parts.append(("Doanh nghiệp đã có cơ hội khác (nhu cầu khác)", 0))
     total = max(0, min(100, sum(p for _, p in parts)))
     return total, [{"label": label, "points": p} for label, p in parts]
 
@@ -233,7 +285,8 @@ def create(db: Session, cfg: Settings, p: PartnerUser, d: dict) -> PartnerSubmis
     )
     if (day or 0) >= cfg.partner_submit_per_day:
         raise HTTPException(429, f"Mỗi ngày gửi tối đa {cfg.partner_submit_per_day} cơ hội. Vui lòng gửi tiếp vào ngày mai.")
-    hints = find_duplicates(db, cfg, d)
+    vec, model = embed_need(cfg, d)
+    hints = find_duplicates(db, cfg, d, vec=vec, model=model)
     own = next((h for h in hints if h["type"] == "submission" and h.get("partner_id") == p.id and h["same_group"] and h["status"] in (*SUBMISSION_OPEN, "verified", "published", "supplement")), None)
     if own:
         raise HTTPException(409, f"Bạn đã gửi cơ hội này rồi ({own['code']}). Theo dõi trạng thái trong mục Cơ hội của tôi.")
@@ -243,12 +296,63 @@ def create(db: Session, cfg: Settings, p: PartnerUser, d: dict) -> PartnerSubmis
         code=_next_code(db), partner_id=p.id, status="submitted", auto_score=score, score_detail=detail, dup_hints=hints,
         sla_due_at=sla_due(now, cfg.partner_sla_workdays), created_at=now, **d,
     )
+    if vec is not None:
+        s.embedding, s.embedding_model = vec, model
+        s.embedding_sha = dedup.sha(model, dedup.need_text(d["need"], d["scale"], d["timing"]))
     db.add(s)
     db.flush()
     db.add(PartnerEvent(partner_id=p.id, submission_id=s.id, kind="sub_created", content=f"Gửi cơ hội {s.code}: {s.company_name}"[:500]))
     db.commit()
     db.refresh(s)
     return s
+
+
+# ================================================================== sửa (khi chưa xác minh)
+
+EDITABLE_STATUSES = ("submitted",)  # LeadScan bắt đầu xác minh (verifying) → khoá, tránh sửa khi người duyệt đang đối chiếu
+EDIT_LABELS = {
+    "company_name": "Tên doanh nghiệp", "tax_code": "MST", "province": "Khu vực", "industry": "Ngành hàng", "kind": "Loại cơ hội",
+    "need": "Nhu cầu", "scale": "Quy mô", "timing": "Thời điểm", "source_type": "Nguồn", "source_url": "Link nguồn",
+    "certainty": "Độ chắc chắn", "evidence": "Tài liệu chứng minh", "contact_name": "Người liên hệ", "contact_title": "Chức vụ",
+    "contact_phone": "SĐT liên hệ", "contact_email": "Email liên hệ", "contact_consent": "Xác nhận đồng ý", "can_connect": "Kết nối trực tiếp",
+}
+
+
+def editable(s: PartnerSubmission) -> bool:
+    return s.status in EDITABLE_STATUSES
+
+
+def update(db: Session, cfg: Settings, p: PartnerUser, s: PartnerSubmission, d: dict) -> list[str]:
+    """Đối tác sửa cơ hội đang chờ xác minh: tính lại kiểm tra trùng & điểm tự động; giữ mã, ngày gửi, hạn xác minh.
+    Trả về danh sách nhãn trường đã đổi (ghi nhật ký)."""
+    # khoá dòng rồi đọc lại trạng thái — người duyệt có thể vừa bấm "Bắt đầu xác minh"
+    s = db.scalar(select(PartnerSubmission).where(PartnerSubmission.id == s.id).with_for_update().execution_options(populate_existing=True))
+    if not editable(s):
+        raise HTTPException(409, "LeadScan đã bắt đầu xác minh cơ hội này nên không sửa được nữa. Cần bổ sung thông tin? Liên hệ LeadScan.")
+    if d["tax_lookup"] is None and d["tax_key"] == s.tax_key:
+        d["tax_lookup"] = s.tax_lookup  # không tra lại MST (MST không đổi) → giữ kết quả tra cũ
+    text = dedup.need_text(d["need"], d["scale"], d["timing"])
+    if s.embedding is not None and s.embedding_sha and s.embedding_sha == dedup.sha(s.embedding_model, text):
+        vec, model = s.embedding, s.embedding_model  # mô tả không đổi → giữ vector cũ, không gọi lại Cohere
+    else:
+        vec, model = embed_need(cfg, d)
+    hints = find_duplicates(db, cfg, d, exclude_id=s.id, vec=vec, model=model)
+    own = next((h for h in hints if h["type"] == "submission" and h.get("partner_id") == p.id and h["same_group"] and h["status"] in (*SUBMISSION_OPEN, "verified", "published", "supplement")), None)
+    if own:
+        raise HTTPException(409, f"Bạn đã gửi cơ hội này ở {own['code']}. Theo dõi trạng thái trong mục Cơ hội của tôi.")
+    changed = [label for k, label in EDIT_LABELS.items() if getattr(s, k) != d[k]]
+    if not changed:
+        return []
+    s.auto_score, s.score_detail = auto_score(d, hints)
+    s.dup_hints = hints
+    for k, v in d.items():
+        setattr(s, k, v)
+    if vec is not None:
+        s.embedding, s.embedding_model, s.embedding_sha = vec, model, dedup.sha(model, text)
+    db.add(PartnerEvent(partner_id=p.id, submission_id=s.id, kind="sub_edited", content=f"Sửa cơ hội {s.code}: " + ", ".join(changed)[:450]))
+    db.commit()
+    db.refresh(s)
+    return changed
 
 
 # ================================================================== hiển thị
@@ -261,7 +365,7 @@ def _status_label(s: PartnerSubmission) -> str:
 def partner_out(s: PartnerSubmission, events: list[PartnerEvent] | None = None, money: dict | None = None, until: datetime | None = None) -> dict:
     """Cho đối tác: không có nghi trùng (có thể lộ cơ hội của người khác), ghi chú nội bộ, người duyệt."""
     out = {
-        "id": s.id, "code": s.code, "status": s.status, "status_label": _status_label(s),
+        "id": s.id, "code": s.code, "status": s.status, "status_label": _status_label(s), "editable": editable(s),
         "company_name": s.company_name, "tax_code": s.tax_code, "province": s.province, "industry": s.industry,
         "kind": s.kind, "kind_label": SUBMISSION_KINDS.get(s.kind, s.kind),
         "need": s.need, "scale": s.scale, "timing": s.timing,
@@ -298,6 +402,8 @@ def admin_out(db: Session, s: PartnerSubmission, detail: bool = False) -> dict:
         partner={"id": p.id, "code": p.code, "full_name": p.full_name, "phone": p.phone, "tier": p.tier, "kind": p.kind, "org_name": p.org_name},
         auto_score=s.auto_score, final_score=s.final_score, score=s.final_score if s.final_score is not None else s.auto_score,
         dup_count=len(s.dup_hints or []), dup_strong=any(h.get("same_group") for h in s.dup_hints or []),
+        dup_same=sum(1 for h in s.dup_hints or [] if h.get("same_group")),
+        dup_similar=sum(1 for h in s.dup_hints or [] if not h.get("same_group") and h.get("relation") in ("same", "similar")),
         is_large=s.is_large, assigned_to={"id": s.assigned_to.id, "full_name": s.assigned_to.full_name} if s.assigned_to else None,
         overdue=bool(s.status in SUBMISSION_OPEN and s.sla_due_at and s.sla_due_at < utcnow()),
         decided_by=s.decided_by.full_name if s.decided_by else None,
@@ -307,9 +413,10 @@ def admin_out(db: Session, s: PartnerSubmission, detail: bool = False) -> dict:
         events = db.scalars(select(PartnerEvent).where(PartnerEvent.submission_id == s.id).order_by(PartnerEvent.id.desc())).unique().all()
         out.update(
             contact_consent=s.contact_consent, tax_lookup=s.tax_lookup, score_detail=s.score_detail, internal_note=s.internal_note,
-            dup_hints=s.dup_hints or [], dup_live=find_duplicates(db, _cfg(), _as_dict(s), exclude_id=s.id),
+            dup_hints=s.dup_hints or [], dup_live=find_duplicates(db, _cfg(), _as_dict(s), exclude_id=s.id, vec=s.embedding, model=s.embedding_model if s.embedding is not None else ""),
             opportunity={"id": opp.id, "code": opp.code, "status": opp.status, "title": opp.title} if opp else None,
             partner_stats=partner_stats(db, p.id),
+            images=[partner_attachments.out(a) for a in partner_attachments.for_submission(db, s.id)],
             credits=[partner_wallet.credit_out(c, admin=True) for c in db.scalars(
                 select(PartnerCredit).where(PartnerCredit.submission_id == s.id).order_by(PartnerCredit.id.desc())).unique()],
             events=[{"kind": e.kind, "content": e.content, "actor": e.actor.full_name if e.actor else None, "created_at": _iso(e.created_at)} for e in events],
@@ -324,7 +431,8 @@ def _cfg() -> Settings:
 
 
 def _as_dict(s: PartnerSubmission) -> dict:
-    return {"company_name": s.company_name, "tax_key": s.tax_key, "province": s.province, "industry": s.industry}
+    return {"company_name": s.company_name, "tax_key": s.tax_key, "province": s.province, "industry": s.industry,
+            "need": s.need, "scale": s.scale, "timing": s.timing}
 
 
 def partner_stats(db: Session, partner_id: int) -> dict:
@@ -429,7 +537,9 @@ def create_opportunity(db: Session, s: PartnerSubmission, actor: AdminUser) -> O
         o.contacts = [OpportunityContact(position_order=0, full_name=s.contact_name, title=s.contact_title, phone=s.contact_phone, email=s.contact_email, note="Đối tác giới thiệu, đã đồng ý")]
     db.add(o)
     db.flush()
-    db.add(PartnerEvent(partner_id=s.partner_id, submission_id=s.id, kind="sub_opp", actor_id=actor.id, content=f"Tạo phiếu nháp {o.code}"))
+    n_img = partner_attachments.copy_to_opportunity(db, s, o, actor)
+    db.add(PartnerEvent(partner_id=s.partner_id, submission_id=s.id, kind="sub_opp", actor_id=actor.id,
+                        content=f"Tạo phiếu nháp {o.code}" + (f" (chép {n_img} ảnh)" if n_img else "")))
     db.commit()
     db.refresh(o)
     return o

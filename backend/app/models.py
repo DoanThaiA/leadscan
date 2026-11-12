@@ -544,6 +544,8 @@ class UserOpportunity(Base):
     score_trust: Mapped[int] = mapped_column(Integer, default=0)
     reasons: Mapped[list] = mapped_column(JSON, default=list)  # vì sao phù hợp (hiển thị cho khách)
     best_request_id: Mapped[int | None] = mapped_column(ForeignKey("search_requests.id", ondelete="SET NULL"))
+    # Mở từ liên kết công khai /co-hoi/<mã> (không do so khớp) — giữ lại khi so khớp lại không còn khớp phiếu tìm nào
+    via_share: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -981,6 +983,10 @@ class PartnerSubmission(Base):
     score_detail: Mapped[list] = mapped_column(JSON, default=list)  # [{label, points}]
     final_score: Mapped[int | None] = mapped_column(Integer)  # điểm người duyệt chốt khi quyết định
     dup_hints: Mapped[list] = mapped_column(JSON, default=list)  # nghi trùng lúc gửi (cơ hội / cơ hội đối tác khác)
+    # Vector của mô tả nhu cầu (lọc trùng theo ngữ nghĩa — services/partner_dedup.py). deferred: không tải khi liệt kê.
+    embedding: Mapped[list | None] = mapped_column(EmbeddingVector(1024), deferred=True)
+    embedding_model: Mapped[str] = mapped_column(String(80), default="")
+    embedding_sha: Mapped[str] = mapped_column(String(40), default="")
     is_large: Mapped[bool] = mapped_column(Boolean, default=False)  # cơ hội lớn — tỷ lệ hoa hồng riêng (Mốc 3)
     reject_reason: Mapped[str] = mapped_column(String(20), default="")
     partner_note: Mapped[str] = mapped_column(Text, default="")  # ghi chú gửi đối tác (đối tác thấy)
@@ -1195,3 +1201,27 @@ class PartnerWithdrawal(Base):
 
     partner: Mapped[PartnerUser] = relationship(lazy="joined")
     batch: Mapped["PartnerPayoutBatch | None"] = relationship(lazy="joined")
+
+
+
+class PartnerAttachment(Base):
+    """Ảnh đối tác gắn vào cơ hội gửi (R2, thư mục partner-submissions/). Upload trước, gắn vào cơ hội khi bấm gửi/lưu;
+    ảnh không được gắn sau 24 giờ thì việc dọn dẹp xoá. Khi admin tạo phiếu từ cơ hội, ảnh được SAO CHÉP sang phiếu."""
+
+    __tablename__ = "partner_attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    partner_id: Mapped[int] = mapped_column(ForeignKey("partner_users.id", ondelete="CASCADE"), index=True)
+    submission_id: Mapped[int | None] = mapped_column(ForeignKey("partner_submissions.id", ondelete="CASCADE"), index=True)
+    key: Mapped[str] = mapped_column(String(400), unique=True)
+    thumb_key: Mapped[str] = mapped_column(String(400), default="")
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(120))
+    size: Mapped[int] = mapped_column(BigInteger, default=0)
+    kind: Mapped[str] = mapped_column(String(10), default="image")
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    caption: Mapped[str] = mapped_column(String(300), default="")
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(12), default="pending", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)

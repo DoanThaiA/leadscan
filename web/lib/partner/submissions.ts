@@ -2,11 +2,22 @@
 
 export type SubStatus = "submitted" | "verifying" | "duplicate" | "rejected" | "verified" | "supplement" | "published";
 
+export interface PartnerImage {
+  id: number;
+  filename: string;
+  width: number | null;
+  height: number | null;
+  size: number;
+  url: string | null;
+  thumb_url: string | null;
+}
+
 export interface Submission {
   id: number;
   code: string;
   status: SubStatus;
   status_label: string;
+  editable: boolean; // còn ở trạng thái Đã gửi — đối tác sửa được
   company_name: string;
   tax_code: string;
   province: string;
@@ -39,6 +50,7 @@ export interface Submission {
   earned: number;
   share_until: string | null;
   share_expired: boolean;
+  images?: PartnerImage[];
   events?: { kind: string; content: string; created_at: string; actor?: string | null }[];
 }
 

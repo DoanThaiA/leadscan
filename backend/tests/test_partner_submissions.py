@@ -132,12 +132,17 @@ def test_mst_optional_and_score_lower(partner):
         assert s.tax_key == "" and s.auto_score < 60
 
 
-def test_same_partner_cannot_resubmit_same_opportunity(partner):
+REWORDED = "Cần nhà cung cấp thùng giấy carton 5 lớp và khay chống tĩnh điện cho line SMT mới mở, giao hàng hằng tuần, ưu tiên NCC gần nhà máy."
+OTHER_NEED = "Doanh nghiệp đang tìm đơn vị bảo trì hệ thống điều hoà trung tâm và xử lý nước thải cho nhà xưởng mới, ký hợp đồng năm."
+
+
+def test_same_partner_cannot_resubmit_same_need(partner):
     submit(partner)
-    r = partner.post("/api/partner/submissions", json=sub_form(need="Gửi lại cùng doanh nghiệp cùng nhóm nhu cầu, mô tả khác đi một chút cho dài."))
+    # cùng doanh nghiệp, cùng nhu cầu (viết lại) → chặn
+    r = partner.post("/api/partner/submissions", json=sub_form(need=REWORDED))
     assert r.status_code == 409 and "đã gửi cơ hội này" in r.json()["detail"]
-    # khác nhóm nhu cầu (ngành) thì vẫn gửi được
-    submit(partner, industry="Nhựa & cao su")
+    # cùng doanh nghiệp, cùng ngành nhưng NHU CẦU KHÁC → gửi được (trước đây bị chặn nhầm)
+    submit(partner, need=OTHER_NEED)
 
 
 def test_daily_limit(partner, monkeypatch):
@@ -182,10 +187,48 @@ def test_duplicate_by_name_without_tax(partner, partner2):
 def test_duplicate_with_existing_opportunity(partner, admin):
     from tests.test_member import make_opp
 
-    make_opp(admin, buyer_name="Công ty TNHH Điện tử Quế Võ")
+    make_opp(admin, buyer_name="Công ty TNHH Điện tử Quế Võ", title="Cần thùng carton 5 lớp và khay chống tĩnh điện cho line SMT",
+             summary="Nhà máy điện tử mở line SMT mới, cần NCC thùng carton 5 lớp, giao hàng tuần", detail="")
     j = submit(partner, tax_code="", tax_lookup=None)
     d = admin.get(f"/api/admin/partner-submissions/{j['id']}").json()
-    assert d["dup_hints"][0]["type"] == "opportunity" and d["dup_strong"] is True
+    h = d["dup_hints"][0]
+    assert h["type"] == "opportunity" and h["match"] == "name" and h["relation"] == "same" and h["similarity"] >= 70
+    assert d["dup_strong"] is True and any("ngữ nghĩa" in b for b in h["basis"])
+
+
+def test_same_company_different_need_is_not_duplicate(partner, admin):
+    """Cùng doanh nghiệp, cùng ngành nhưng mô tả nhu cầu khác → chỉ ghi chú, không 'nghi trùng', không trừ điểm."""
+    first = submit(partner)
+    j = submit(verified_partner(email="p3@gmail.com", phone="0911555666"), need=OTHER_NEED)
+    d = admin.get(f"/api/admin/partner-submissions/{j['id']}").json()
+    h = d["dup_hints"][0]
+    assert h["code"] == first["code"] and h["match"] == "tax" and h["relation"] == "different" and h["similarity"] < 45
+    assert d["dup_strong"] is False
+    assert any(x["label"].startswith("Doanh nghiệp đã có cơ hội khác") and x["points"] == 0 for x in d["score_detail"])
+
+
+def test_partial_overlap_is_similar(partner, partner2, admin):
+    submit(partner)
+    j = submit(partner2, need="Cần thêm khay nhựa chống tĩnh điện cho dây chuyền SMT, khoảng 5.000 khay mỗi đợt, giao trong tháng.")
+    h = admin.get(f"/api/admin/partner-submissions/{j['id']}").json()["dup_hints"][0]
+    assert h["relation"] in ("similar", "same") and h["similarity"] >= 45
+
+
+def test_different_product_same_company_is_different(partner, partner2, admin):
+    submit(partner, need="Nhà máy cần mua túi giữ nhiệt in logo để đóng gói hàng giao lạnh, 10.000 túi mỗi tháng từ quý 1.")
+    j = submit(partner2, need="Nhà máy cần mua túi PP dệt 50kg đựng hạt nhựa, 10.000 bao mỗi tháng từ quý 1.")
+    h = admin.get(f"/api/admin/partner-submissions/{j['id']}").json()["dup_hints"][0]
+    assert h["relation"] == "different" and any("khác sản phẩm" in b for b in h["basis"])
+
+
+def test_same_need_under_other_company_name_warns_only(partner, partner2, admin):
+    """Mô tả giống hệt nhưng khác tên doanh nghiệp (cùng tỉnh, cùng ngành) → cảnh báo người duyệt, không chặn."""
+    first = submit(partner)
+    j = submit(partner2, company_name="Công ty Khác Hẳn", tax_code="0399999999", need=REWORDED)
+    d = admin.get(f"/api/admin/partner-submissions/{j['id']}").json()
+    h = d["dup_hints"][0]
+    assert h["code"] == first["code"] and h["match"] == "need" and h["relation"] == "same"
+    assert d["dup_strong"] is False and d["auto_score"] < 88
 
 
 def test_name_key_and_sla():

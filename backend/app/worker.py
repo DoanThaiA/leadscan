@@ -76,8 +76,13 @@ def _cleanup_orphan_attachments(db) -> list[str]:
             OpportunityAttachment.opportunity_id.is_(None), OpportunityAttachment.created_at < utcnow() - timedelta(hours=ORPHAN_HOURS)
         )
     ).all()
-    keys = [k for a in old for k in (a.key, a.thumb_key) if k]
-    for a in old:
+    from app.models import PartnerAttachment
+
+    old_p = db.scalars(
+        select(PartnerAttachment).where(PartnerAttachment.submission_id.is_(None), PartnerAttachment.created_at < utcnow() - timedelta(hours=ORPHAN_HOURS))
+    ).all()  # ảnh đối tác tải lên nhưng không gửi cơ hội
+    keys = [k for a in [*old, *old_p] for k in (a.key, a.thumb_key) if k]
+    for a in [*old, *old_p]:
         db.delete(a)
     return keys  # xoá trên R2 sau khi DB đã commit
 

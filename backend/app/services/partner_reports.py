@@ -408,7 +408,7 @@ def events_csv(db: Session, kind: str = "", partner_id: int | None = None, q: st
 # Nhóm loại nhật ký cho bộ lọc
 EVENT_GROUPS = {
     "account": ("created", "email_verified", "phone_verified", "password", "status", "tier", "note"),
-    "submission": ("sub_created", "sub_verifying", "sub_assign", "sub_decided", "sub_opp", "sub_published"),
+    "submission": ("sub_created", "sub_edited", "sub_verifying", "sub_assign", "sub_decided", "sub_opp", "sub_published"),
     "money": ("credit", "cafe_quota", "sale_skip", "credit_error"),
     "payout": ("withdraw", "payout_profile"),
     "fraud": ("fraud_flag",),
@@ -416,7 +416,7 @@ EVENT_GROUPS = {
 
 EVENT_LABELS = {
     "created": "Đăng ký", "email_verified": "Xác thực email", "phone_verified": "Xác thực SĐT", "password": "Mật khẩu", "status": "Khoá / mở", "tier": "Hạng & thoả thuận",
-    "note": "Ghi chú", "sub_created": "Gửi cơ hội", "sub_verifying": "Xác minh", "sub_assign": "Giao xác minh", "sub_decided": "Kết quả xác minh",
+    "note": "Ghi chú", "sub_created": "Gửi cơ hội", "sub_edited": "Sửa cơ hội", "sub_verifying": "Xác minh", "sub_assign": "Giao xác minh", "sub_decided": "Kết quả xác minh",
     "sub_opp": "Tạo phiếu", "sub_published": "Đăng phiếu", "credit": "Ví & hoa hồng", "cafe_quota": "Hạn mức ly cafe",
     "sale_skip": "Lượt bán không tính", "credit_error": "Lỗi tính thưởng", "withdraw": "Rút tiền", "payout_profile": "Hồ sơ thanh toán",
     "fraud_flag": "Cờ gian lận",

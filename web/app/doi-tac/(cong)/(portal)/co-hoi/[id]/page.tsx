@@ -33,7 +33,9 @@ function Flow({ s }: { s: Submission }) {
 
 function Detail() {
   const { id } = useParams<{ id: string }>();
-  const fresh = useSearchParams().get("moi") === "1";
+  const sp = useSearchParams();
+  const fresh = sp.get("moi") === "1";
+  const edited = sp.get("da-sua") === "1";
   const [s, setS] = useState<Submission | null>(null);
   const [error, setError] = useState("");
 
@@ -57,10 +59,14 @@ function Detail() {
           <h1 style={{ marginTop: 4 }}>{s.company_name}</h1>
           <p className="mono">{s.code} · gửi {fmtDateTime(s.created_at)}</p>
         </div>
-        <StatusBadge status={SUB_BADGE[s.status]} label={s.status_label} />
+        <div className="adm-actions" style={{ alignItems: "center" }}>
+          {s.editable ? <Link className="adm-btn" href={`/doi-tac/gui-co-hoi?sua=${s.id}`}>Sửa cơ hội</Link> : null}
+          <StatusBadge status={SUB_BADGE[s.status]} label={s.status_label} />
+        </div>
       </div>
 
-      {fresh ? <div className="adm-alert ok" style={{ marginBottom: 16 }}>Đã gửi cơ hội. LeadScan sẽ xác minh trong khoảng 2 ngày làm việc và báo kết quả qua email.</div> : null}
+      {fresh ? <div className="adm-alert ok" style={{ marginBottom: 16 }}>Đã gửi cơ hội. LeadScan sẽ xác minh trong khoảng 2 ngày làm việc và báo kết quả qua email. Cần chỉnh lại? Bấm “Sửa cơ hội” trước khi LeadScan bắt đầu xác minh.</div> : null}
+      {edited ? <div className="adm-alert ok" style={{ marginBottom: 16 }}>Đã lưu thay đổi.</div> : null}
 
       <div className="adm-grid side">
         <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
@@ -99,6 +105,12 @@ function Detail() {
                 {row("Link nguồn", s.source_url && <a href={s.source_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-600)" }}>{s.source_url}</a>)}
                 {row("Mức độ chắc chắn", s.certainty_label)}
                 {row("Tài liệu, link", s.evidence && <span style={{ whiteSpace: "pre-wrap" }}>{s.evidence}</span>)}
+                {row("Ảnh", s.images?.length ? (
+                  <div className="ptn-images">{s.images.map((im) => (
+                    <a key={im.id} href={im.url ?? "#"} target="_blank" rel="noopener noreferrer" title={im.filename}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={im.thumb_url ?? im.url ?? ""} alt={im.filename} />
+                    </a>))}</div>) : null)}
                 {row("Người liên hệ", [s.contact_name, s.contact_title, s.contact_phone, s.contact_email].filter(Boolean).join(" · "))}
               </dl>
             </div>

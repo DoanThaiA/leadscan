@@ -10,6 +10,7 @@ import { Icon, Skeleton } from "@/components/admin/ui";
 import { api, errMsg } from "@/lib/admin/api";
 import { fmtDateTime } from "@/lib/admin/format";
 import { fmtPts, type Opp, OPP_STATUS } from "@/lib/commerce";
+import PublicLinkButton from "@/components/admin/PublicLinkButton";
 
 interface Resp {
   opportunity: Opp;
@@ -82,6 +83,7 @@ Lý do (khách sẽ thấy trong lịch sử điểm):`, "Cơ hội đã chỉnh
         </div>
         <div className="adm-actions" style={{ alignItems: "center" }}>
           {flash ? <span className="adm-badge s-active" role="status">{flash}</span> : null}
+          <PublicLinkButton code={o.code} published={o.status === "published"} />
           {user.role === "admin" && !o.sold_count ? <button className="adm-btn danger" onClick={remove}><Icon name="trash" size={14} /> Xoá</button> : null}
         </div>
       </div>
