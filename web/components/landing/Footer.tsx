@@ -16,13 +16,13 @@ export default function Footer({ base = "" }: { base?: string }) {
             <div><h4>Sản phẩm</h4><ul><li><a href={`${base}#quy-trinh`}>Quy trình</a></li><li><a href={`${base}#phieu-co-hoi`}>Phiếu cơ hội</a></li><li><a href={`${base}#bang-gia`}>Bảng giá</a></li></ul></div>
             <div><h4>Hỗ trợ</h4><ul><li><a href={`${base}#faq`}>Câu hỏi thường gặp</a></li><li><a href="/gioi-thieu">Giới thiệu</a></li><li><a href="/tuyen-dung">Tuyển dụng</a></li><li><a href="/doi-tac">Trở thành đối tác</a></li><li><a href="#">Hướng dẫn sử dụng</a></li><li><a href="#">Chính sách bảo mật</a></li><li><a href="#">Điều khoản sử dụng</a></li></ul></div>
             <div><h4>Liên hệ</h4><ul className="foot-contact">
-              <li><svg className="icon"><use href="#i-globe" /></svg>LeadScanB2B.com</li>
+              <li><svg className="icon"><use href="#i-globe" /></svg><a href="https://leadscan.net">leadscan.net</a></li>
               <li><svg className="icon"><use href="#i-mail" /></svg><a href="mailto:contact@leadscan.net">contact@leadscan.net</a></li>
               <li><svg className="icon"><use href="#i-phone" /></svg><a href="tel:+84877770788">Hotline: +848 7777 0788</a></li>
               <li><svg className="icon"><use href="#i-map" /></svg>Địa chỉ: (cập nhật)</li>
             </ul></div>
           </div>
-          <div className="foot-bottom"><span>© 2026 LeadScanB2B.com. Bảo lưu mọi quyền.</span><span><a href="#">Bảo mật</a><a href="#">Điều khoản</a></span></div>
+          <div className="foot-bottom"><span>© 2026 leadscan.net. Bảo lưu mọi quyền.</span><span><a href="#">Bảo mật</a><a href="#">Điều khoản</a></span></div>
         </div>
       </footer>
     </>

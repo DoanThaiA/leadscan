@@ -20,7 +20,12 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESC,
   alternates: { canonical: "/doi-tac" },
-  openGraph: { type: "website", locale: "vi_VN", siteName: "LeadScan B2B", url: "/doi-tac", title: TITLE, description: DESC },
+  openGraph: {
+    type: "website", locale: "vi_VN", siteName: "LeadScan B2B", url: "/doi-tac", title: TITLE, description: DESC,
+    // Ảnh xem trước khi gửi link qua Zalo / Messenger / Facebook — logo + "Partnership business"
+    images: [{ url: "/brand/leadscan-og-doi-tac.jpg", width: 1200, height: 630, type: "image/jpeg", alt: "LeadScan – Partnership business" }],
+  },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESC, images: ["/brand/leadscan-og-doi-tac.jpg"] },
 };
 
 const Ic = ({ name }: { name: string }) => <svg className="icon"><use href={`#i-${name}`} /></svg>;
