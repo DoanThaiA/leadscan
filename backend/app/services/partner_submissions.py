@@ -65,6 +65,7 @@ def name_key(name: str) -> str:
 
 def normalize(raw: dict) -> tuple[dict, dict[str, str]]:
     d = {
+        "title": clean1(raw.get("title"), 150),
         "company_name": clean1(raw.get("company_name"), 200),
         "tax_code": re.sub(r"[^0-9\-]", "", clean1(raw.get("tax_code"), 20)),
         "province": clean1(raw.get("province"), 80),
@@ -90,6 +91,8 @@ def normalize(raw: dict) -> tuple[dict, dict[str, str]]:
         if isinstance(lookup, dict) else None
     )
     e: dict[str, str] = {}
+    if len(d["title"]) < 10:
+        e["title"] = "Đặt tiêu đề ngắn gọn cho cơ hội (ít nhất 10 ký tự), vd: Cần 20.000 thùng carton 5 lớp/tháng cho nhà máy điện tử."
     if len(d["company_name"]) < 3:
         e["company_name"] = "Vui lòng nhập tên doanh nghiệp có nhu cầu."
     if d["tax_code"] and not re.fullmatch(r"\d{10}(-?\d{3})?", d["tax_code"]):
@@ -143,7 +146,7 @@ def find_duplicates(db: Session, cfg: Settings, d: dict, exclude_id: int | None 
     """
     since = utcnow() - timedelta(days=cfg.partner_dup_days)
     nk = name_key(d["company_name"])
-    text = dedup.need_text(d["need"], d.get("scale", ""), d.get("timing", ""))
+    text = dedup.need_text(d["need"], d.get("scale", ""), d.get("timing", ""), d.get("title", ""))
     cands: list[tuple[str, object, str]] = []  # (loại, dòng, cách khớp)
 
     # Phiếu: chỉ đọc các cột cần (không tải đầu mối); so tên ở Python vì cần bỏ dấu + bỏ từ chung
@@ -177,7 +180,7 @@ def find_duplicates(db: Session, cfg: Settings, d: dict, exclude_id: int | None 
     # Vector: dùng vector đã lưu; thiếu thì nhúng 1 lần cho cả lô (chỉ ứng viên cùng doanh nghiệp — tiết kiệm lượt Cohere)
     company = [r for t, r, m in cands if m != "need"]
     opp_text = lambda o: dedup.opp_need_text(o.title, o.summary, o.scale, o.detail)  # noqa: E731
-    sub_text = lambda x: dedup.need_text(x.need, x.scale, x.timing)  # noqa: E731
+    sub_text = lambda x: dedup.need_text(x.need, x.scale, x.timing, x.title)  # noqa: E731
     opp_vecs: dict[int, list[float]] = {}
     if vec is not None and model:
         # Vector của phiếu (opportunities.embedding) phục vụ so khớp với yêu cầu thành viên → KHÔNG ghi đè; chỉ tính tạm.
@@ -221,7 +224,7 @@ def find_duplicates(db: Session, cfg: Settings, d: dict, exclude_id: int | None 
 
 def embed_need(cfg: Settings, d: dict) -> tuple[list[float] | None, str]:
     """Vector mô tả nhu cầu của cơ hội đang gửi / sửa (1 lần gọi Cohere). Lỗi → (None, "") — vẫn lọc trùng bằng từ khoá."""
-    vecs, model = dedup.embed(cfg, [dedup.need_text(d["need"], d.get("scale", ""), d.get("timing", ""))])
+    vecs, model = dedup.embed(cfg, [dedup.need_text(d["need"], d.get("scale", ""), d.get("timing", ""), d.get("title", ""))])
     return (vecs[0], model) if vecs else (None, "")
 
 
@@ -298,7 +301,7 @@ def create(db: Session, cfg: Settings, p: PartnerUser, d: dict) -> PartnerSubmis
     )
     if vec is not None:
         s.embedding, s.embedding_model = vec, model
-        s.embedding_sha = dedup.sha(model, dedup.need_text(d["need"], d["scale"], d["timing"]))
+        s.embedding_sha = dedup.sha(model, dedup.need_text(d["need"], d["scale"], d["timing"], d.get("title", "")))
     db.add(s)
     db.flush()
     db.add(PartnerEvent(partner_id=p.id, submission_id=s.id, kind="sub_created", content=f"Gửi cơ hội {s.code}: {s.company_name}"[:500]))
@@ -311,7 +314,7 @@ def create(db: Session, cfg: Settings, p: PartnerUser, d: dict) -> PartnerSubmis
 
 EDITABLE_STATUSES = ("submitted",)  # LeadScan bắt đầu xác minh (verifying) → khoá, tránh sửa khi người duyệt đang đối chiếu
 EDIT_LABELS = {
-    "company_name": "Tên doanh nghiệp", "tax_code": "MST", "province": "Khu vực", "industry": "Ngành hàng", "kind": "Loại cơ hội",
+    "title": "Tiêu đề", "company_name": "Tên doanh nghiệp", "tax_code": "MST", "province": "Khu vực", "industry": "Ngành hàng", "kind": "Loại cơ hội",
     "need": "Nhu cầu", "scale": "Quy mô", "timing": "Thời điểm", "source_type": "Nguồn", "source_url": "Link nguồn",
     "certainty": "Độ chắc chắn", "evidence": "Tài liệu chứng minh", "contact_name": "Người liên hệ", "contact_title": "Chức vụ",
     "contact_phone": "SĐT liên hệ", "contact_email": "Email liên hệ", "contact_consent": "Xác nhận đồng ý", "can_connect": "Kết nối trực tiếp",
@@ -331,7 +334,7 @@ def update(db: Session, cfg: Settings, p: PartnerUser, s: PartnerSubmission, d: 
         raise HTTPException(409, "LeadScan đã bắt đầu xác minh cơ hội này nên không sửa được nữa. Cần bổ sung thông tin? Liên hệ LeadScan.")
     if d["tax_lookup"] is None and d["tax_key"] == s.tax_key:
         d["tax_lookup"] = s.tax_lookup  # không tra lại MST (MST không đổi) → giữ kết quả tra cũ
-    text = dedup.need_text(d["need"], d["scale"], d["timing"])
+    text = dedup.need_text(d["need"], d["scale"], d["timing"], d.get("title", ""))
     if s.embedding is not None and s.embedding_sha and s.embedding_sha == dedup.sha(s.embedding_model, text):
         vec, model = s.embedding, s.embedding_model  # mô tả không đổi → giữ vector cũ, không gọi lại Cohere
     else:
@@ -366,7 +369,7 @@ def partner_out(s: PartnerSubmission, events: list[PartnerEvent] | None = None, 
     """Cho đối tác: không có nghi trùng (có thể lộ cơ hội của người khác), ghi chú nội bộ, người duyệt."""
     out = {
         "id": s.id, "code": s.code, "status": s.status, "status_label": _status_label(s), "editable": editable(s),
-        "company_name": s.company_name, "tax_code": s.tax_code, "province": s.province, "industry": s.industry,
+        "title": s.title, "company_name": s.company_name, "tax_code": s.tax_code, "province": s.province, "industry": s.industry,
         "kind": s.kind, "kind_label": SUBMISSION_KINDS.get(s.kind, s.kind),
         "need": s.need, "scale": s.scale, "timing": s.timing,
         "source_type": s.source_type, "source_label": SUBMISSION_SOURCES.get(s.source_type, s.source_type), "source_url": s.source_url,
@@ -432,7 +435,7 @@ def _cfg() -> Settings:
 
 def _as_dict(s: PartnerSubmission) -> dict:
     return {"company_name": s.company_name, "tax_key": s.tax_key, "province": s.province, "industry": s.industry,
-            "need": s.need, "scale": s.scale, "timing": s.timing}
+            "need": s.need, "scale": s.scale, "timing": s.timing, "title": s.title}
 
 
 def partner_stats(db: Session, partner_id: int) -> dict:
@@ -513,8 +516,11 @@ def create_opportunity(db: Session, s: PartnerSubmission, actor: AdminUser) -> O
     if linked_opportunity(db, s):
         raise HTTPException(409, "Cơ hội này đã có phiếu.")
     kind = SUBMISSION_KINDS.get(s.kind, s.kind)
-    first = re.split(r"(?<=[.!?\n])\s", s.need.strip(), maxsplit=1)[0]
-    title = f"{kind}: {first}"[:200]
+    if s.title:  # tiêu đề đối tác đặt → tiêu đề phiếu (admin vẫn sửa được trước khi mở bán)
+        title = s.title[:200]
+    else:  # cơ hội gửi trước khi có trường tiêu đề
+        first = re.split(r"(?<=[.!?\n])\s", s.need.strip(), maxsplit=1)[0]
+        title = f"{kind}: {first}"[:200]
     summary = " · ".join(x for x in (kind, s.industry, s.province, s.scale and f"Quy mô: {s.scale}", s.timing and f"Thời điểm: {s.timing}") if x)
     lines = [s.need]
     if s.scale:

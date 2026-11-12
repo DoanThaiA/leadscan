@@ -28,8 +28,13 @@ def test_public_shows_preview_only(admin):
     for secret in ("buyer_name", "detail", "contacts", "source_url", "source_partner_id", "source_submission_id"):
         assert secret not in d
     assert "Công ty Điện tử ABC" not in str(d) and "0912345678" not in str(d)
+    assert d["is_new"] is True and d["related"] == [] and 0 < d["trust"] <= 100 and d["urgency"] == 50
     lst = anon.get("/api/public/opportunities?q=carton").json()
     assert lst["total"] == 1 and lst["items"][0]["code"] == code
+    assert lst["stats"] == {"open": 1, "new_7d": 1, "industries": 1} and lst["chips"] == [["Bao bì & in ấn", 1]]
+    other = make_opp(admin, title="Cần 50.000 túi giấy kraft in logo", buyer_name="Công ty XYZ")
+    rel = anon.get(f"/api/public/opportunities/{code}").json()["related"]
+    assert [r["id"] for r in rel] == [other] and "buyer_name" not in rel[0]
 
 
 def test_public_hides_drafts(admin):

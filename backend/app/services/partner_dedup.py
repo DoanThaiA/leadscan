@@ -33,9 +33,9 @@ HASH_RANGE = (0.10, 0.55)  # vector hash: cosine ≤ 0.10 → 0, ≥ 0.55 → 10
 RELATION_LABELS = {"same": "Trùng nhu cầu", "similar": "Gần giống", "different": "Nhu cầu khác"}
 
 
-def need_text(need: str, scale: str = "", timing: str = "") -> str:
+def need_text(need: str, scale: str = "", timing: str = "", title: str = "") -> str:
     """Mô tả nhu cầu + quy mô. KHÔNG gồm thời điểm ("Từ tháng 1/2027"…): cụm chung chung, làm 2 nhu cầu khác nhau trông giống nhau."""
-    return ". ".join(x for x in (need, scale) if x)
+    return ". ".join(x for x in (title, need, scale) if x)
 
 
 def opp_need_text(title: str, summary: str, scale: str, detail: str) -> str:

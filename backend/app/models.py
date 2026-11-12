@@ -961,6 +961,7 @@ class PartnerSubmission(Base):
     province: Mapped[str] = mapped_column(String(80), default="")
     industry: Mapped[str] = mapped_column(String(100), default="")
     # Nhu cầu
+    title: Mapped[str] = mapped_column(String(150), default="")  # tiêu đề đối tác đặt → tiêu đề phiếu khi tạo phiếu ("" = cơ hội gửi trước khi có trường này)
     kind: Mapped[str] = mapped_column(String(20))
     need: Mapped[str] = mapped_column(Text)
     scale: Mapped[str] = mapped_column(String(200), default="")

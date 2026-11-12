@@ -18,6 +18,7 @@ export interface Submission {
   status: SubStatus;
   status_label: string;
   editable: boolean; // còn ở trạng thái Đã gửi — đối tác sửa được
+  title: string; // "" = cơ hội gửi trước khi có trường tiêu đề
   company_name: string;
   tax_code: string;
   province: string;

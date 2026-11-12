@@ -112,7 +112,8 @@ function Queue() {
                   return (
                     <tr key={s.id} className="link" onClick={() => router.push(href)}>
                       <td style={{ maxWidth: 360 }}>
-                        <Link className="name" href={href} onClick={(e) => e.stopPropagation()}>{s.company_name}</Link>
+                        <Link className="name" href={href} onClick={(e) => e.stopPropagation()}>{s.title || s.company_name}</Link>
+                        {s.title ? <div className="sub">{s.company_name}</div> : null}
                         <div className="sub" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.kind_label} · {s.industry} · {s.province}</div>
                         <div className="sub mono">{s.code}{s.tax_code ? ` · MST ${s.tax_code}` : ""}</div>
                       </td>

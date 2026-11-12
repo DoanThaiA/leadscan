@@ -70,7 +70,7 @@ function MyList() {
             {data.items.map((s) => (
               <Link key={s.id} href={`/doi-tac/co-hoi/${s.id}`} className="ptn-list-row">
                 <div style={{ minWidth: 0 }}>
-                  <b>{s.company_name}</b>
+                  <b>{s.title || s.company_name}</b>
                   <div className="sub" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.kind_label} · {s.need}</div>
                   <div className="sub mono">{s.code} · gửi {fmtDate(s.created_at)}{s.reject_label ? ` · ${s.reject_label}` : ""}{s.sold_count ? ` · đã bán ${s.sold_count} lượt` : ""}{s.earned ? ` · đã nhận ${vnd(s.earned)}` : ""}</div>
                 </div>

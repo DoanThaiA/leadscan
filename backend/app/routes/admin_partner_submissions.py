@@ -73,7 +73,7 @@ def list_submissions(
     if q.strip():
         like = f"%{q.strip()}%"
         stmt = stmt.join(PartnerUser, PartnerUser.id == PartnerSubmission.partner_id).where(
-            or_(PartnerSubmission.code.ilike(like), PartnerSubmission.company_name.ilike(like), PartnerSubmission.tax_code.like(like),
+            or_(PartnerSubmission.code.ilike(like), PartnerSubmission.title.ilike(like), PartnerSubmission.company_name.ilike(like), PartnerSubmission.tax_code.like(like),
                 PartnerSubmission.need.ilike(like), PartnerUser.code.ilike(like), PartnerUser.full_name.ilike(like))
         )
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0

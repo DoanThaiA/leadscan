@@ -35,6 +35,7 @@ def partner2(otp_mail) -> TestClient:
 
 def sub_form(**over) -> dict:
     form = {
+        "title": "Nhà máy điện tử Quế Võ cần thùng carton 5 lớp cho line SMT mới",
         "company_name": "Công ty TNHH Điện tử Quế Võ",
         "tax_code": "2300123456",
         "tax_lookup": {"name": "CÔNG TY TNHH ĐIỆN TỬ QUẾ VÕ", "status": "NNT đang hoạt động", "active": True},
@@ -133,6 +134,7 @@ def test_mst_optional_and_score_lower(partner):
 
 
 REWORDED = "Cần nhà cung cấp thùng giấy carton 5 lớp và khay chống tĩnh điện cho line SMT mới mở, giao hàng hằng tuần, ưu tiên NCC gần nhà máy."
+OTHER_TITLE = "Tìm đơn vị bảo trì điều hoà trung tâm và xử lý nước thải nhà xưởng"
 OTHER_NEED = "Doanh nghiệp đang tìm đơn vị bảo trì hệ thống điều hoà trung tâm và xử lý nước thải cho nhà xưởng mới, ký hợp đồng năm."
 
 
@@ -142,7 +144,7 @@ def test_same_partner_cannot_resubmit_same_need(partner):
     r = partner.post("/api/partner/submissions", json=sub_form(need=REWORDED))
     assert r.status_code == 409 and "đã gửi cơ hội này" in r.json()["detail"]
     # cùng doanh nghiệp, cùng ngành nhưng NHU CẦU KHÁC → gửi được (trước đây bị chặn nhầm)
-    submit(partner, need=OTHER_NEED)
+    submit(partner, need=OTHER_NEED, title=OTHER_TITLE)
 
 
 def test_daily_limit(partner, monkeypatch):
@@ -199,7 +201,7 @@ def test_duplicate_with_existing_opportunity(partner, admin):
 def test_same_company_different_need_is_not_duplicate(partner, admin):
     """Cùng doanh nghiệp, cùng ngành nhưng mô tả nhu cầu khác → chỉ ghi chú, không 'nghi trùng', không trừ điểm."""
     first = submit(partner)
-    j = submit(verified_partner(email="p3@gmail.com", phone="0911555666"), need=OTHER_NEED)
+    j = submit(verified_partner(email="p3@gmail.com", phone="0911555666"), need=OTHER_NEED, title=OTHER_TITLE)
     d = admin.get(f"/api/admin/partner-submissions/{j['id']}").json()
     h = d["dup_hints"][0]
     assert h["code"] == first["code"] and h["match"] == "tax" and h["relation"] == "different" and h["similarity"] < 45
@@ -215,8 +217,10 @@ def test_partial_overlap_is_similar(partner, partner2, admin):
 
 
 def test_different_product_same_company_is_different(partner, partner2, admin):
-    submit(partner, need="Nhà máy cần mua túi giữ nhiệt in logo để đóng gói hàng giao lạnh, 10.000 túi mỗi tháng từ quý 1.")
-    j = submit(partner2, need="Nhà máy cần mua túi PP dệt 50kg đựng hạt nhựa, 10.000 bao mỗi tháng từ quý 1.")
+    submit(partner, need="Nhà máy cần mua túi giữ nhiệt in logo để đóng gói hàng giao lạnh, 10.000 túi mỗi tháng từ quý 1.",
+           title="Cần 10.000 túi giữ nhiệt in logo mỗi tháng")
+    j = submit(partner2, need="Nhà máy cần mua túi PP dệt 50kg đựng hạt nhựa, 10.000 bao mỗi tháng từ quý 1.",
+               title="Cần 10.000 bao PP dệt 50kg đựng hạt nhựa mỗi tháng")
     h = admin.get(f"/api/admin/partner-submissions/{j['id']}").json()["dup_hints"][0]
     assert h["relation"] == "different" and any("khác sản phẩm" in b for b in h["basis"])
 
@@ -366,3 +370,15 @@ def test_admin_partner_detail_has_submission_stats(partner, staff):
     pid = partner.get("/api/partner/auth/me").json()["id"]
     d = staff.get(f"/api/admin/partners/{pid}").json()
     assert d["submissions"]["total"] == 1 and d["submissions"]["by_status"] == {"submitted": 1}
+
+
+def test_title_required_and_maps_to_opportunity_title(partner, admin):
+    r = partner.post("/api/partner/submissions", json=sub_form(title="ngắn"))
+    assert r.status_code == 422 and "title" in r.json()["fields"]
+    j = submit(partner, title="Nhà máy FDI Bắc Ninh cần 20.000 thùng carton 5 lớp/tháng")
+    assert j["title"] == "Nhà máy FDI Bắc Ninh cần 20.000 thùng carton 5 lớp/tháng"
+    admin.post(f"/api/admin/partner-submissions/{j['id']}/decide", json={"decision": "verified"})
+    oid = admin.post(f"/api/admin/partner-submissions/{j['id']}/create-opportunity").json()["opportunity_id"]
+    assert admin.get(f"/api/admin/opportunities/{oid}").json()["opportunity"]["title"] == j["title"]
+    # tìm trong hàng đợi theo tiêu đề
+    assert admin.get("/api/admin/partner-submissions?status=all&q=FDI%20B%E1%BA%AFc").json()["total"] == 1

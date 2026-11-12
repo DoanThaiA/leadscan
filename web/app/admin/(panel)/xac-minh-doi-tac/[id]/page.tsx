@@ -122,7 +122,7 @@ export default function PartnerSubmissionDetailPage() {
       <div className="adm-head">
         <div>
           <Link href="/admin/xac-minh-doi-tac" className="muted" style={{ fontSize: 13 }}>← Xác minh cơ hội đối tác</Link>
-          <h1 style={{ marginTop: 4 }}>{s.company_name}</h1>
+          <h1 style={{ marginTop: 4 }}>{s.title || s.company_name}</h1>
           <p className="mono">{s.code} · gửi {fmtDateTime(s.created_at)}{open ? ` · hạn ${fmtDate(s.sla_due_at)}` : ""}</p>
         </div>
         <div className="adm-actions" style={{ alignItems: "center" }}>
@@ -138,6 +138,7 @@ export default function PartnerSubmissionDetailPage() {
             <div className="hd"><h2>Cơ hội đối tác gửi</h2></div>
             <div className="bd">
               <dl className="adm-kv">
+                {row("Tiêu đề (→ tiêu đề phiếu)", s.title)}
                 {row("Doanh nghiệp", <b>{s.company_name}</b>)}
                 {row("Mã số thuế", s.tax_code ? <span className="mono">{s.tax_code}</span> : <span className="muted">Không có</span>)}
                 {row("Tra MST (trình duyệt)", s.tax_lookup && <>{s.tax_lookup.name} · <span style={{ color: s.tax_lookup.active ? "var(--ok)" : "var(--danger)" }}>{s.tax_lookup.status}</span> <span className="muted">(gợi ý, cần kiểm chứng)</span></>)}

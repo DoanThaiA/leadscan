@@ -60,7 +60,7 @@ export default function PartnerOverviewPage() {
             d.recent.map((s) => (
               <Link key={s.id} href={`/doi-tac/co-hoi/${s.id}`} className="ptn-list-row">
                 <div style={{ minWidth: 0 }}>
-                  <b>{s.company_name}</b>
+                  <b>{s.title || s.company_name}</b>
                   <div className="sub mono">{s.code} · {fmtDate(s.created_at)}{s.sold_count ? ` · đã bán ${s.sold_count} lượt` : ""}{s.earned ? ` · ${vnd(s.earned)}` : ""}</div>
                 </div>
                 <StatusBadge status={SUB_BADGE[s.status]} label={s.status_label} />

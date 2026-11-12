@@ -22,7 +22,12 @@ export interface PublicOpp {
   contact_count: number;
   price_from: number;
   published_at: string | null;
+  is_new: boolean; // mở bán < 3 ngày
+  days_left: number | null; // tới hạn chót (âm = quá hạn)
+  trust: number; // độ tin cậy nguồn 0–100
+  urgency: number; // độ cấp thiết 0–100
   attachment_counts?: { images: number; files: number };
+  related?: PublicOpp[]; // cùng ngành, còn lượt (chỉ ở trang chi tiết)
 }
 
 export interface PublicOppList {
@@ -32,6 +37,8 @@ export interface PublicOppList {
   items: PublicOpp[];
   industries: string[];
   regions: string[];
+  stats: { open: number; new_7d: number; industries: number };
+  chips: [string, number][]; // ngành nhiều cơ hội nhất
 }
 
 const API = process.env.API_INTERNAL_URL ?? "http://localhost:8000";

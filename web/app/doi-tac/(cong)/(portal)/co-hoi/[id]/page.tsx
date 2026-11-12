@@ -56,7 +56,7 @@ function Detail() {
       <div className="adm-head">
         <div>
           <Link href="/doi-tac/co-hoi" className="muted" style={{ fontSize: 13 }}>← Cơ hội của tôi</Link>
-          <h1 style={{ marginTop: 4 }}>{s.company_name}</h1>
+          <h1 style={{ marginTop: 4 }}>{s.title || s.company_name}</h1>
           <p className="mono">{s.code} · gửi {fmtDateTime(s.created_at)}</p>
         </div>
         <div className="adm-actions" style={{ alignItems: "center" }}>
@@ -93,6 +93,7 @@ function Detail() {
             <div className="hd"><h2>Thông tin đã gửi</h2></div>
             <div className="bd">
               <dl className="adm-kv">
+                {row("Tiêu đề", s.title)}
                 {row("Doanh nghiệp", s.company_name)}
                 {row("Mã số thuế", s.tax_code && <span className="mono">{s.tax_code}</span>)}
                 {row("Khu vực", s.province)}

@@ -10,7 +10,7 @@ import { ApiError, errFields, errMsg, papi } from "@/lib/partner/api";
 import type { PartnerImage, SubOptions, Submission } from "@/lib/partner/submissions";
 
 type Errors = Record<string, string>;
-const ORDER = ["company_name", "tax_code", "province", "industry", "kind", "need", "source_type", "source_url", "certainty",
+const ORDER = ["title", "company_name", "tax_code", "province", "industry", "kind", "need", "source_type", "source_url", "certainty",
   "contact_phone", "contact_email", "contact_consent", "commitment"];
 
 function Choice({ name, options, value, onChange, error }: {
@@ -114,6 +114,7 @@ function SubmitForm() {
     const f = new FormData(e.currentTarget);
     const v = (n: string) => String(f.get(n) ?? "").trim();
     const er: Errors = {};
+    if (v("title").length < 10) er.title = "Đặt tiêu đề ngắn gọn cho cơ hội (ít nhất 10 ký tự).";
     if (v("company_name").length < 3) er.company_name = "Vui lòng nhập tên doanh nghiệp có nhu cầu.";
     if (v("tax_code") && !normalizeTaxCode(v("tax_code"))) er.tax_code = "Mã số thuế gồm 10 hoặc 13 chữ số (để trống nếu chưa biết).";
     if (!v("province")) er.province = "Vui lòng nhập khu vực / tỉnh thành.";
@@ -129,7 +130,7 @@ function SubmitForm() {
     if (Object.keys(er).length) return showErrors(er);
 
     const body = {
-      company_name: v("company_name"), tax_code: v("tax_code"), province: v("province"), industry: v("industry"),
+      title: v("title"), company_name: v("company_name"), tax_code: v("tax_code"), province: v("province"), industry: v("industry"),
       tax_lookup: lookup && normalizeTaxCode(v("tax_code")) === lookup.taxCode ? { name: lookup.name, status: lookup.status, active: lookup.active } : null,
       kind, need: v("need"), scale: v("scale"), timing: v("timing"),
       source_type: source, source_url: v("source_url"), certainty, evidence: v("evidence"),
@@ -215,6 +216,11 @@ function SubmitForm() {
         <section className="adm-card">
           <div className="hd"><h2>2. Nhu cầu</h2></div>
           <div className="bd ptn-grid">
+            <F label="Tiêu đề cơ hội *" error={errors.title} full id="s-title"
+              hint="Dùng làm tiêu đề phiếu cơ hội khi LeadScan mở bán. Nêu mặt hàng + số lượng + loại bên mua; KHÔNG ghi tên doanh nghiệp (tên chỉ mở cho người mua phiếu).">
+              <input id="s-title" className="adm-input" name="title" maxLength={150} defaultValue={iv("title")}
+                placeholder="Vd: Nhà máy điện tử FDI cần 20.000 thùng carton 5 lớp/tháng" />
+            </F>
             <F label="Loại cơ hội *" error={errors.kind} full>
               <Choice name="kind" options={opts.kinds} value={kind} onChange={(v) => { setKind(v); setErrors(({ kind: _, ...r }) => r); }} error={errors.kind} />
             </F>
