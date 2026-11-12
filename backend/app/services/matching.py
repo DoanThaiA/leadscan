@@ -16,7 +16,8 @@ Luồng:
      và tự thêm vào "Kho của tôi" (lần đầu tiên cơ hội xuất hiện với doanh nghiệp).
      Phiếu tìm "tìm kiếm liên tục": cơ hội MỚI mở bán / vừa sửa mà khớp phiếu lần đầu → MemberNotification
      (báo trong cổng + email gộp), mỗi cặp (phiếu tìm, cơ hội) báo đúng 1 lần.
-  5. Giá phiếu thành viên phải trả: price_of() = giá cơ bản (tối thiểu 29.000) × hệ số điểm × cấp thiết × đủ thông tin × giá trị đơn.
+  5. Giá phiếu thành viên phải trả: price_of() = giá cơ bản × hệ số điểm × cấp thiết × đủ thông tin × giá trị đơn —
+     tham số chỉnh ở trang quản trị (services/pricing.py).
 
 Kỹ thuật:
   - Embedding: Cohere (services/embedding.py), lưu cột pgvector vector(1024). Chỉ gọi lại API khi văn bản đổi (sha1).
@@ -37,6 +38,7 @@ from sqlalchemy import Float, bindparam, or_, select, text
 from sqlalchemy.orm import Session, selectinload, undefer
 
 from app.db import EmbeddingVector
+from app.services import pricing
 
 from app.config import Settings, get_settings
 from app.models import MemberNotification, Opportunity, Purchase, SavedOpportunity, SearchRequest, SearchRequestMatch, UserOpportunity
@@ -64,20 +66,6 @@ TRUST_BY_SOURCE = {
 DOMESTIC_REGIONS = {"mien bac", "mien trung", "mien nam"}
 
 
-MIN_PRICE = 29_000  # giá thấp nhất của 1 phiếu (giá cơ bản admin đặt thấp hơn vẫn tính tối thiểu mức này)
-
-
-def _score_factor(score: int) -> float:
-    """≤50 điểm: ×1 · 60: ×1,18 · 70: ×1,51 · 80: ×1,93 · 86: ×2,22 · 90: ×2,43 · 100: ×3 — điểm càng cao càng tăng nhanh."""
-    s = max(0, min(100, score))
-    return 1 + 2 * (max(0, s - 50) / 50) ** 1.5
-
-
-def _urgency_factor(urgency: int) -> float:
-    """Không hạn chót (50): ×1 · ≤14 ngày (80): ×1,24 · ≤7 ngày (90): ×1,32 · ≤3 ngày (100): ×1,4."""
-    return 1 + 0.4 * max(0, min(100, urgency) - 50) / 50
-
-
 _UNITS = [("ty", 1_000_000_000), ("ti", 1_000_000_000), ("billion", 1_000_000_000), ("trieu", 1_000_000), ("tr", 1_000_000),
           ("million", 1_000_000), ("nghin", 1_000), ("ngan", 1_000), ("k", 1_000)]
 _FX = {"usd": 25_000, "$": 25_000, "eur": 27_000, "€": 27_000}
@@ -98,14 +86,6 @@ def parse_value_vnd(text_: str) -> int:
     return best
 
 
-def _value_factor(value_vnd: int) -> float:
-    """Giá trị đơn hàng ước tính: <100 triệu ×1 · <1 tỷ ×1,15 · <5 tỷ ×1,3 · <20 tỷ ×1,5 · từ 20 tỷ ×1,8."""
-    for limit, f in ((100_000_000, 1.0), (1_000_000_000, 1.15), (5_000_000_000, 1.3), (20_000_000_000, 1.5)):
-        if value_vnd < limit:
-            return f
-    return 1.8
-
-
 def info_completeness(o: Opportunity) -> float:
     """Tỷ lệ thông tin phiếu có đủ (0–1): bên mua, đầu mối (tên, chức vụ, SĐT, email), số lượng, giá trị, hạn chót, nguồn, chi tiết."""
     cs = o.contacts or []
@@ -117,14 +97,8 @@ def info_completeness(o: Opportunity) -> float:
 
 
 def price_for(base_price: int, score: int, urgency: int = 50, info: float = 0.0, value_vnd: int = 0) -> int:
-    """Giá phiếu thành viên phải trả = giá cơ bản × hệ số điểm × hệ số cấp thiết × hệ số đủ thông tin × hệ số giá trị đơn hàng.
-
-    Không bao giờ thấp hơn giá cơ bản (và MIN_PRICE). Giá cơ bản 0 = phiếu miễn phí."""
-    if base_price <= 0:
-        return 0
-    base = max(base_price, MIN_PRICE)
-    p = base * _score_factor(score) * _urgency_factor(urgency) * (1 + 0.5 * max(0.0, min(1.0, info))) * _value_factor(value_vnd)
-    return max(base, round(p / 1000) * 1000)
+    """Giá phiếu theo công thức đang áp dụng (tham số chỉnh trên trang quản trị — services/pricing.py)."""
+    return pricing.price_for(base_price, score, urgency, info, value_vnd)
 
 
 def price_of(o: Opportunity, score: int, urgency: int) -> int:
@@ -413,12 +387,16 @@ def _keyword_score(q_words: list[str], q_bigrams: set[str], bag: WordBag, strict
 
 def urgency_of(o: Opportunity, today: date) -> int:
     """Độ cấp thiết theo hạn chót (tính tại thời điểm gọi — giá phiếu tăng dần khi hạn chót tới gần)."""
-    if not o.deadline:
+    return urgency_from_days((o.deadline - today).days if o.deadline else None)
+
+
+def urgency_from_days(days: int | None) -> int:
+    """Số ngày còn tới hạn chót → độ cấp thiết (None = không có hạn chót; âm = đã quá hạn)."""
+    if days is None:
         return 50
-    d = (o.deadline - today).days
-    if d < 0:
+    if days < 0:
         return 0
-    return 100 if d <= 3 else 90 if d <= 7 else 80 if d <= 14 else 65 if d <= 30 else 50
+    return 100 if days <= 3 else 90 if days <= 7 else 80 if days <= 14 else 65 if days <= 30 else 50
 
 
 def _trust(o: Opportunity) -> int:

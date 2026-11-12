@@ -1062,6 +1062,31 @@ class PartnerCredit(Base):
     actor: Mapped[AdminUser | None] = relationship(lazy="joined")
 
 
+class PricingSetting(Base):
+    """Tham số công thức giá phiếu cơ hội — chỉnh ở /admin/co-hoi/cong-thuc-gia. Mặc định ở services/pricing.py."""
+
+    __tablename__ = "pricing_settings"
+
+    key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    value: Mapped[str] = mapped_column(String(100))
+    updated_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class PricingSettingLog(Base):
+    __tablename__ = "pricing_setting_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(40))
+    old_value: Mapped[str] = mapped_column(String(100), default="")
+    new_value: Mapped[str] = mapped_column(String(100))
+    reason: Mapped[str] = mapped_column(String(300), default="")
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    actor: Mapped[AdminUser | None] = relationship(lazy="joined")
+
+
 class PartnerSetting(Base):
     """Tham số thưởng chỉnh trên trang quản trị (không sửa code). Giá trị lưu dạng chuỗi; mặc định ở services/partner_wallet.py."""
 

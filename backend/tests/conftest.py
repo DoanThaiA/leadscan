@@ -17,6 +17,9 @@ def _clear_caches():
     get_settings.cache_clear()
     dbmod.get_engine.cache_clear()
     dbmod._session_factory.cache_clear()
+    from app.services import pricing
+
+    pricing.clear_cache()  # tham số giá nhớ tạm theo tiến trình — mỗi test DB mới
 
 
 @pytest.fixture(autouse=True)

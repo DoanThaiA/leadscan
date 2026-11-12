@@ -41,7 +41,10 @@ export default function AdminOppsPage() {
           <h1>Cơ hội & phiếu</h1>
           <p>Nhập cơ hội thủ công (giai đoạn sau: crawl + AI tự tạo), định giá và mở bán phiếu.</p>
         </div>
-        <Link className="adm-btn primary" href="/admin/co-hoi/moi"><Icon name="plus" size={16} /> Thêm cơ hội</Link>
+        <div className="adm-actions">
+          <Link className="adm-btn" href="/admin/co-hoi/cong-thuc-gia"><Icon name="gauge" size={14} /> Công thức giá</Link>
+          <Link className="adm-btn primary" href="/admin/co-hoi/moi"><Icon name="plus" size={16} /> Thêm cơ hội</Link>
+        </div>
       </div>
       {error ? <div className="adm-alert" style={{ marginBottom: 16 }}>{error}</div> : null}
       <section className="adm-card">
