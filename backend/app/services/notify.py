@@ -275,6 +275,29 @@ def send_welcome(cfg: Settings, c: Company, email: str, name: str) -> bool:
     return send_mail(cfg, f"[LeadScan] Chào mừng {c.name} — đăng ký thành công", body, to=email)
 
 
+def send_account_setup(cfg: Settings, c: Company, email: str, name: str, token: str) -> bool:
+    """Tài khoản tạo qua webhook đăng ký (hệ thống ngoài không gửi mật khẩu): chào mừng + link tự đặt mật khẩu."""
+    base = _member_base(cfg)
+    body = (
+        f"Chào {name},\n\n"
+        f"LeadScan đã nhận đăng ký thành viên cho {c.name}.\n"
+        f"Mã đăng ký: {c.code}\n\n"
+        "Tài khoản thành viên của bạn đã được tạo. Mở liên kết sau để đặt mật khẩu và đăng nhập\n"
+        f"(hiệu lực {cfg.registration_setup_days} ngày):\n\n{base}/dat-lai-mat-khau?token={token}\n\n"
+        f"  • Email đăng nhập: {email}\n"
+        f"  • Đăng nhập: {base}/dang-nhap\n\n"
+        "Bước tiếp theo:\n"
+        f"  1. Thanh toán phí thành viên {_vnd(cfg.membership_fee)}/năm trong cổng thành viên ({base}/nap-tien).\n"
+        f"     Toàn bộ số tiền được cộng thành {cfg.membership_points:,} điểm để mua phiếu cơ hội.\n".replace(",", ".")
+        + "  2. Cập nhật chân dung cơ hội để AI tìm đúng khách hàng bạn cần.\n"
+        "  3. Đội ngũ LeadScan sẽ liên hệ xác nhận và hỗ trợ bạn bắt đầu.\n\n"
+        f"Link hết hạn? Đặt lại mật khẩu tại {base}/quen-mat-khau\n"
+        "Nếu bạn không đăng ký LeadScan, hãy bỏ qua email này.\n\n"
+        "Trân trọng,\nĐội ngũ LeadScan\n"
+    )
+    return send_mail(cfg, f"[LeadScan] Chào mừng {c.name} — đặt mật khẩu để bắt đầu", body, to=email)
+
+
 def send_payment_success(cfg: Settings, order, email: str, name: str) -> bool:
     """Gửi thành viên khi đơn thanh toán được ghi nhận (phí thành viên hoặc nạp điểm)."""
     c = order.company

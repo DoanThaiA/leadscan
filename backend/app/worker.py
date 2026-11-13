@@ -198,6 +198,22 @@ def send_password_reset_task(email: str, name: str, token: str) -> None:
     send_password_reset(get_settings(), email, name, token)
 
 
+@celery_app.task(name="leadscan.send_account_setup")
+def send_account_setup_task(company_id: int, token: str) -> None:
+    """Email chào mừng + link đặt mật khẩu cho tài khoản tạo qua webhook đăng ký."""
+    from sqlalchemy import select
+
+    from app.db import new_session
+    from app.models import Company, MemberUser
+    from app.services.notify import send_account_setup
+
+    with new_session() as db:
+        c = db.get(Company, company_id)
+        u = db.scalar(select(MemberUser).where(MemberUser.company_id == company_id).order_by(MemberUser.id))
+        if c and u:
+            send_account_setup(get_settings(), c, u.email, u.full_name, token)
+
+
 @celery_app.task(name="leadscan.send_partner_password_reset")
 def send_partner_password_reset_task(email: str, name: str, token: str) -> None:
     from app.services.notify import send_partner_password_reset

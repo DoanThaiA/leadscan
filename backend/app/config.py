@@ -103,6 +103,11 @@ class Settings(BaseSettings):
     infocms_webhook_secret: str = ""
     infocms_signature_header: str = "X-Signature"
 
+    # Webhook nhận đăng ký thành viên từ hệ thống ngoài (n8n, Zapier, CRM, landing page khác):
+    # POST /api/registrations/webhook với header "Authorization: Bearer <khoá này>". Trống = tắt webhook.
+    registration_webhook_secret: str = ""
+    registration_setup_days: int = 7  # hạn link đặt mật khẩu gửi cho tài khoản tạo qua webhook (không kèm mật khẩu)
+
     # Yêu cầu xuất hoá đơn được gửi tới email này (kế toán xuất thủ công)
     invoice_email: str = "vylyy9999@gmail.com"
 

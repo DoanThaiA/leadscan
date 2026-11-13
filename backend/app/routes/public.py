@@ -98,17 +98,12 @@ def _save(data: dict, ip: str, ua: str, cfg: Settings) -> tuple[int, str]:
 
     rl_key = "reg:" + sha256(ip)
     tkey = tax_key(d["tax_code"])
-    dup = ApiError(
-        409,
-        "Mã số thuế này đã được đăng ký. Nếu cần hỗ trợ, vui lòng liên hệ LeadScan.",
-        {"tax_code": "Mã số thuế đã được đăng ký."},
-    )
 
     with new_session() as db:
         if rate_limited(db, rl_key, cfg.rate_limit_per_hour, timedelta(hours=1)):
             raise ApiError(429, "Bạn đã gửi quá nhiều lần. Vui lòng thử lại sau ít phút.")
         if db.scalar(select(Company.id).where(Company.tax_key == tkey)):
-            raise dup
+            raise ApiError(409, *DUP_TAX)
         if db.scalar(select(MemberUser.id).where(MemberUser.email == d["email"])):
             raise ApiError(
                 409,
@@ -127,47 +122,64 @@ def _save(data: dict, ip: str, ua: str, cfg: Settings) -> tuple[int, str]:
                 {"password": "Mật khẩu chưa khớp với tài khoản đối tác của email này."},
             ) from None
 
-        for _ in range(5):
-            company = Company(
-                code=new_code(),
-                name=d["company_name"],
-                tax_code=d["tax_code"],
-                tax_key=tkey,
-                industry=d["industry"],
-                company_size=d["company_size"],
-                province=d["province"],
-                address=d["address"],
-                website=d["website"],
-                ip=ip,
-                user_agent=ua,
-            )
-            company.contacts.append(
-                Contact(full_name=d["contact_name"], position=d["position"], email=d["email"], phone=d["phone"], is_primary=True)
-            )
-            company.profile = Profile(
-                # ngành hàng đã chọn khi đăng ký → gợi ý sẵn cho "Tìm cơ hội phù hợp"
-                search={"industries": d["industries"]},
-                offering=d["offering"],
-                target_customers=d["target_customers"],
-                target_regions=d["target_regions"],
-                opp_types=d["opp_types"],
-                expected_tickets=d["expected_tickets"],
-                notes=d["notes"],
-            )
-            company.activities.append(Activity(kind="created", content="Đăng ký thành viên trên landing page"))
-            db.add(company)
-            try:
-                db.flush()
-                db.add(MemberUser(company_id=company.id, email=d["email"], full_name=d["contact_name"], password_hash=pw_hash))
-                add_hit(db, rl_key)
-                db.commit()
-                return company.id, company.code
-            except IntegrityError:
-                db.rollback()
-                # Unique constraint đảm bảo 2 request đồng thời cùng MST/email không lọt qua
-                if db.scalar(select(Company.id).where(Company.tax_key == tkey)):
-                    raise dup from None
-                if db.scalar(select(MemberUser.id).where(MemberUser.email == d["email"])):
-                    raise ApiError(409, "Email này đã có tài khoản LeadScan.", {"email": "Email đã có tài khoản."}) from None
-                # còn lại là trùng mã đăng ký → sinh mã khác
-        raise ApiError(500, "Hệ thống bận, vui lòng thử lại.")
+        company = insert_member(db, d, pw_hash, ip, ua, source="landing", activity="Đăng ký thành viên trên landing page",
+                                before_commit=lambda: add_hit(db, rl_key))
+        return company.id, company.code
+
+
+DUP_TAX = ("Mã số thuế này đã được đăng ký. Nếu cần hỗ trợ, vui lòng liên hệ LeadScan.", {"tax_code": "Mã số thuế đã được đăng ký."})
+
+
+def insert_member(db, d: dict, pw_hash: str, ip: str, ua: str, *, source: str, activity: str, before_commit=None) -> Company:
+    """Tạo doanh nghiệp + người liên hệ chính + chân dung + tài khoản thành viên từ dữ liệu đã chuẩn hoá (normalize()).
+
+    Dùng chung cho form đăng ký trên web và webhook nhận đăng ký (routes/registration_webhook.py).
+    Trùng MST / email (kể cả 2 request đồng thời) → ApiError 409.
+    """
+    tkey = tax_key(d["tax_code"])
+    for _ in range(5):
+        company = Company(
+            code=new_code(),
+            name=d["company_name"],
+            tax_code=d["tax_code"],
+            tax_key=tkey,
+            industry=d["industry"],
+            company_size=d["company_size"],
+            province=d["province"],
+            address=d["address"],
+            website=d["website"],
+            source=source,
+            ip=ip,
+            user_agent=ua,
+        )
+        company.contacts.append(
+            Contact(full_name=d["contact_name"], position=d["position"], email=d["email"], phone=d["phone"], is_primary=True)
+        )
+        company.profile = Profile(
+            # ngành hàng đã chọn khi đăng ký → gợi ý sẵn cho "Tìm cơ hội phù hợp"
+            search={"industries": d["industries"]},
+            offering=d["offering"],
+            target_customers=d["target_customers"],
+            target_regions=d["target_regions"],
+            opp_types=d["opp_types"],
+            expected_tickets=d["expected_tickets"],
+            notes=d["notes"],
+        )
+        company.activities.append(Activity(kind="created", content=activity[:500]))
+        db.add(company)
+        try:
+            db.flush()
+            db.add(MemberUser(company_id=company.id, email=d["email"], full_name=d["contact_name"], password_hash=pw_hash))
+            if before_commit:
+                before_commit()
+            db.commit()
+            return company
+        except IntegrityError:
+            db.rollback()
+            # Unique constraint đảm bảo 2 request đồng thời cùng MST/email không lọt qua
+            if db.scalar(select(Company.id).where(Company.tax_key == tkey)):
+                raise ApiError(409, *DUP_TAX) from None
+            if db.scalar(select(MemberUser.id).where(MemberUser.email == d["email"])):
+                raise ApiError(409, "Email này đã có tài khoản LeadScan.", {"email": "Email đã có tài khoản."}) from None
+            # còn lại là trùng mã đăng ký → sinh mã khác
+    raise ApiError(500, "Hệ thống bận, vui lòng thử lại.")

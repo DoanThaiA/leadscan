@@ -301,6 +301,39 @@ Admin gắn ảnh/tài liệu vào phiếu ngay trong form tạo/sửa phiếu (
 > Giới hạn mặc định: 20 tệp/phiếu; ảnh jpg/png/webp/gif ≤ 10 MB (tự xoá EXIF/GPS và tạo ảnh nhỏ); tài liệu pdf/doc(x)/xls(x)/ppt(x)/csv/txt/zip ≤ 25 MB (luôn tải về, không mở trong trình duyệt). Chặn svg/html.
 > Tệp upload nhưng không lưu vào phiếu nào tự xoá sau 24 giờ (việc dọn dẹp hằng giờ của **beat**); xoá phiếu / bỏ tệp khỏi phiếu thì **worker** xoá tệp trên R2.
 
+### Webhook nhận đăng ký thành viên (tuỳ chọn)
+
+Cho hệ thống ngoài (landing page riêng, form quảng cáo qua n8n / Zapier / Make, CRM…) tạo hồ sơ thành viên LeadScan
+giống như khách đăng ký trên web.
+
+| Biến | Điền gì |
+|---|---|
+| `LEADSCAN_REGISTRATION_WEBHOOK_SECRET` | Khoá bí mật dài, ngẫu nhiên — tạo bằng `openssl rand -hex 32`. **Để trống = webhook tắt** |
+| `LEADSCAN_REGISTRATION_SETUP_DAYS` | Hạn link đặt mật khẩu gửi khách khi bên gửi không kèm mật khẩu (mặc định 7 ngày) |
+
+Đổi khoá xong chạy `docker compose up -d` để api đọc lại `.env`. Chỉ đưa khoá cho hệ thống gửi, không đặt trong trang web.
+
+Gửi thử:
+
+```bash
+curl -X POST https://leadscan.net/api/registrations/webhook \
+  -H "Authorization: Bearer <KHOÁ>" -H "Content-Type: application/json" \
+  -d '{"company_name":"Công ty ABC","tax_code":"0312345678","contact_name":"Nguyễn Văn A","email":"a@abc.vn","phone":"0901234567","source":"facebook-ads"}'
+```
+
+- **Bắt buộc:** `company_name`, `tax_code` (10 hoặc 13 số), `contact_name`, `email`, `phone`.
+- **Tuỳ chọn:** `position`, `province`, `address`, `website`, `company_size`, `industries` (mảng hoặc chuỗi cách nhau dấu phẩy, tối đa 8 — nên theo danh mục ngành của form web), `notes`, `source` (tên nguồn — hiện trong hồ sơ khách là `webhook:<nguồn>`), `password` (≥ 8 ký tự).
+- Không gửi `password` → khách nhận email chào mừng kèm **link tự đặt mật khẩu**. Email đã là đối tác → dùng chung tài khoản đối tác (1 email = 1 tài khoản).
+- Bên gửi chịu trách nhiệm đã có sự đồng ý của khách khi thu thập thông tin.
+
+| Kết quả | Ý nghĩa |
+|---|---|
+| `201` `{"ok":true,"code":"LS-…","account":"created",…}` | Đã tạo thành viên, quản trị nhận email "Đăng ký mới" như đăng ký trên web |
+| `200` `{"ok":true,"duplicate":true,…}` | Gửi lại đúng đăng ký đã có (cùng MST + email) — an toàn khi hệ thống gửi tự retry |
+| `401` / `429` | Sai khoá / IP sai khoá quá 20 lần trong 15 phút |
+| `409` | MST hoặc email đã thuộc khách khác (`fields` cho biết trường nào) |
+| `422` | Dữ liệu sai, `fields` = `{tên trường: lỗi}` |
+
 ### Biến tuỳ chọn
 
 | Biến | Mặc định | Khi nào đổi |
