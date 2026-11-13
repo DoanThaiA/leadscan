@@ -15,27 +15,13 @@ interface Banner {
   ends_on: string | null;
 }
 
-const SEEN_KEY = "ls_promo_seen"; // đã đóng popup trong phiên này (theo bộ khuyến mãi) → không hiện lại khi quay về trang chủ
 const AUTO_MS = 5000;
+const IMG_WAIT_MS = 1200; // chờ ảnh đầu tải xong tối đa chừng này rồi hiện luôn (tránh khung trống)
 
 const fmtDate = (iso: string) => {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 };
-
-function readSeen(): string {
-  try {
-    return sessionStorage.getItem(SEEN_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function writeSeen(v: string) {
-  try {
-    sessionStorage.setItem(SEEN_KEY, v);
-  } catch {}
-}
 
 /** Popup nổi trên trang chủ: trượt lần lượt giữa các khuyến mãi, có nút ✕ để tắt. */
 export default function PromoPopup() {
@@ -46,33 +32,37 @@ export default function PromoPopup() {
   const [copied, setCopied] = useState("");
   const boxRef = useRef<HTMLDivElement>(null);
   const touchX = useRef<number | null>(null);
-  const signature = items.map((b) => b.id).join(",");
 
+  // Vào trang chủ là hỏi khuyến mãi ngay và hiện popup mỗi lần mở trang (đóng bằng ✕ / Esc / bấm ra ngoài)
   useEffect(() => {
     let alive = true;
-    // chờ trang hiện xong rồi mới hỏi khuyến mãi — không làm chậm lần tải đầu
-    const t = setTimeout(() => {
-      fetch("/api/promos", { credentials: "omit" })
-        .then((r) => (r.ok ? r.json() : { items: [] }))
-        .then((d: { items?: Banner[] }) => {
-          const list = (d.items ?? []).filter((b) => b.image);
-          if (!alive || !list.length) return;
-          if (readSeen() === list.map((b) => b.id).join(",")) return; // đã xem & đóng đúng bộ này
-          setItems(list);
-          setOpen(true);
-        })
-        .catch(() => {});
-    }, 700);
+    fetch("/api/promos", { credentials: "omit" })
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((d: { items?: Banner[] }) => {
+        const list = (d.items ?? []).filter((b) => b.image);
+        if (!alive || !list.length) return;
+        setItems(list);
+        // tải sẵn ảnh đầu: hiện popup ngay khi ảnh sẵn sàng (hoặc sau IMG_WAIT_MS) để không hiện khung trống
+        const img = new Image();
+        let shown = false;
+        const show = () => {
+          if (!shown && alive) {
+            shown = true;
+            setOpen(true);
+          }
+        };
+        img.onload = img.onerror = show;
+        img.src = list[0].image;
+        setTimeout(show, IMG_WAIT_MS);
+        list.slice(1).forEach((b) => (new Image().src = b.image)); // các ảnh sau tải nền để trượt không bị giật
+      })
+      .catch(() => {});
     return () => {
       alive = false;
-      clearTimeout(t);
     };
   }, []);
 
-  const close = useCallback(() => {
-    setOpen(false);
-    writeSeen(signature);
-  }, [signature]);
+  const close = useCallback(() => setOpen(false), []);
 
   const go = useCallback((n: number) => setI((n + items.length) % items.length), [items.length]);
 
