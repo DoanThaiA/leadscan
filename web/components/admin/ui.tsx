@@ -89,12 +89,14 @@ export function Dialog({
   onClose,
   children,
   footer,
+  wide,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  wide?: boolean; // form nhiều cột
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -104,7 +106,7 @@ export function Dialog({
     if (!open && d.open) d.close();
   }, [open]);
   return (
-    <dialog ref={ref} className="adm-dialog" onClose={onClose} onCancel={onClose}>
+    <dialog ref={ref} className={wide ? "adm-dialog wide" : "adm-dialog"} onClose={onClose} onCancel={onClose}>
       <div className="hd"><h2>{title}</h2></div>
       <div className="bd">{children}</div>
       {footer ? <div className="ft adm-actions">{footer}</div> : null}

@@ -329,7 +329,7 @@ def update(db: Session, cfg: Settings, p: PartnerUser, s: PartnerSubmission, d: 
     """Đối tác sửa cơ hội đang chờ xác minh: tính lại kiểm tra trùng & điểm tự động; giữ mã, ngày gửi, hạn xác minh.
     Trả về danh sách nhãn trường đã đổi (ghi nhật ký)."""
     # khoá dòng rồi đọc lại trạng thái — người duyệt có thể vừa bấm "Bắt đầu xác minh"
-    s = db.scalar(select(PartnerSubmission).where(PartnerSubmission.id == s.id).with_for_update().execution_options(populate_existing=True))
+    s = db.scalar(select(PartnerSubmission).where(PartnerSubmission.id == s.id).with_for_update(of=PartnerSubmission).execution_options(populate_existing=True))
     if not editable(s):
         raise HTTPException(409, "LeadScan đã bắt đầu xác minh cơ hội này nên không sửa được nữa. Cần bổ sung thông tin? Liên hệ LeadScan.")
     if d["tax_lookup"] is None and d["tax_key"] == s.tax_key:

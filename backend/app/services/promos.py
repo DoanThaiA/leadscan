@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, lazyload
 
 from app.db import utcnow
 from app.models import PROMO_SCOPES, PaymentOrder, PromoCode
@@ -94,7 +94,8 @@ def check(db: Session, raw_code: str, kind: str, amount: int, company_id: int, *
     code = norm_code(raw_code)
     stmt = select(PromoCode).where(PromoCode.code == code)
     if lock:
-        stmt = stmt.with_for_update()
+        # Không JOIN người tạo mã (created_by lazy="joined"): PostgreSQL không cho FOR UPDATE trên LEFT OUTER JOIN
+        stmt = stmt.options(lazyload(PromoCode.created_by)).with_for_update(of=PromoCode)
     p = db.scalar(stmt) if code else None
     now = utcnow()
     if not p or not p.is_active:

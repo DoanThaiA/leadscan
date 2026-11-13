@@ -5,8 +5,20 @@ os.environ.setdefault("LEADSCAN_SCRYPT_N", "1024")  # băm mật khẩu nhanh kh
 import pytest
 from fastapi.testclient import TestClient
 
+from sqlalchemy import event
+from sqlalchemy.orm import Session
+
 from app import db as dbmod
 from app.config import get_settings
+
+
+@event.listens_for(Session, "do_orm_execute")
+def _lock_must_name_table(state):
+    """Test chạy SQLite (bỏ qua FOR UPDATE) nên không thấy lỗi PostgreSQL "FOR UPDATE cannot be applied to the nullable
+    side of an outer join" khi model có quan hệ lazy="joined". Bắt buộc with_for_update(of=Model) để chỉ khoá bảng chính."""
+    lock = getattr(state.statement, "_for_update_arg", None)
+    if lock is not None and not lock.of:
+        raise AssertionError("with_for_update() phải ghi rõ bảng: with_for_update(of=Model) — PostgreSQL lỗi khi có JOIN")
 
 ADMIN_PW = "matkhau-admin-123"
 STAFF_PW = "matkhau-staff-123"

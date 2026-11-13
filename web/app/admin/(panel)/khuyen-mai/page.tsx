@@ -196,9 +196,9 @@ function PromoDialog({ promo, scopes, onClose, onDone }: { promo: Promo | "new" 
 
   const money = (v: number | null | undefined) => (v ? v.toLocaleString("vi-VN") : "");
   return (
-    <Dialog open={promo !== null} title={p ? `Sửa mã ${p.code}` : "Tạo mã khuyến mãi"} onClose={onClose}>
+    <Dialog open={promo !== null} title={p ? `Sửa mã ${p.code}` : "Tạo mã khuyến mãi"} onClose={onClose} wide>
       {promo !== null ? (
-        <form key={p?.id ?? "new"} onSubmit={submit} className="adm-form" style={{ minWidth: "min(560px, 80vw)" }}>
+        <form key={p?.id ?? "new"} onSubmit={submit} className="adm-form">
           {msg ? <div className="adm-alert full">{msg}</div> : null}
           <Field label="Mã (khách nhập khi thanh toán)" htmlFor="pm-code" error={fields.code}>
             <input id="pm-code" className="adm-input mono" name="code" required minLength={3} maxLength={30} defaultValue={p?.code} placeholder="VD: CHAOMUNG2027" style={{ textTransform: "uppercase" }} />
