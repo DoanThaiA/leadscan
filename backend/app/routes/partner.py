@@ -149,16 +149,10 @@ def register(request: Request, response: Response, raw: dict | None = Body(None)
     if rate_limited(db, rl_key, cfg.rate_limit_per_hour, timedelta(hours=1)):
         return _fail(429, "Bạn đã gửi quá nhiều lần. Vui lòng thử lại sau ít phút.")
 
-    def taken_email():
-        return _fail(409, "Email này đã có tài khoản đối tác. Vui lòng đăng nhập hoặc dùng email khác.", {"email": "Email đã có tài khoản đối tác."})
-
-    def taken_phone():
-        return _fail(409, "Số điện thoại này đã đăng ký đối tác. Mỗi số điện thoại chỉ dùng cho 1 tài khoản.", {"phone": "Số điện thoại đã đăng ký."})
-
     if db.scalar(select(PartnerUser.id).where(PartnerUser.email == d["email"])):
-        return taken_email()
+        return _taken_email()
     if db.scalar(select(PartnerUser.id).where(PartnerUser.phone == d["phone"])):
-        return taken_phone()
+        return _taken_phone()
 
     # Email đã là thành viên → cùng 1 tài khoản: phải nhập đúng mật khẩu đang dùng, hồ sơ đối tác dùng chung mật khẩu đó
     password = d.pop("password")
@@ -169,6 +163,23 @@ def register(request: Request, response: Response, raw: dict | None = Body(None)
         db.commit()
         msg = "Email này đã có tài khoản thành viên LeadScan. Nhập đúng mật khẩu của tài khoản đó để dùng chung cho cổng đối tác."
         return _fail(409, msg, {"password": "Mật khẩu chưa khớp với tài khoản thành viên của email này."})
+    return create_partner(db, request, response, d, pw_hash, rl_key, f"Đăng ký đối tác ({PARTNER_KINDS[d['kind']]}) trên trang /doi-tac")
+
+
+def _taken_email() -> JSONResponse:
+    return _fail(409, "Email này đã có tài khoản đối tác. Vui lòng đăng nhập hoặc dùng email khác.", {"email": "Email đã có tài khoản đối tác."})
+
+
+def _taken_phone() -> JSONResponse:
+    return _fail(409, "Số điện thoại này đã đăng ký đối tác. Mỗi số điện thoại chỉ dùng cho 1 tài khoản.", {"phone": "Số điện thoại đã đăng ký."})
+
+
+def create_partner(db: Session, request: Request, response: Response, d: dict, pw_hash: str, rl_key: str, event: str) -> dict | JSONResponse:
+    """Tạo hồ sơ đối tác (d đã chuẩn hoá, không có mật khẩu) → đăng nhập cổng đối tác + gửi mã OTP kích hoạt qua email.
+
+    Dùng cho form đăng ký /doi-tac và cho thành viên bấm "Trở thành đối tác" (cùng 1 tài khoản, routes/member.py).
+    """
+    cfg = get_settings()
     p = None
     for _ in range(5):
         p = PartnerUser(
@@ -176,7 +187,7 @@ def register(request: Request, response: Response, raw: dict | None = Body(None)
             password_hash=pw_hash,
             terms_version=cfg.partner_terms_version,
             terms_accepted_at=utcnow(),
-            signup_ip=ip,
+            signup_ip=client_ip(request, cfg),
             signup_ua=request.headers.get("user-agent", "")[:300],
             **d,
         )
@@ -188,11 +199,11 @@ def register(request: Request, response: Response, raw: dict | None = Body(None)
             p = None
             # Unique constraint chặn 2 request đồng thời cùng email/SĐT
             if db.scalar(select(PartnerUser.id).where(PartnerUser.email == d["email"])):
-                return taken_email()
+                return _taken_email()
             if db.scalar(select(PartnerUser.id).where(PartnerUser.phone == d["phone"])):
-                return taken_phone()
+                return _taken_phone()
             continue  # trùng mã đối tác → sinh mã khác
-        db.add(PartnerEvent(partner_id=p.id, kind="created", content=f"Đăng ký đối tác ({PARTNER_KINDS[p.kind]}) trên trang /doi-tac"))
+        db.add(PartnerEvent(partner_id=p.id, kind="created", content=event[:500]))
         add_hit(db, rl_key)
         db.commit()
         break

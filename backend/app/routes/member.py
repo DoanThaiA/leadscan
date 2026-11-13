@@ -4,7 +4,7 @@ import re
 import secrets
 from datetime import timedelta
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, delete, func, or_, select, update
@@ -15,8 +15,10 @@ from app.config import get_settings
 from app.db import get_db, utcnow
 from app import accounts
 from app.member_auth import current_member
+from app.routes import partner as partner_routes
 from app.models import (
     OPP_SOURCES,
+    PARTNER_KINDS,
     Activity,
     Contact,
     EnrichRequest,
@@ -25,6 +27,7 @@ from app.models import (
     MemberUser,
     Opportunity,
     PasswordReset,
+    PartnerUser,
     PaymentOrder,
     Profile,
     Purchase,
@@ -154,6 +157,49 @@ def reset(body: ResetIn, db: Session = Depends(get_db)):
     pr.used_at = utcnow()
     accounts.sync_password(db, user.email, hash_password(body.password), end_sessions=True)  # cả 2 cổng
     db.commit()
+
+
+# ================================================================== trở thành đối tác (cùng 1 tài khoản)
+# Thành viên đã đăng nhập đăng ký làm đối tác: dùng luôn email + mật khẩu của tài khoản thành viên (không nhập lại),
+# điền sẵn họ tên & SĐT người liên hệ chính. Sau đó xác thực email bằng mã OTP như đối tác đăng ký ở /doi-tac.
+
+
+@router.get("/partner-join")
+def partner_join_info(user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    c = _primary_contact(db, user.company_id)
+    return {
+        "already_partner": accounts.partner_by_email(db, user.email) is not None,
+        "prefill": {"full_name": user.full_name, "email": user.email, "phone": partner_routes.norm_phone(c.phone) if c else ""},
+        "industries": INDUSTRIES,
+        "regions": AREAS,
+        "kinds": PARTNER_KINDS,
+    }
+
+
+@router.post("/partner-join", status_code=201)
+def partner_join(request: Request, response: Response, raw: dict | None = Body(None),
+                 user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    if not isinstance(raw, dict):
+        raise HTTPException(400, "Dữ liệu gửi lên không hợp lệ.")
+    if accounts.partner_by_email(db, user.email):
+        raise HTTPException(409, "Tài khoản của bạn đã là đối tác — bấm \"Sang cổng đối tác\" để vào.")
+    rl_key = "pjoin:" + str(user.id)
+    if rate_limited(db, rl_key, 10, timedelta(hours=1)):
+        raise HTTPException(429, "Bạn đã gửi quá nhiều lần. Vui lòng thử lại sau ít phút.")
+    # email & mật khẩu lấy từ tài khoản thành viên (mật khẩu tạm chỉ để qua bước kiểm tra form, không dùng)
+    d, errors = partner_routes.normalize_signup({**raw, "email": user.email, "password": "khong-dung-toi"})
+    d.pop("password")
+    if errors:
+        return JSONResponse({"detail": "Vui lòng kiểm tra lại thông tin.", "fields": errors}, status_code=422)
+    if db.scalar(select(PartnerUser.id).where(PartnerUser.phone == d["phone"])):
+        return partner_routes._taken_phone()
+    out = partner_routes.create_partner(
+        db, request, response, d, user.password_hash, rl_key,
+        f"Thành viên {user.company.name} ({user.company.code}) đăng ký đối tác ({PARTNER_KINDS[d['kind']]}) từ cổng thành viên",
+    )
+    if isinstance(out, dict):
+        out["redirect"] = "/doi-tac/xac-thuc"  # nhập mã OTP đã gửi qua email để kích hoạt
+    return out
 
 
 # ================================================================== thông tin tài khoản & doanh nghiệp

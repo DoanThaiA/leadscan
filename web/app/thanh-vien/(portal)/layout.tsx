@@ -94,7 +94,9 @@ function Shell({ children }: { children: ReactNode }) {
           </div>
           {me.portals?.partner ? (
             <a className="adm-btn sm" href="/doi-tac/tong-quan" title="Cùng 1 tài khoản — không cần đăng nhập lại"><Icon name="users" size={14} /> Sang cổng đối tác</a>
-          ) : null}
+          ) : (
+            <Link className="adm-btn sm" href="/thanh-vien/tro-thanh-doi-tac" title="Giới thiệu cơ hội, nhận hoa hồng — dùng chung tài khoản này"><Icon name="users" size={14} /> Trở thành đối tác</Link>
+          )}
           <button className="adm-btn sm ghost" onClick={logout}><Icon name="logout" size={14} /> Đăng xuất</button>
         </div>
       </aside>

@@ -408,3 +408,50 @@ def test_changing_email_invalidates_code(partner, otp_mail):
         p.email = "khac@gmail.com"
         db.commit()
     assert partner.post("/api/partner/auth/otp/verify", json={"code": otp_mail[-1][1]}).status_code == 400
+
+
+# ------------------------------------------------------------------ thành viên bấm "Trở thành đối tác"
+
+
+def _member(client):
+    register(client)  # thành viên a@minhan.vn / MEMBER_PW, người liên hệ chính SĐT 0901 234 567
+    m = new_client()
+    assert m.post("/api/member/auth/login", json={"email": "a@minhan.vn", "password": MEMBER_PW}).status_code == 200
+    return m
+
+
+def test_member_becomes_partner_without_retyping_password(client, otp_mail):
+    m = _member(client)
+    info = m.get("/api/member/partner-join").json()
+    assert info["already_partner"] is False
+    assert info["prefill"] == {"full_name": "Nguyễn Văn A", "email": "a@minhan.vn", "phone": "0901234567"}
+    assert info["industries"] and info["regions"]
+
+    r = m.post("/api/member/partner-join", json={"full_name": "Nguyễn Văn A", "phone": "0901234567", "kind": "personal"})
+    assert r.status_code == 422 and "agree" in r.json()["fields"]  # phải đồng ý điều khoản
+
+    r = m.post("/api/member/partner-join", json={"full_name": "Nguyễn Văn A", "phone": "0901 234 567", "kind": "personal",
+                                                 "industries": ["Bao bì & in ấn"], "regions": ["Bắc Ninh"], "agree": True})
+    assert r.status_code == 201, r.text
+    assert r.json()["redirect"] == "/doi-tac/xac-thuc" and r.json()["me"]["email"] == "a@minhan.vn"
+    assert otp_mail and otp_mail[-1][0] == "a@minhan.vn"  # mã OTP kích hoạt gửi về email
+
+    # đã đăng nhập luôn cổng đối tác (chưa xác thực email), dùng chung mật khẩu thành viên
+    me = m.get("/api/partner/auth/me").json()
+    assert me["email_verified"] is False and me["portals"] == {"member": True, "partner": True}
+    assert m.post("/api/partner/auth/otp/verify", json={"code": otp_mail[-1][1]}).status_code == 200
+    r = new_client().post("/api/partner/auth/login", json={"email": "a@minhan.vn", "password": MEMBER_PW})
+    assert r.status_code == 200 and r.json()["code"].startswith("DT-")
+    with new_session() as db:
+        ev = db.scalar(select(PartnerEvent).where(PartnerEvent.kind == "created"))
+        assert "từ cổng thành viên" in ev.content
+
+    assert m.get("/api/member/partner-join").json()["already_partner"] is True
+    assert m.post("/api/member/partner-join", json={"phone": "0911111111", "kind": "personal", "agree": True}).status_code == 409
+
+
+def test_member_join_phone_taken_and_requires_login(client, partner, otp_mail):
+    m = _member(client)
+    r = m.post("/api/member/partner-join", json={"full_name": "Nguyễn Văn A", "phone": "0912345678", "kind": "personal", "agree": True})
+    assert r.status_code == 409 and "phone" in r.json()["fields"]  # SĐT đã là của đối tác Bình
+    assert new_client().post("/api/member/partner-join", json={}).status_code == 401
