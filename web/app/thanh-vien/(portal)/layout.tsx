@@ -92,6 +92,9 @@ function Shell({ children }: { children: ReactNode }) {
               <span className="adm-me-org" title={me.company.name}>{me.company.name}</span>
             </div>
           </div>
+          {me.portals?.partner ? (
+            <a className="adm-btn sm" href="/doi-tac/tong-quan" title="Cùng 1 tài khoản — không cần đăng nhập lại"><Icon name="users" size={14} /> Sang cổng đối tác</a>
+          ) : null}
           <button className="adm-btn sm ghost" onClick={logout}><Icon name="logout" size={14} /> Đăng xuất</button>
         </div>
       </aside>

@@ -51,7 +51,7 @@ export default function OrderPage() {
 
   // Đã thanh toán: hoá đơn điện tử được xuất ở việc nền → hỏi lại vài lần (tối đa ~2 phút) để hiện số hoá đơn
   const invPolls = useRef(0);
-  const invWaiting = d?.order.status === "paid" && (d.order.invoice ? d.order.invoice.status === "pending" && !d.order.invoice.einvoice_error : true);
+  const invWaiting = d?.order.status === "paid" && d.order.amount > 0 && (d.order.invoice ? d.order.invoice.status === "pending" && !d.order.invoice.einvoice_error : true);
   useEffect(() => {
     // chưa có yêu cầu hoá đơn: chỉ chờ ~30 giây xem hệ thống có tự tạo không (rồi để khách tự điền form)
     if (!invWaiting || invPolls.current >= (d?.order.invoice ? 24 : 6)) return;
@@ -100,7 +100,10 @@ export default function OrderPage() {
       <div className="adm-head">
         <div>
           <h1>Đơn {o.code}</h1>
-          <p>{ORDER_KIND[o.kind]} · {fmtVnd(o.amount)} · tạo lúc {fmtDateTime(o.created_at)}</p>
+          <p>
+            {ORDER_KIND[o.kind]} · {fmtVnd(o.amount)}
+            {o.discount ? <> (giá gốc {fmtVnd(o.original_amount)}, mã {o.promo_code} −{fmtVnd(o.discount)})</> : null} · tạo lúc {fmtDateTime(o.created_at)}
+          </p>
         </div>
         <span className={`adm-badge ${ORDER_STATUS_CLASS[o.status]}`} style={{ fontSize: 13, padding: "4px 12px" }}>{ORDER_STATUS[o.status]}</span>
       </div>
@@ -159,6 +162,20 @@ export default function OrderPage() {
                 </div>
               </div>
             )}
+          </div>
+        </section>
+      ) : o.status === "paid" && o.amount <= 0 ? (
+        <section className="adm-card">
+          <div className="bd" style={{ display: "grid", gap: 12, maxWidth: 560 }}>
+            <div className="adm-alert ok">
+              <b>Đã kích hoạt — miễn phí!</b> Mã khuyến mãi {o.promo_code} giảm toàn bộ {fmtVnd(o.discount)}, không cần thanh toán.
+              {" "}Đã cộng {fmtPts(o.points)} vào ví lúc {fmtDateTime(o.paid_at)}.
+            </div>
+            <dl className="adm-kv">
+              <dt>Số dư hiện tại</dt><dd><b>{fmtPts(d.me.company.points_balance)}</b></dd>
+              {o.kind === "membership" ? (<><dt>Thành viên đến</dt><dd>{fmtDateTime(d.me.company.membership_expires_at)}</dd></>) : null}
+            </dl>
+            <Link className="adm-btn primary" href="/thanh-vien/co-hoi">Vào kho cơ hội</Link>
           </div>
         </section>
       ) : o.status === "paid" ? (

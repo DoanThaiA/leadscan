@@ -16,6 +16,7 @@ const NAV = [
   { href: "/admin/kho-doanh-nghiep", label: "Kho doanh nghiệp (AI)", icon: "scan" },
   { href: "/admin/thanh-toan", label: "Thanh toán", icon: "card" },
   { href: "/admin/hoa-don", label: "Hoá đơn", icon: "receipt" },
+  { href: "/admin/khuyen-mai", label: "Khuyến mãi", icon: "tag" },
   { href: "/admin/yeu-cau-tim-co-hoi", label: "Yêu cầu tìm cơ hội", icon: "search" },
   { href: "/admin/enrich", label: "Yêu cầu enrich", icon: "spark" },
   { href: "/admin/doi-tac", label: "Đối tác", icon: "users" },

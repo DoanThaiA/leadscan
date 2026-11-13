@@ -56,11 +56,15 @@ class OrderOut(Out):
     created_at: UtcDatetime
     note: str
     invoice: InvoiceOut | None
+    promo_code: str = ""  # mã khuyến mãi đã áp (amount = original_amount - discount)
+    original_amount: int | None = None
+    discount: int = 0
 
 
 class OrderCreateIn(BaseModel):
     kind: str
     amount: int | None = None  # chỉ dùng cho topup
+    promo_code: str = Field("", max_length=40)
 
     @field_validator("kind")
     @classmethod

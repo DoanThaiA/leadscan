@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
 
+from app import accounts
 from app.config import Settings, get_settings
 from app.db import new_session
 from app.models import Activity, Company, Contact, MemberUser, Profile
@@ -114,6 +115,17 @@ def _save(data: dict, ip: str, ua: str, cfg: Settings) -> tuple[int, str]:
                 "Email này đã có tài khoản LeadScan. Vui lòng đăng nhập hoặc dùng email khác.",
                 {"email": "Email đã có tài khoản."},
             )
+        # Email đã là đối tác → cùng 1 tài khoản: phải nhập đúng mật khẩu đang dùng, hồ sơ thành viên dùng chung mật khẩu đó
+        try:
+            pw_hash = accounts.other_hash_for_signup(db, accounts.partner_by_email(db, d["email"]), password) or pw_hash
+        except ValueError:
+            add_hit(db, rl_key)  # chặn dò mật khẩu qua form đăng ký
+            db.commit()
+            raise ApiError(
+                409,
+                "Email này đã có tài khoản đối tác LeadScan. Nhập đúng mật khẩu của tài khoản đó để dùng chung cho cổng thành viên.",
+                {"password": "Mật khẩu chưa khớp với tài khoản đối tác của email này."},
+            ) from None
 
         for _ in range(5):
             company = Company(

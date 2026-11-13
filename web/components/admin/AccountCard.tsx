@@ -51,7 +51,7 @@ export function AccountCard({ companyId, onChanged }: { companyId: number; onCha
     if (!pw) return;
     try {
       await api.patch(`/members/${m.id}`, { password: pw });
-      alert("Đã đặt mật khẩu mới và đăng xuất mọi thiết bị của tài khoản này.");
+      alert("Đã đặt mật khẩu mới (áp dụng cả cổng đối tác nếu email này là đối tác) và đăng xuất mọi thiết bị của tài khoản này.");
       onChanged();
     } catch (e) {
       alert(errMsg(e));
@@ -197,7 +197,9 @@ function CreateMemberDialog({ open, companyId, onClose, onDone }: { open: boolea
     setBusy(true);
     setMsg("");
     try {
-      await api.post(`/companies/${companyId}/members`, f);
+      const r = await api.post<{ shared_with_partner?: boolean }>(`/companies/${companyId}/members`, f);
+      // email đã là đối tác → cùng 1 tài khoản, giữ mật khẩu đối tác đang dùng
+      if (r.shared_with_partner) alert("Email này đã có tài khoản đối tác — tài khoản thành viên dùng chung mật khẩu đối tác hiện tại (mật khẩu vừa nhập không được áp dụng).");
       onDone();
     } catch (err) {
       setMsg(errMsg(err));

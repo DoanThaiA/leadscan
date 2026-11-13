@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db import utcnow
-from app.models import Activity, PaymentOrder
+from app.models import Activity, PaymentOrder, PromoCode
 from app.services import tiers, wallet
 from app.services.vietqr import build_payload
 
@@ -38,7 +38,7 @@ def new_order_code() -> str:
 
 def payment_info(order: PaymentOrder, cfg: Settings) -> dict:
     """Thông tin để trang thanh toán hiển thị (QR + số tài khoản)."""
-    ready = bool(cfg.payment_bank_bin and cfg.payment_account_no)
+    ready = bool(cfg.payment_bank_bin and cfg.payment_account_no) and order.amount > 0  # đơn 0đ (mã khuyến mãi) không cần QR
     return {
         "provider": order.provider,
         "configured": ready,
@@ -56,7 +56,21 @@ def expire_if_due(order: PaymentOrder) -> None:
         order.status = "expired"
 
 
-def create_order(db: Session, cfg: Settings, company_id: int, member_id: int, kind: str, amount: int, points: int) -> PaymentOrder:
+def create_order(
+    db: Session,
+    cfg: Settings,
+    company_id: int,
+    member_id: int,
+    kind: str,
+    amount: int,
+    points: int,
+    *,
+    promo: PromoCode | None = None,
+    discount: int = 0,
+) -> PaymentOrder:
+    """amount = giá gốc; có mã khuyến mãi thì số tiền phải trả = amount - discount (không âm).
+    Đơn còn 0đ dùng provider "free" — không qua cổng thanh toán, gọi activate_free() để kích hoạt luôn."""
+    pay = max(0, amount - discount)
     for _ in range(5):
         code = new_order_code()
         if not db.scalar(select(PaymentOrder.id).where(PaymentOrder.code == code)):
@@ -66,15 +80,27 @@ def create_order(db: Session, cfg: Settings, company_id: int, member_id: int, ki
         company_id=company_id,
         created_by_id=member_id,
         kind=kind,
-        amount=amount,
+        amount=pay,
         points=points,
-        provider=cfg.payment_provider,
+        provider=cfg.payment_provider if pay > 0 else "free",
         expires_at=utcnow() + timedelta(hours=cfg.order_expire_hours),
+        promo_id=promo.id if promo else None,
+        promo_code=promo.code if promo else "",
+        original_amount=amount if promo else None,
+        discount=amount - pay if promo else 0,
     )
     db.add(order)
     db.commit()
     db.refresh(order)
     return order
+
+
+def activate_free(db: Session, cfg: Settings, order: PaymentOrder) -> bool:
+    """Đơn 0đ nhờ mã khuyến mãi: không cần thanh toán — ghi nhận đã thanh toán 0đ và mở dịch vụ / cộng điểm ngay."""
+    if order.amount > 0:
+        raise HTTPException(400, "Đơn còn số tiền phải thanh toán.")
+    note = f"Miễn phí nhờ mã khuyến mãi {order.promo_code}" if order.promo_code else "Đơn 0đ"
+    return mark_paid(db, cfg, order, 0, None, note=note)
 
 
 def mark_paid(
@@ -125,6 +151,7 @@ def mark_paid(
             kind="update",
             actor_id=admin_id,
             content=f"Thanh toán {order.code}: {paid_amount:,}đ, cộng {order.points:,} điểm".replace(",", ".")
+            + (f" (mã khuyến mãi {order.promo_code}, giảm {order.discount:,}đ)".replace(",", ".") if order.promo_code else "")
             + (" (xác nhận thủ công)" if admin_id else ""),
         )
     )
@@ -132,7 +159,7 @@ def mark_paid(
     from app.worker import einvoice_for_order_task, enqueue, notify_payment_task  # import muộn: tránh vòng import
 
     enqueue(notify_payment_task, order.id)  # email cho thành viên + báo quản trị (chạy nền)
-    if cfg.iam_enabled and cfg.iam_issue_on_payment:
+    if cfg.iam_enabled and cfg.iam_issue_on_payment and order.amount > 0:  # đơn 0đ không xuất hoá đơn
         enqueue(einvoice_for_order_task, order.id)  # tự xuất hoá đơn điện tử IAM
     return True
 

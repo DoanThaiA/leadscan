@@ -15,6 +15,8 @@ export default function AdminOrdersPage() {
   const { user } = useAdmin();
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
+  // lọc đơn theo mã khuyến mãi (từ trang Khuyến mãi: /admin/thanh-toan?promo=MA)
+  const [promo, setPromo] = useState(() => (typeof window === "undefined" ? "" : new URLSearchParams(location.search).get("promo") ?? ""));
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [d, setD] = useState<{ total: number; items: AdminOrder[] } | null>(null);
@@ -27,8 +29,8 @@ export default function AdminOrdersPage() {
   }, [search]);
 
   const load = useCallback(() => {
-    api.get<{ total: number; items: AdminOrder[] }>("/orders" + qs({ status, q, page })).then(setD, (e) => setError(errMsg(e)));
-  }, [status, q, page]);
+    api.get<{ total: number; items: AdminOrder[] }>("/orders" + qs({ status, q, page, promo })).then(setD, (e) => setError(errMsg(e)));
+  }, [status, q, page, promo]);
   useEffect(() => {
     document.title = "Thanh toán · Quản trị LeadScan";
     setD(null);
@@ -62,6 +64,11 @@ export default function AdminOrdersPage() {
         </div>
         <div className="adm-toolbar">
           <div className="adm-search"><Icon name="search" /><input className="adm-input" type="search" placeholder="Tìm theo mã đơn, tên / mã khách hàng…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Tìm đơn" /></div>
+          {promo ? (
+            <button className="adm-btn sm" onClick={() => { setPromo(""); setPage(1); history.replaceState(null, "", "/admin/thanh-toan"); }} title="Bỏ lọc">
+              <Icon name="tag" size={14} /> Mã {promo.toUpperCase()} ✕
+            </button>
+          ) : null}
         </div>
         {!d ? (
           <div className="bd" style={{ display: "grid", gap: 12 }}>{[1, 2, 3].map((i) => <Skeleton key={i} h={34} />)}</div>
@@ -77,7 +84,10 @@ export default function AdminOrdersPage() {
                     <td className="mono"><b>{o.code}</b></td>
                     <td><Link className="name" href={`/admin/khach-hang/${o.company.id}`}>{o.company.name}</Link><div className="sub mono">{o.company.code}</div></td>
                     <td>{ORDER_KIND[o.kind]}<div className="sub">+{fmtPts(o.points)}</div></td>
-                    <td className="adm-neg">{fmtVnd(o.amount)}</td>
+                    <td className="adm-neg">
+                      {fmtVnd(o.amount)}
+                      {o.discount ? <div className="sub" style={{ color: "var(--muted)" }}>Mã {o.promo_code}: −{fmtVnd(o.discount)}</div> : null}
+                    </td>
                     <td>
                       <span className={`adm-badge ${ORDER_STATUS_CLASS[o.status]}`}>{ORDER_STATUS[o.status]}</span>
                       {o.note && o.status !== "paid" ? <div className="sub" style={{ color: "var(--danger)" }}>{o.note}</div> : null}
@@ -86,7 +96,7 @@ export default function AdminOrdersPage() {
                       {o.status === "paid" ? (
                         <>
                           <div>{fmtDateTime(o.paid_at)}</div>
-                          <div className="sub">{o.confirmed_by ? `Xác nhận tay: ${o.confirmed_by}` : o.provider_txn_id ? `InfoCMS · ${o.provider_txn_id}` : ""}</div>
+                          <div className="sub">{o.confirmed_by ? `Xác nhận tay: ${o.confirmed_by}` : o.provider === "free" ? "Miễn phí nhờ mã khuyến mãi" : o.provider_txn_id ? `InfoCMS · ${o.provider_txn_id}` : ""}</div>
                         </>
                       ) : "—"}
                     </td>

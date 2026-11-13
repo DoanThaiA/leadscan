@@ -6,7 +6,7 @@ Company            doanh nghiệp đăng ký / thành viên
   └─ Activity       lịch sử: tạo hồ sơ, đổi trạng thái, ghi chú chăm sóc
   ├─ MemberUser     tài khoản đăng nhập cổng thành viên
   ├─ WalletTransaction   sổ cái điểm (mỗi lần cộng/trừ 1 dòng, không sửa/xoá)
-  ├─ PaymentOrder   đơn nạp tiền / phí thành viên (thanh toán qua cổng MCV → InfoCMS)
+  ├─ PaymentOrder   đơn nạp tiền / phí thành viên (thanh toán qua cổng MCV → InfoCMS; có thể áp mã khuyến mãi)
   │    ├─ McvPayment      mỗi mã QR MCV cấp cho đơn (1 đơn có thể nhiều payment_code); chống mở dịch vụ 2 lần
   │    └─ InvoiceRequest  thông tin xuất hoá đơn (tự xuất HĐĐT qua IAM Invoice, hoặc kế toán xuất thủ công)
   ├─ SearchRequest      yêu cầu "Enrich tìm kiếm cơ hội" (tiêu chí + mô tả, email báo admin)
@@ -24,7 +24,8 @@ ApiUsage                   đếm số lần gọi API ngoài theo tháng (Coher
 KnowledgeCompany           kho doanh nghiệp để AI quét (crawl từ bảng xếp hạng như PROFIT500 hoặc nhập tay)
 JobPost                    bài tuyển dụng đăng trên /tuyen-dung
   └─ JobApplication         hồ sơ ứng viên gửi qua form (đồng thời email về hộp thư tuyển dụng)
-PartnerUser                tài khoản cổng đối tác (/doi-tac) — tách hẳn MemberUser
+PromoCode                  mã khuyến mãi giảm tiền đơn thanh toán (admin cấu hình)
+PartnerUser                tài khoản cổng đối tác (/doi-tac) — cùng email với MemberUser = cùng 1 tài khoản (app/accounts.py)
   ├─ PartnerSession / PartnerPasswordReset   phiên đăng nhập (cookie ls_partner) & đặt lại mật khẩu
   ├─ PartnerOtp             mã OTP xác thực SĐT
   └─ PartnerEvent           nhật ký thay đổi (ai, khi nào, vì sao)
@@ -304,10 +305,47 @@ class PaymentOrder(Base):
     raw_callback: Mapped[str | None] = mapped_column(Text)
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    # Mã khuyến mãi: amount = original_amount - discount (không âm); điểm cộng vẫn theo giá gốc
+    promo_id: Mapped[int | None] = mapped_column(ForeignKey("promo_codes.id", ondelete="SET NULL"), index=True)
+    promo_code: Mapped[str] = mapped_column(String(30), default="")
+    original_amount: Mapped[int | None] = mapped_column(BigInteger)
+    discount: Mapped[int] = mapped_column(BigInteger, default=0)
 
     company: Mapped[Company] = relationship(lazy="joined")
     invoice: Mapped["InvoiceRequest | None"] = relationship(back_populates="order", uselist=False, lazy="joined")
     confirmed_by: Mapped[AdminUser | None] = relationship(lazy="joined")
+
+
+PROMO_TYPES = {"percent": "Giảm theo %", "amount": "Giảm số tiền"}
+PROMO_SCOPES = {"all": "Mọi đơn", "membership": "Phí thành viên", "topup": "Nạp thêm điểm"}
+
+
+class PromoCode(Base):
+    """Mã khuyến mãi giảm tiền đơn thanh toán. Đơn còn 0đ → kích hoạt luôn, không cần thanh toán.
+
+    Lượt dùng = số đơn đã thanh toán + đơn đang chờ thanh toán còn hạn có gắn mã (đơn huỷ/hết hạn trả lại lượt).
+    """
+
+    __tablename__ = "promo_codes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(30), unique=True)  # chữ in hoa, vd CHAOMUNG2027
+    name: Mapped[str] = mapped_column(String(200), default="")  # mô tả nội bộ / hiện cho khách
+    discount_type: Mapped[str] = mapped_column(String(10), default="percent")
+    discount_value: Mapped[int] = mapped_column(BigInteger)  # % (1–100) hoặc số tiền VND
+    max_discount: Mapped[int | None] = mapped_column(BigInteger)  # giảm tối đa (chỉ cho %), None = không giới hạn
+    min_amount: Mapped[int] = mapped_column(BigInteger, default=0)  # giá trị đơn tối thiểu
+    applies_to: Mapped[str] = mapped_column(String(16), default="all")
+    max_uses: Mapped[int | None] = mapped_column(Integer)  # tổng lượt, None = không giới hạn
+    per_company_limit: Mapped[int | None] = mapped_column(Integer, default=1)  # lượt / doanh nghiệp, None = không giới hạn
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    created_by: Mapped[AdminUser | None] = relationship(lazy="joined")
 
 
 MCV_STATUSES = {

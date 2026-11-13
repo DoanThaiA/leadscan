@@ -73,6 +73,9 @@ function Shell({ children }: { children: ReactNode }) {
               <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{me.kind === "org" ? me.org_name : me.email}</span>
             </div>
           </div>
+          {me.portals?.member ? (
+            <a className="adm-btn sm" href="/thanh-vien" title="Cùng 1 tài khoản — không cần đăng nhập lại"><Icon name="building" size={14} /> Sang cổng thành viên</a>
+          ) : null}
           <button className="adm-btn sm ghost" onClick={logout}><Icon name="logout" size={14} /> Đăng xuất</button>
         </div>
       </aside>

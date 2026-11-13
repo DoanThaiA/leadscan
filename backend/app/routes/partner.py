@@ -7,7 +7,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -23,14 +23,14 @@ from app.models import (
     SUBMISSION_STATUSES,
     PartnerEvent,
     PartnerPasswordReset,
-    PartnerSession,
     PartnerSubmission,
     PartnerUser,
 )
-from app.partner_auth import create_session, current_partner, destroy_session, verified_partner
+from app import accounts
+from app.partner_auth import create_session, current_partner, verified_partner
 from app.registration_form import _EMAIL, AREAS, INDUSTRIES, clean1, pick_list
 from app.schemas import LoginIn
-from app.security import DUMMY_HASH, add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
+from app.security import add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
 from app.services import otp
 from app.services import partner_submissions as subs
 from app.services import partner_attachments, partner_wallet
@@ -77,6 +77,7 @@ def me_out(p: PartnerUser) -> dict:
         "tier": p.tier,
         "tier_label": PARTNER_TIERS.get(p.tier, p.tier),
         "created_at": _iso(p.created_at),
+        "portals": accounts.portals_of(p),  # cùng email dùng được cổng nào (hiện nút chuyển cổng)
     }
 
 
@@ -159,7 +160,15 @@ def register(request: Request, response: Response, raw: dict | None = Body(None)
     if db.scalar(select(PartnerUser.id).where(PartnerUser.phone == d["phone"])):
         return taken_phone()
 
-    pw_hash = hash_password(d.pop("password"))
+    # Email đã là thành viên → cùng 1 tài khoản: phải nhập đúng mật khẩu đang dùng, hồ sơ đối tác dùng chung mật khẩu đó
+    password = d.pop("password")
+    try:
+        pw_hash = accounts.other_hash_for_signup(db, accounts.member_by_email(db, d["email"]), password) or hash_password(password)
+    except ValueError:
+        add_hit(db, rl_key)  # chặn dò mật khẩu qua form đăng ký
+        db.commit()
+        msg = "Email này đã có tài khoản thành viên LeadScan. Nhập đúng mật khẩu của tài khoản đó để dùng chung cho cổng đối tác."
+        return _fail(409, msg, {"password": "Mật khẩu chưa khớp với tài khoản thành viên của email này."})
     p = None
     for _ in range(5):
         p = PartnerUser(
@@ -210,21 +219,25 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
     key = "plogin:" + sha256(client_ip(request, cfg))
     if rate_limited(db, key, cfg.login_attempts_per_15min, timedelta(minutes=15)):
         raise HTTPException(429, "Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.")
-    p = db.scalar(select(PartnerUser).where(PartnerUser.email == body.email.strip().lower()))
-    ok = verify_password(body.password, p.password_hash if p else DUMMY_HASH)
-    if not p or not ok:
+    # 1 tài khoản cho cả 2 cổng: mở phiên đối tác + phiên thành viên (nếu email có hồ sơ thành viên)
+    member, p = accounts.authenticate(db, body.email, body.password)
+    if not member and not p:
         add_hit(db, key)
         db.commit()
         raise HTTPException(401, "Email hoặc mật khẩu không đúng.")
-    if p.status != "active":
+    if p and not accounts.partner_usable(p):
         raise HTTPException(403, "Tài khoản đối tác đang bị khoá. Vui lòng liên hệ LeadScan.")
-    create_session(db, p, request, response)
+    if not p and not accounts.member_usable(member):
+        raise HTTPException(403, "Tài khoản đang bị khoá. Vui lòng liên hệ LeadScan.")
+    accounts.open_sessions(db, member, p, request, response)
+    if not p:  # chỉ có hồ sơ thành viên → trang đăng nhập cho chọn vào cổng thành viên hoặc đăng ký đối tác
+        return {"portals": {"member": True, "partner": False}, "redirect": accounts.MEMBER_HOME}
     return me_out(p)
 
 
 @router.post("/auth/logout", status_code=204)
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
-    destroy_session(db, request, response)
+    accounts.logout_all(db, request, response)  # đăng xuất cả cổng thành viên (cùng 1 tài khoản)
 
 
 @router.get("/auth/me")
@@ -243,7 +256,7 @@ class PasswordChangeIn(BaseModel):
 def change_password(body: PasswordChangeIn, p: PartnerUser = Depends(current_partner), db: Session = Depends(get_db)):
     if not verify_password(body.current_password, p.password_hash):
         raise HTTPException(400, "Mật khẩu hiện tại không đúng.")
-    p.password_hash = hash_password(body.new_password)
+    accounts.sync_password(db, p.email, hash_password(body.new_password), end_sessions=False)  # áp dụng cả cổng thành viên
     db.add(PartnerEvent(partner_id=p.id, kind="password", content="Đối tác đổi mật khẩu"))
     db.commit()
 
@@ -281,9 +294,8 @@ def reset(body: ResetIn, db: Session = Depends(get_db)):
     if not pr or pr.used_at or pr.expires_at < utcnow():
         raise HTTPException(400, "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.")
     p = db.get(PartnerUser, pr.partner_id)
-    p.password_hash = hash_password(body.password)
     pr.used_at = utcnow()
-    db.execute(delete(PartnerSession).where(PartnerSession.partner_id == p.id))
+    accounts.sync_password(db, p.email, hash_password(body.password), end_sessions=True)  # cả 2 cổng
     db.add(PartnerEvent(partner_id=p.id, kind="password", content="Đặt lại mật khẩu qua email"))
     db.commit()
 

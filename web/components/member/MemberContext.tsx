@@ -31,6 +31,8 @@ export interface MemberMe {
     membership_active: boolean;
     tier: MemberTier;
   };
+  /** cùng email (cùng 1 tài khoản) dùng được cổng nào */
+  portals?: { member: boolean; partner: boolean };
 }
 
 interface Ctx {

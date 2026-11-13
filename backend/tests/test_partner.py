@@ -129,11 +129,17 @@ def test_register_duplicate_email_or_phone(partner):
     assert r.status_code == 409 and "phone" in r.json()["fields"]
 
 
-def test_member_email_can_also_be_partner(client, otp_mail):
-    """Cùng 1 email có thể có 2 tài khoản độc lập: thành viên và đối tác."""
-    register(client)  # thành viên a@minhan.vn
+def test_member_email_becomes_partner_with_same_password(client, otp_mail):
+    """Cùng email = cùng 1 tài khoản: đăng ký đối tác bằng email thành viên phải nhập đúng mật khẩu đang dùng."""
+    register(client)  # thành viên a@minhan.vn / MEMBER_PW
     r = new_client().post("/api/partner/auth/register", json=signup_form(email="a@minhan.vn", password="mat-khau-khac-1"))
+    assert r.status_code == 409 and "password" in r.json()["fields"]
+    r = new_client().post("/api/partner/auth/register", json=signup_form(email="A@MinhAn.vn", password=MEMBER_PW))
     assert r.status_code == 201, r.text
+    with new_session() as db:
+        from app.models import MemberUser
+
+        assert db.scalar(select(PartnerUser.password_hash)) == db.scalar(select(MemberUser.password_hash))
 
 
 # ------------------------------------------------------------------ OTP
@@ -220,24 +226,76 @@ def test_login_logout(partner):
     assert c.get("/api/partner/auth/me").status_code == 401
 
 
-def test_portals_are_isolated(client, otp_mail):
-    """Phiên cổng đối tác không mở được cổng thành viên và ngược lại, kể cả cùng email + mật khẩu."""
+def test_one_account_logs_into_both_portals(client, otp_mail):
+    """1 tài khoản cho cả 2 cổng: đăng nhập ở cổng nào cũng mở phiên của cả 2, mỗi cổng giao diện / API riêng."""
     register(client)  # thành viên a@minhan.vn / MEMBER_PW
-    m = new_client()
-    assert m.post("/api/member/auth/login", json={"email": "a@minhan.vn", "password": MEMBER_PW}).status_code == 200
-    assert m.get("/api/partner/auth/me").status_code == 401
-    # tài khoản thành viên không đăng nhập được cổng đối tác
-    assert new_client().post("/api/partner/auth/login", json={"email": "a@minhan.vn", "password": MEMBER_PW}).status_code == 401
+    # chỉ có hồ sơ thành viên: đăng nhập ở cổng đối tác vẫn được, trang đăng nhập cho chọn vào cổng thành viên
+    c = new_client()
+    r = c.post("/api/partner/auth/login", json={"email": "a@minhan.vn", "password": MEMBER_PW})
+    assert r.status_code == 200 and r.json()["portals"] == {"member": True, "partner": False}
+    assert r.json()["redirect"] == "/thanh-vien"
+    assert c.get("/api/member/auth/me").status_code == 200
+    assert c.get("/api/partner/auth/me").status_code == 401
+    assert new_client().post("/api/partner/auth/login", json={"email": "a@minhan.vn", "password": "sai-mat-khau"}).status_code == 401
 
     p = new_client()
     assert p.post("/api/partner/auth/register", json=signup_form(email="a@minhan.vn", password=MEMBER_PW)).status_code == 201
-    assert p.get("/api/partner/auth/me").status_code == 200
-    assert p.get("/api/member/auth/me").status_code == 401
-    assert p.get("/api/member/wallet").status_code == 401
 
-    # cookie phiên giới hạn đúng đường dẫn API của từng cổng
-    r = new_client().post("/api/partner/auth/login", json={"email": "a@minhan.vn", "password": MEMBER_PW})
-    assert "Path=/api/partner" in r.headers["set-cookie"] and "HttpOnly" in r.headers["set-cookie"]
+    # có cả 2 hồ sơ: đăng nhập cổng thành viên → vào được cả cổng đối tác, và ngược lại
+    m = new_client()
+    r = m.post("/api/member/auth/login", json={"email": "a@minhan.vn", "password": MEMBER_PW})
+    assert r.status_code == 200 and r.json()["company"] and r.json()["portals"] == {"member": True, "partner": True}
+    assert m.get("/api/partner/auth/me").status_code == 200
+    assert m.get("/api/partner/auth/me").json()["portals"] == {"member": True, "partner": True}
+    q = new_client()
+    r = q.post("/api/partner/auth/login", json={"email": "a@minhan.vn", "password": MEMBER_PW})
+    assert r.status_code == 200 and r.json()["code"].startswith("DT-")
+    assert q.get("/api/member/wallet").status_code == 200
+    assert "Path=/api;" in r.headers["set-cookie"] and "HttpOnly" in r.headers["set-cookie"]
+
+    # đăng xuất 1 cổng = đăng xuất cả 2
+    assert q.post("/api/member/auth/logout").status_code == 204
+    assert q.get("/api/partner/auth/me").status_code == 401
+    assert q.get("/api/member/auth/me").status_code == 401
+
+
+def test_partner_only_account_on_member_login(partner):
+    c = new_client()
+    r = c.post("/api/member/auth/login", json={"email": "binh@gmail.com", "password": PARTNER_PW})
+    assert r.status_code == 200 and r.json()["portals"] == {"member": False, "partner": True}
+    assert r.json()["redirect"] == "/doi-tac/xac-thuc"  # chưa xác thực email
+    assert c.get("/api/partner/auth/me").status_code == 200
+    assert c.get("/api/member/auth/me").status_code == 401
+
+
+def test_password_change_and_reset_apply_to_both_portals(client, otp_mail, monkeypatch):
+    from app.services import notify
+
+    register(client)
+    assert new_client().post("/api/partner/auth/register", json=signup_form(email="a@minhan.vn", password=MEMBER_PW)).status_code == 201
+    m = new_client()
+    m.post("/api/member/auth/login", json={"email": "a@minhan.vn", "password": MEMBER_PW})
+    assert m.post("/api/member/auth/password", json={"current_password": MEMBER_PW, "new_password": "moi-12345678"}).status_code == 204
+    r = new_client().post("/api/partner/auth/login", json={"email": "a@minhan.vn", "password": "moi-12345678"})
+    assert r.status_code == 200 and r.json()["code"].startswith("DT-")
+
+    tokens: list[str] = []
+    monkeypatch.setattr(notify, "send_partner_password_reset", lambda cfg, email, name, token: tokens.append(token) or True)
+    new_client().post("/api/partner/auth/forgot", json={"email": "a@minhan.vn"})
+    assert new_client().post("/api/partner/auth/reset", json={"token": tokens[0], "password": "lan-ba-12345678"}).status_code == 204
+    assert m.get("/api/member/auth/me").status_code == 401  # đặt lại mật khẩu → đăng xuất mọi phiên cả 2 cổng
+    assert new_client().post("/api/member/auth/login", json={"email": "a@minhan.vn", "password": "lan-ba-12345678"}).json()["company"]
+
+
+def test_partner_email_registers_as_member_with_same_password(client, partner):
+    from tests.conftest import valid_form
+
+    r = client.post("/api/registrations", json=valid_form(email="binh@gmail.com"))
+    assert r.status_code == 409 and "password" in r.json()["fields"]
+    r = client.post("/api/registrations", json=valid_form(email="binh@gmail.com", password=PARTNER_PW, password_confirm=PARTNER_PW))
+    assert r.status_code == 200, r.text
+    r = new_client().post("/api/member/auth/login", json={"email": "binh@gmail.com", "password": PARTNER_PW})
+    assert r.status_code == 200 and r.json()["portals"] == {"member": True, "partner": True}
 
 
 def test_change_password(partner):

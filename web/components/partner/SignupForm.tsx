@@ -139,6 +139,7 @@ export default function SignupForm() {
           <label htmlFor="p_password">Mật khẩu <span className="req">*</span></label>
           <input type="password" id="p_password" name="password" maxLength={200} autoComplete="new-password" placeholder="Tối thiểu 8 ký tự" {...inv("password")} />
           {err("password")}
+          <span className="hint">Đã là thành viên LeadScan? Nhập đúng email và mật khẩu đang dùng — 1 tài khoản cho cả 2 cổng.</span>
         </div>
 
         <div className="fld full">

@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
 from app.db import get_db, utcnow
-from app.member_auth import create_session, current_member, destroy_session
+from app import accounts
+from app.member_auth import current_member
 from app.models import (
     OPP_SOURCES,
     Activity,
@@ -21,7 +22,6 @@ from app.models import (
     EnrichRequest,
     InvoiceRequest,
     MemberNotification,
-    MemberSession,
     MemberUser,
     Opportunity,
     PasswordReset,
@@ -38,8 +38,8 @@ from app.registration_form import AREAS, CUSTOMER_SIZES, INDUSTRIES, MAX_INDUSTR
 from app.registration_form import _valid_url as valid_url
 from app.schemas import LoginIn, PasswordChangeIn
 from app.schemas_commerce import EnrichIn, EnrichOut, InvoiceIn, OrderCreateIn, OrderOut, TxOut
-from app.security import DUMMY_HASH, add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
-from app.services import attachments, catalog, mcv_payments, payments, tiers
+from app.security import add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
+from app.services import attachments, catalog, mcv_payments, payments, promos, tiers
 from app.services import products as prod
 from app.services.mcv import McvClient, McvError
 from app.worker import enqueue, issue_einvoice_task, match_request_now, send_invoice_request_task, send_password_reset_task, send_search_request_task
@@ -65,6 +65,7 @@ def _me(user: MemberUser) -> dict:
             "membership_active": catalog.membership_active(c),
             "tier": tiers.tier_out(c),
         },
+        "portals": accounts.portals_of(user),  # cùng email dùng được cổng nào (hiện nút chuyển cổng)
     }
 
 
@@ -83,21 +84,25 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
     key = "mlogin:" + sha256(client_ip(request, cfg))
     if rate_limited(db, key, cfg.login_attempts_per_15min, timedelta(minutes=15)):
         raise HTTPException(429, "Đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.")
-    user = db.scalar(select(MemberUser).where(MemberUser.email == body.email.strip().lower()))
-    ok = verify_password(body.password, user.password_hash if user else DUMMY_HASH)
-    if not user or not ok:
+    # 1 tài khoản cho cả 2 cổng: mở phiên thành viên + phiên đối tác (nếu email có hồ sơ đối tác)
+    user, partner = accounts.authenticate(db, body.email, body.password)
+    if not user and not partner:
         add_hit(db, key)
         db.commit()
         raise HTTPException(401, "Email hoặc mật khẩu không đúng.")
-    if not user.is_active or user.company.status in ("suspended", "rejected"):
+    if user and not accounts.member_usable(user):
         raise HTTPException(403, "Tài khoản đang bị khoá. Vui lòng liên hệ LeadScan.")
-    create_session(db, user, request, response)
+    if not user and not accounts.partner_usable(partner):
+        raise HTTPException(403, "Tài khoản đối tác đang bị khoá. Vui lòng liên hệ LeadScan.")
+    accounts.open_sessions(db, user, partner, request, response)
+    if not user:  # chỉ có hồ sơ đối tác → trang đăng nhập cho chọn vào cổng đối tác hoặc đăng ký thành viên
+        return {"portals": {"member": False, "partner": True}, "redirect": accounts.PARTNER_HOME if partner.email_verified_at else "/doi-tac/xac-thuc"}
     return _me(user)
 
 
 @router.post("/auth/logout", status_code=204)
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
-    destroy_session(db, request, response)
+    accounts.logout_all(db, request, response)  # đăng xuất cả cổng đối tác (cùng 1 tài khoản)
 
 
 @router.get("/auth/me")
@@ -109,7 +114,7 @@ def me(user: MemberUser = Depends(current_member)):
 def change_password(body: PasswordChangeIn, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(400, "Mật khẩu hiện tại không đúng.")
-    user.password_hash = hash_password(body.new_password)
+    accounts.sync_password(db, user.email, hash_password(body.new_password), end_sessions=False)  # áp dụng cả cổng đối tác
     db.commit()
 
 
@@ -146,9 +151,8 @@ def reset(body: ResetIn, db: Session = Depends(get_db)):
     if not pr or pr.used_at or pr.expires_at < utcnow():
         raise HTTPException(400, "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.")
     user = db.get(MemberUser, pr.user_id)
-    user.password_hash = hash_password(body.password)
     pr.used_at = utcnow()
-    db.execute(delete(MemberSession).where(MemberSession.user_id == user.id))
+    accounts.sync_password(db, user.email, hash_password(body.password), end_sessions=True)  # cả 2 cổng
     db.commit()
 
 
@@ -499,7 +503,15 @@ def create_order(body: OrderCreateIn, user: MemberUser = Depends(current_member)
         if not cfg.topup_min <= amount <= cfg.topup_max:
             raise HTTPException(400, f"Số tiền nạp phải từ {cfg.topup_min:,}đ đến {cfg.topup_max:,}đ.".replace(",", "."))
         points = amount
-    order = payments.create_order(db, cfg, user.company_id, user.id, body.kind, amount, points)
+    promo, discount = None, 0
+    if body.promo_code.strip():  # khoá dòng mã tới khi tạo xong đơn → không vượt số lượt
+        promo, discount = promos.check(db, body.promo_code, body.kind, amount, user.company_id, lock=True)
+    order = payments.create_order(db, cfg, user.company_id, user.id, body.kind, amount, points, promo=promo, discount=discount)
+    if order.amount <= 0:  # mã khuyến mãi giảm hết → không cần thanh toán, kích hoạt luôn
+        payments.activate_free(db, cfg, order)
+        db.refresh(order)
+        db.refresh(user.company)
+        return {"order": OrderOut.model_validate(order).model_dump(mode="json"), "payment": _payment_info(db, order), "me": _me(user)}
     error = ""
     if order.provider == "mcv":  # xin MCV mã QR ngay; lỗi thì đơn vẫn còn, trang thanh toán có nút "Tạo mã QR"
         try:
@@ -507,6 +519,41 @@ def create_order(body: OrderCreateIn, user: MemberUser = Depends(current_member)
         except McvError as e:
             error = _mcv_error_text(e)
     return {"order": OrderOut.model_validate(order).model_dump(mode="json"), "payment": _payment_info(db, order, error=error)}
+
+
+class PromoCheckIn(BaseModel):
+    code: str = Field(max_length=40)
+    kind: str
+    amount: int | None = None  # chỉ dùng cho topup
+
+
+@router.post("/promo/check")
+def check_promo(body: PromoCheckIn, request: Request, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    """Xem trước mã khuyến mãi cho đơn sắp tạo: số tiền giảm và số tiền còn phải trả."""
+    cfg = get_settings()
+    key = "promo:" + str(user.company_id)
+    if rate_limited(db, key, 30, timedelta(minutes=15)):  # chặn dò mã
+        raise HTTPException(429, "Bạn thử mã quá nhiều lần. Vui lòng thử lại sau ít phút.")
+    if body.kind == "membership":
+        amount = cfg.membership_fee
+    elif body.kind == "topup":
+        amount = int(body.amount or 0)
+    else:
+        raise HTTPException(400, "Loại đơn không hợp lệ.")
+    try:
+        p, discount = promos.check(db, body.code, body.kind, amount, user.company_id)
+    except HTTPException:
+        add_hit(db, key)
+        db.commit()
+        raise
+    return {
+        "code": p.code,
+        "name": p.name,
+        "description": promos.describe(p),
+        "amount": amount,
+        "discount": discount,
+        "pay": max(0, amount - discount),
+    }
 
 
 def _mcv_error_text(e: McvError) -> str:
@@ -615,6 +662,8 @@ def request_invoice(code: str, body: InvoiceIn, user: MemberUser = Depends(curre
     o = _my_order(db, user, code)
     if o.status != "paid":
         raise HTTPException(400, "Chỉ yêu cầu xuất hoá đơn cho đơn đã thanh toán.")
+    if o.amount <= 0:
+        raise HTTPException(400, "Đơn miễn phí (0đ) không xuất hoá đơn.")
     if o.invoice:
         raise HTTPException(409, "Đơn này đã gửi thông tin xuất hoá đơn.")
     inv = InvoiceRequest(order_id=o.id, **body.model_dump())

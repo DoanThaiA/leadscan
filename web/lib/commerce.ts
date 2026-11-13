@@ -36,6 +36,10 @@ export interface Order {
   created_at: string;
   note: string;
   invoice: Invoice | null;
+  /** mã khuyến mãi đã áp: amount = original_amount - discount; provider "free" = đơn 0đ kích hoạt luôn */
+  promo_code?: string;
+  original_amount?: number | null;
+  discount?: number;
 }
 
 export interface PaymentInfo {

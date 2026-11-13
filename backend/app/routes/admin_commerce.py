@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app import accounts
 from app.auth import current_user, require_admin
 from app.config import get_settings
 from app.db import get_db, utcnow
@@ -362,6 +363,7 @@ def _order_out(o: PaymentOrder) -> dict:
 def list_orders(
     q: str = Query("", max_length=100),
     status: str = "",
+    promo: str = Query("", max_length=40),  # lọc đơn dùng mã khuyến mãi
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     _: AdminUser = Depends(current_user),
@@ -375,6 +377,8 @@ def list_orders(
         stmt = stmt.where(or_(PaymentOrder.code.ilike(like), Company.name.ilike(like), Company.code.ilike(like)))
     if status:
         stmt = stmt.where(PaymentOrder.status == status)
+    if promo.strip():
+        stmt = stmt.where(PaymentOrder.promo_code == promo.strip().upper())
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(PaymentOrder.id.desc()).offset((page - 1) * page_size).limit(page_size)).unique().all()
     return {"total": total, "page": page, "page_size": page_size, "items": [_order_out(o) for o in rows]}
@@ -631,12 +635,16 @@ def create_member(company_id: int, body: MemberCreateIn, user: AdminUser = Depen
         raise HTTPException(404, "Không tìm thấy khách hàng.")
     if db.scalar(select(MemberUser.id).where(MemberUser.email == body.email)):
         raise HTTPException(409, "Email này đã có tài khoản.")
-    m = MemberUser(company_id=c.id, email=body.email, full_name=body.full_name, password_hash=hash_password(body.password))
+    # Email đã là đối tác → cùng 1 tài khoản: dùng mật khẩu đối tác đang dùng (không đổi mật khẩu của người ta)
+    partner = accounts.partner_by_email(db, body.email)
+    m = MemberUser(company_id=c.id, email=body.email, full_name=body.full_name,
+                   password_hash=partner.password_hash if partner else hash_password(body.password))
     db.add(m)
-    db.add(Activity(company_id=c.id, kind="update", actor_id=user.id, content=f"Tạo tài khoản đăng nhập cho {body.email}"))
+    note = " (dùng chung mật khẩu tài khoản đối tác)" if partner else ""
+    db.add(Activity(company_id=c.id, kind="update", actor_id=user.id, content=f"Tạo tài khoản đăng nhập cho {body.email}{note}"))
     db.commit()
     db.refresh(m)
-    return _member_out(m)
+    return {**_member_out(m), "shared_with_partner": bool(partner)}
 
 
 @router.patch("/members/{member_id}")
@@ -646,9 +654,9 @@ def update_member(member_id: int, body: MemberUpdateIn, user: AdminUser = Depend
         raise HTTPException(404, "Không tìm thấy tài khoản.")
     if body.is_active is not None:
         m.is_active = body.is_active
-    if body.password:
-        m.password_hash = hash_password(body.password)
-    if body.is_active is False or body.password:
+    if body.password:  # cùng 1 tài khoản → đổi luôn mật khẩu cổng đối tác, đăng xuất mọi phiên
+        accounts.sync_password(db, m.email, hash_password(body.password), end_sessions=True)
+    if body.is_active is False:
         db.query(MemberSession).filter(MemberSession.user_id == m.id).delete()
     db.add(Activity(company_id=m.company_id, kind="update", actor_id=user.id, content=f"Cập nhật tài khoản đăng nhập {m.email}"))
     db.commit()

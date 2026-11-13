@@ -23,6 +23,8 @@ export interface PartnerMe {
   tier_label: string;
   created_at: string;
   otp_resend_after?: number;
+  /** cùng email (cùng 1 tài khoản) dùng được cổng nào */
+  portals?: { member: boolean; partner: boolean };
 }
 
 export interface OtpSent {

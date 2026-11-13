@@ -36,6 +36,7 @@ const ICONS: Record<string, ReactNode> = {
   gauge: <><path d="M12 14l4-4M3.3 17a9 9 0 1 1 17.4 0" /><circle cx="12" cy="14" r="1.5" /></>,
   layers: <path d="M12 2 2 7l10 5 10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />,
   bookmark: <path d="M6 3h12v18l-6-4-6 4z" />,
+  tag: <><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.5" /></>,
   bell: <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0" />,
   brief: <><rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2M2 13h20" /></>,
   download: <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />,

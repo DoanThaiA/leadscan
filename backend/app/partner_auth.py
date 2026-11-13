@@ -1,7 +1,7 @@
-"""Phiên đăng nhập cổng đối tác — cookie, bảng và đường dẫn riêng, không dùng chung với cổng thành viên.
+"""Phiên đăng nhập cổng đối tác — cookie ls_partner và bảng partner_sessions riêng với cổng thành viên.
 
-Cookie ls_partner chỉ gửi kèm request tới /api/partner/*, nên đăng nhập cổng đối tác không mở được cổng thành viên
-(và ngược lại: cookie ls_member chỉ đi tới /api/member/*).
+Cùng email = cùng 1 tài khoản cho cả 2 cổng (app/accounts.py): đăng nhập 1 lần mở phiên của từng cổng mà email có
+hồ sơ. Phiên đối tác chỉ mở API cổng đối tác, phiên thành viên chỉ mở API cổng thành viên.
 """
 
 import secrets
@@ -17,7 +17,10 @@ from app.models import PartnerSession, PartnerUser
 from app.security import client_ip, origin_allowed, sha256
 
 COOKIE = "ls_partner"
-COOKIE_PATH = "/api/partner"
+# Cookie gửi tới mọi /api/* để đăng nhập / đăng xuất 1 lần cho cả cổng thành viên và cổng đối tác (app/accounts.py).
+# Phiên vẫn chỉ mở được API của đúng cổng: mỗi cổng đọc cookie và bảng phiên riêng.
+COOKIE_PATH = "/api"
+LEGACY_COOKIE_PATH = "/api/partner"  # cookie cũ trước khi dùng chung tài khoản
 
 
 def create_session(db: Session, partner: PartnerUser, request: Request, response: Response) -> None:
@@ -37,6 +40,7 @@ def create_session(db: Session, partner: PartnerUser, request: Request, response
     response.set_cookie(
         COOKIE, token, max_age=cfg.session_days * 86400, httponly=True, secure=cfg.cookie_secure, samesite="lax", path=COOKIE_PATH
     )
+    response.delete_cookie(COOKIE, path=LEGACY_COOKIE_PATH)
 
 
 def destroy_session(db: Session, request: Request, response: Response) -> None:
@@ -45,6 +49,7 @@ def destroy_session(db: Session, request: Request, response: Response) -> None:
         db.execute(delete(PartnerSession).where(PartnerSession.token_hash == sha256(token)))
         db.commit()
     response.delete_cookie(COOKIE, path=COOKIE_PATH)
+    response.delete_cookie(COOKIE, path=LEGACY_COOKIE_PATH)
 
 
 def end_all_sessions(db: Session, partner_id: int) -> None:
