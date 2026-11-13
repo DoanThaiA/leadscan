@@ -5,6 +5,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 
 import { api, errMsg } from "@/lib/admin/api";
 import { fmtDate, fmtDateTime } from "@/lib/admin/format";
+import type { MemberTier } from "@/components/member/MemberContext";
 import { fmtPts, fmtVnd, ORDER_KIND, ORDER_STATUS, ORDER_STATUS_CLASS, type Order, TX_KIND, type Tx } from "@/lib/commerce";
 
 import { useAdmin } from "./AdminContext";
@@ -15,10 +16,11 @@ interface Account {
   points_balance: number;
   membership_expires_at: string | null;
   membership_active: boolean;
+  tier: MemberTier;
   members: Member[];
   transactions: Tx[];
   orders: Order[];
-  purchases: { id: number; price: number; created_at: string; opportunity: { id: number; code: string; title: string } }[];
+  purchases: { id: number; price: number; exclusive: boolean; created_at: string; opportunity: { id: number; code: string; title: string } }[];
 }
 
 /** Ví điểm, thành viên, tài khoản đăng nhập, đơn & phiếu đã mua của 1 khách hàng */
@@ -66,12 +68,19 @@ export function AccountCard({ companyId, onChanged }: { companyId: number; onCha
         {user.role === "admin" ? <button className="adm-btn sm" onClick={() => setAdjusting(true)}>Điều chỉnh điểm</button> : null}
       </div>
       <div className="bd" style={{ display: "grid", gap: 16 }}>
-        <div className="adm-grid" style={{ gridTemplateColumns: "repeat(2, minmax(0,1fr))" }}>
+        <div className="adm-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
           <div><small className="muted">Số dư</small><div className="adm-price" style={{ fontSize: 22 }}>{fmtPts(a.points_balance)}</div></div>
           <div>
             <small className="muted">Thành viên</small>
             <div style={{ fontWeight: 600, color: a.membership_active ? "var(--ok)" : "var(--danger)" }}>{a.membership_active ? "Đang hiệu lực" : "Chưa kích hoạt / hết hạn"}</div>
             <div className="muted" style={{ fontSize: 12.5 }}>{a.membership_expires_at ? `Đến ${fmtDate(a.membership_expires_at)}` : "—"}</div>
+          </div>
+          <div>
+            <small className="muted">Hạng</small>
+            <div><span className={`adm-badge ${a.tier.key === "gold" ? "s-gold" : "s-suspended"}`}>Hạng {a.tier.label}</span></div>
+            <div className="muted" style={{ fontSize: 12.5 }}>
+              Tổng nạp {fmtVnd(a.tier.topup_total)}{a.tier.key === "gold" ? " · được mua độc quyền" : ` · còn ${fmtVnd(a.tier.to_gold)} lên Vàng`}
+            </div>
           </div>
         </div>
 
@@ -120,7 +129,10 @@ export function AccountCard({ companyId, onChanged }: { companyId: number; onCha
                 ))}
                 {tab === "buys" && a.purchases.map((p) => (
                   <tr key={p.id}>
-                    <td><Link className="name" href={`/admin/co-hoi/${p.opportunity.id}`}>{p.opportunity.title}</Link><div className="sub mono">{p.opportunity.code}</div></td>
+                    <td>
+                      <Link className="name" href={`/admin/co-hoi/${p.opportunity.id}`}>{p.opportunity.title}</Link>
+                      <div className="sub mono">{p.opportunity.code}{p.exclusive ? <span className="adm-badge s-gold" style={{ marginLeft: 6 }}>Độc quyền</span> : null}</div>
+                    </td>
                     <td className="adm-neg">{fmtPts(p.price)}</td>
                     <td style={{ whiteSpace: "nowrap" }}>{fmtDateTime(p.created_at)}</td>
                   </tr>

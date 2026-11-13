@@ -107,6 +107,7 @@ class Company(Base):
 
     source: Mapped[str] = mapped_column(String(40), default="landing")
     points_balance: Mapped[int] = mapped_column(BigInteger, default=0)
+    topup_total: Mapped[int] = mapped_column(BigInteger, default=0)  # tổng tiền đã nạp (đơn đã thanh toán) → hạng thành viên
     membership_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
     assigned_to_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"), index=True)
     ip: Mapped[str] = mapped_column(String(64), default="")
@@ -481,6 +482,7 @@ class Purchase(Base):
     opportunity_id: Mapped[int] = mapped_column(ForeignKey("opportunities.id", ondelete="CASCADE"), index=True)
     member_user_id: Mapped[int | None] = mapped_column(ForeignKey("member_users.id", ondelete="SET NULL"))
     price: Mapped[int] = mapped_column(BigInteger)
+    exclusive: Mapped[bool] = mapped_column(Boolean, default=False)  # mua độc quyền (hạng Vàng): đóng các lượt còn lại
     # Bản cơ hội tại thời điểm mua (nội dung, đầu mối, điểm/giá lúc mua) — cơ hội bị sửa sau đó thì khách vẫn xem được
     # đúng bản đã mua, và quản trị so sánh để quyết định hoàn điểm. None = mua trước khi có tính năng này.
     snapshot: Mapped[dict | None] = mapped_column(JSON)

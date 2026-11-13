@@ -4,13 +4,17 @@ Luồng:
   1. Admin thêm phiếu cơ hội — phiếu KHÔNG mang điểm.
   2. Khách gửi phiếu tìm cơ hội (tiêu chí + mô tả). Hệ thống so với mọi phiếu cơ hội đang bán
      (và ngược lại: phiếu cơ hội mới mở bán được so với mọi phiếu tìm cơ hội đã có).
-  3. Mỗi cặp được chấm điểm "hybrid":
-       - tiêu chí   : ngành / khu vực / loại cơ hội khớp tiêu chí đã chọn (chỉ tính nhóm khách có chọn)
-       - từ khoá    : mô tả của khách bao phủ bao nhiêu từ/cụm từ trong phiếu cơ hội
-       - ngữ nghĩa  : cosine giữa embedding mô tả của khách và embedding mô tả phiếu cơ hội
-     khớp yêu cầu = 0.40·tiêu chí + 0.35·ngữ nghĩa + 0.25·từ khoá  (khách không chọn tiêu chí: 0.60·ngữ nghĩa + 0.40·từ khoá)
-     điểm tổng    = 0.75·khớp yêu cầu + 0.10·cấp thiết (hạn chót) + 0.15·tin cậy (nguồn, enrich, đầu mối)
-  4. Cặp đạt ngưỡng "khớp yêu cầu" (và điểm tối thiểu khách chọn) được ghi vào:
+  3. Mỗi cặp qua 2 vòng:
+       a) VÒNG LOẠI — tiêu chí: ngành / khu vực / loại cơ hội khớp tiêu chí đã chọn (chỉ tính nhóm khách có chọn;
+          khu vực = tốt nhất giữa ô đã chọn và địa danh ghi trong mô tả). Điểm tiêu chí < cfg.match_min_criteria (80)
+          → loại, KHÔNG chấm tiếp. Tiêu chí chỉ để lọc, không cộng vào điểm.
+       b) CHẤM ĐIỂM — chỉ theo nội dung:
+          - ngữ nghĩa : cosine giữa embedding mô tả của khách và embedding mô tả phiếu cơ hội
+          - từ khoá   : mô tả của khách bao phủ bao nhiêu từ/cụm từ của phiếu, mỗi từ nặng theo độ hiếm (IDF trên
+                        các phiếu đang bán) → từ chung chung ("giao hàng", "thiết kế", "khu vực") gần như không được điểm
+          điểm = 0.60·ngữ nghĩa + 0.40·từ khoá; rồi đối chiếu sản phẩm cụ thể (khác sản phẩm ≤ 20, tương đương ≤ 70…).
+          Cấp thiết (hạn chót) và tin cậy (nguồn, enrich, đầu mối) lưu kèm để tham khảo / tính giá — không cộng vào điểm.
+  4. Cặp qua vòng loại, đạt điểm tối thiểu (cfg.match_min_fit và điểm tối thiểu khách chọn) được ghi vào:
        SearchRequestMatch  cơ hội phù hợp của từng phiếu tìm cơ hội
        UserOpportunity     "Tất cả cơ hội" của doanh nghiệp — gộp từ mọi phiếu, mỗi cơ hội 1 dòng, điểm cao nhất
      và tự thêm vào "Kho của tôi" (lần đầu tiên cơ hội xuất hiện với doanh nghiệp).
@@ -26,15 +30,16 @@ Kỹ thuật:
   - Chạy nền bằng Celery (worker.match_request_task / match_opportunity_task); "Tất cả cơ hội" của doanh nghiệp
     chỉ có dòng khi doanh nghiệp đã gửi phiếu tìm cơ hội và có cơ hội đạt ngưỡng.
   - Dự phòng (semantic=False): khi không lấy được embedding (hết 1.000 lượt/tháng của khoá Trial, sai khoá, Cohere lỗi)
-    vẫn so khớp bằng tiêu chí + từ khoá: khớp yêu cầu = 0.60·tiêu chí + 0.40·từ khoá (không chọn tiêu chí: chỉ từ khoá).
+    vẫn qua vòng loại tiêu chí như thường, điểm chỉ tính theo từ khoá.
 """
 
 import hashlib
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import date
 
-from sqlalchemy import Float, bindparam, or_, select, text
+from sqlalchemy import Float, bindparam, func, or_, select, text
 from sqlalchemy.orm import Session, selectinload, undefer
 
 from app.db import EmbeddingVector
@@ -45,10 +50,7 @@ from app.models import MemberNotification, Opportunity, Purchase, SavedOpportuni
 from app.services import embedding as emb
 from app.services import products as prod
 
-W_CRITERIA, W_SEMANTIC, W_KEYWORD = 0.40, 0.35, 0.25
-W_SEMANTIC_ONLY, W_KEYWORD_ONLY = 0.60, 0.40  # khách không chọn tiêu chí nào
-W_CRITERIA_NOSEM, W_KEYWORD_NOSEM = 0.60, 0.40  # dự phòng không có embedding
-W_FIT, W_URGENCY, W_TRUST = 0.75, 0.10, 0.15
+W_SEMANTIC, W_KEYWORD = 0.60, 0.40  # điểm = ngữ nghĩa + từ khoá (tiêu chí chỉ là vòng loại)
 CRITERIA_WEIGHTS = {"industries": 40, "regions": 30, "sources": 20}
 HASH_COS_RANGE = (0.03, 0.40)  # vector hash: cosine ≤ 0.03 → 0 điểm ngữ nghĩa, ≥ 0.40 → 100 điểm
 
@@ -230,6 +232,7 @@ class Scored:
     urgency: int
     trust: int
     reasons: list[str] = field(default_factory=list)
+    passed: bool = True  # qua vòng loại tiêu chí
 
 
 def _clamp(x: float, lo: float = 0.0, hi: float = 100.0) -> float:
@@ -327,16 +330,14 @@ def _region_score(wanted: list[str], o: Opportunity) -> tuple[float, str]:
 def _combined_region(q: "RequestCtx", o: Opportunity) -> tuple[float | None, str, bool]:
     """Điểm khu vực từ tiêu chí đã chọn + địa danh khách ghi trong mô tả. Trả về (điểm, khu vực khớp, khớp theo mô tả).
 
-    Mô tả ghi rõ địa điểm (vd. "giao hàng tại TP.HCM") được ƯU TIÊN hơn ô tiêu chí cố định (vd. "Quốc tế"):
-    cơ hội đúng địa điểm trong mô tả được đủ điểm, cơ hội chỉ khớp ô tiêu chí được một nửa."""
+    Khu vực là vòng loại: cơ hội đúng ô khách đã chọn HOẶC đúng địa điểm khách ghi trong mô tả (vd. "giao hàng tại TP.HCM")
+    đều qua — lấy điểm tốt hơn của hai nguồn."""
     chips = q.criteria.get("regions") or []
     if not q.places:
         return (_region_score(chips, o)[0], _region_score(chips, o)[1], False) if chips else (None, "", False)
     ns, nhit = _region_score(q.places, o)
     cs, chit = _region_score(chips, o) if chips else (0.0, "")
-    if ns >= cs / 2:
-        return ns, nhit, True
-    return cs / 2, chit, False
+    return (ns, nhit, True) if ns >= cs else (cs, chit, False)
 
 
 def _criteria_score(q: "RequestCtx", o: Opportunity, bag: WordBag) -> tuple[float | None, list[str]]:
@@ -364,23 +365,60 @@ def _criteria_score(q: "RequestCtx", o: Opportunity, bag: WordBag) -> tuple[floa
     return (total / weight if weight else None), reasons
 
 
-def _keyword_score(q_words: list[str], q_bigrams: set[str], bag: WordBag, strict: bool) -> tuple[float, list[str]]:
-    """Độ bao phủ từ khoá của yêu cầu trong phiếu; từ dài (đặc trưng hơn) nặng hơn, cụm 2 từ nặng gấp đôi.
+class Idf:
+    """Độ hiếm của từ trên các phiếu cơ hội đang bán: từ có ở hầu hết phiếu ("cần", "giao hàng", "thiết kế") → trọng số ≈ 0,
+    từ chỉ vài phiếu có ("giữ nhiệt", "carton") → ≈ 1. Ít phiếu quá (< 5) thì chưa đủ thống kê → mọi từ = 1."""
+
+    def __init__(self, texts: list[str]):
+        self.n = len(texts)
+        self.df: dict[str, int] = {}
+        for t in texts:
+            for w in {emb.fold(x) for x in emb.vtokens(t)}:
+                self.df[w] = self.df.get(w, 0) + 1
+
+    def factor(self, word: str) -> float:
+        if self.n < 5:
+            return 1.0
+        return math.log((self.n + 1) / (self.df.get(emb.fold(word), 0) + 1)) / math.log(self.n + 1)
+
+
+NO_IDF = Idf([])
+_idf_cache: dict = {}
+
+
+def corpus_idf(db: Session) -> Idf:
+    """IDF trên mọi phiếu cơ hội đang bán — tính lại khi danh sách / nội dung phiếu đổi."""
+    pub = Opportunity.status == "published"
+    key = (str(db.get_bind().url), *db.execute(select(func.count(), func.max(Opportunity.updated_at), func.max(Opportunity.id)).where(pub)).one())
+    if _idf_cache.get("key") != key:
+        rows = db.execute(select(Opportunity.title, Opportunity.summary, Opportunity.industry, Opportunity.scale, Opportunity.province,
+                                 Opportunity.region, Opportunity.source_type, Opportunity.detail).where(pub)).all()
+        _idf_cache.update(key=key, idf=Idf([". ".join(p for p in (*r[:7], (r[7] or "")[:2000]) if p) for r in rows]))
+    return _idf_cache["idf"]
+
+
+def _keyword_score(q_words: list[str], q_bigrams: set[str], bag: WordBag, strict: bool, idf: Idf = NO_IDF) -> tuple[float, list[str]]:
+    """Độ bao phủ từ khoá của yêu cầu trong phiếu; từ dài (đặc trưng hơn) nặng hơn, cụm 2 từ nặng gấp đôi,
+    và mọi từ nhân độ hiếm (IDF) — trùng từ chung chung không đẩy điểm lên.
 
     So có phân biệt dấu (WordBag) để "may" (may mặc) không khớp "máy", "gia công" không khớp "giá"."""
     if not q_words:
         return 0.0, []
     uniq = list(dict.fromkeys(q_words))
-    total = sum(1 + min(len(emb.fold(t)), 8) / 8 for t in uniq)
+    weight = {t: (1 + min(len(emb.fold(t)), 8) / 8) * idf.factor(t) for t in uniq}
+    total = sum(weight.values())
     got_w, hits = 0.0, []
     for t in uniq:
         if bag.has(t, strict):
-            got_w += 1 + min(len(emb.fold(t)), 8) / 8
-            hits.append(t)
+            got_w += weight[t]
+            if idf.factor(t) >= 0.25:  # lý do chỉ nêu từ có ý nghĩa
+                hits.append(t)
     for bg in q_bigrams:
+        a, b = bg.split(" ", 1)
+        w = 2 * min(idf.factor(a), idf.factor(b))
+        total += w
         if bag.has_phrase(bg, strict):
-            got_w += 2
-            total += 2
+            got_w += w
     need = min(total, 6.0)  # chỉ cần khớp ~6 đơn vị là đủ điểm tối đa — mô tả dài không bị phạt
     return _clamp(100 * got_w / need if need else 0.0), hits
 
@@ -426,37 +464,34 @@ def cos_range(cfg: Settings, model: str) -> tuple[float, float]:
     return HASH_COS_RANGE if model.startswith("hash") else (cfg.cohere_cos_low, cfg.cohere_cos_high)
 
 
-def score_pair(q: RequestCtx, o: Opportunity, cos: float | None, cfg: Settings, today: date | None = None) -> Scored:
-    """Chấm 1 cặp (phiếu tìm, phiếu cơ hội). cos = cosine embedding (pgvector đã tính sẵn); None = không có embedding."""
+def score_pair(q: RequestCtx, o: Opportunity, cos: float | None, cfg: Settings, today: date | None = None, idf: Idf = NO_IDF) -> Scored:
+    """Chấm 1 cặp (phiếu tìm, phiếu cơ hội). cos = cosine embedding (pgvector đã tính sẵn); None = không có embedding.
+
+    Vòng loại tiêu chí (passed) → điểm = 0.60·ngữ nghĩa + 0.40·từ khoá, giới hạn theo đối chiếu sản phẩm."""
     today = today or date.today()
     bag = WordBag(opp_text(o))
+    urgency, trust = urgency_of(o, today), _trust(o)
 
-    kw, hits = _keyword_score(q.q_words, q.q_bigrams, bag, q.accented)
-    sem = 0.0
-    if cos is not None:
+    crit, crit_reasons = _criteria_score(q, o, bag)
+    passed = crit is None or crit >= cfg.match_min_criteria
+
+    kw, hits = _keyword_score(q.q_words, q.q_bigrams, bag, q.accented, idf)
+    if cos is None:  # dự phòng không có embedding: chỉ từ khoá
+        fit = kw
+        sem = 0.0
+    else:
         lo, hi = cos_range(cfg, o.embedding_model)
         sem = _clamp(100 * (cos - lo) / (hi - lo))
+        fit = W_SEMANTIC * sem + W_KEYWORD * kw
 
     reasons: list[str] = []
-    crit, crit_reasons = _criteria_score(q, o, bag)
-    if cos is None:  # dự phòng: chỉ tiêu chí + từ khoá
-        fit = kw if crit is None else W_CRITERIA_NOSEM * crit + W_KEYWORD_NOSEM * kw
-    elif crit is None:
-        fit = W_SEMANTIC_ONLY * sem + W_KEYWORD_ONLY * kw
-    else:
-        fit = W_CRITERIA * crit + W_SEMANTIC * sem + W_KEYWORD * kw
-    if crit is not None:
-        if _combined_region(q, o)[0] == 0:
-            fit *= 0.75 if q.places else 0.8  # sai khu vực khách yêu cầu → trừ điểm (ghi rõ trong mô tả thì trừ nặng hơn)
-
     # Đối chiếu SẢN PHẨM cụ thể: cùng ngành nhưng khác sản phẩm thì không được điểm cao
     # chỉ xét nội dung cơ hội — KHÔNG xét cột ngành (ngành rộng như "Bao bì & in ấn" chính là nguyên nhân khớp sai)
     rel, rel_keys = prod.product_relation(q.products, ". ".join(p for p in (o.title, o.summary, o.scale, (o.detail or "")[:2000]) if p))
     if rel == "direct":
-        fit = 0.6 * fit + 40
         reasons.append("Đúng sản phẩm: " + ", ".join(prod.product_names(rel_keys)))
     elif rel == "equivalent":
-        fit = min(0.6 * fit + 24, 70)
+        fit = min(fit, 70)
         reasons.append(f"Sản phẩm tương đương: {', '.join(prod.product_names(rel_keys))} (bạn tìm {', '.join(prod.product_names(q.products))})")
     elif rel == "unknown":
         fit = min(fit, 50)
@@ -464,7 +499,9 @@ def score_pair(q: RequestCtx, o: Opportunity, cos: float | None, cfg: Settings, 
     elif rel == "unrelated":
         fit = min(fit, 20)  # dưới ngưỡng khớp → không đưa vào kết quả
         reasons.append(f"Khác sản phẩm: {', '.join(prod.product_names(rel_keys))}" if rel_keys else "Không nhắc tới sản phẩm bạn cần")
-    if rel != "unrelated" and crit is not None:
+    if not passed:
+        reasons.insert(0, f"Chưa đạt tiêu chí bạn chọn (ngành / khu vực / loại cơ hội): {crit:.0f}/100")
+    elif rel != "unrelated" and crit is not None:
         reasons += crit_reasons  # lý do sản phẩm đứng đầu (thẻ cơ hội chỉ hiện 2 lý do đầu)
     shown = [h for h in hits if len(h) > 2]
     if shown:
@@ -474,14 +511,12 @@ def score_pair(q: RequestCtx, o: Opportunity, cos: float | None, cfg: Settings, 
     elif sem >= 35:
         reasons.append("Nội dung có liên quan tới mô tả yêu cầu")
 
-    urgency, trust = urgency_of(o, today), _trust(o)
-    fit_i = round(_clamp(fit))
-    total = round(W_FIT * fit_i + W_URGENCY * urgency + W_TRUST * trust)
-    return Scored(score=int(_clamp(total)), fit=fit_i, urgency=urgency, trust=trust, reasons=reasons)
+    fit_i = int(round(_clamp(fit)))
+    return Scored(score=fit_i, fit=fit_i, urgency=urgency, trust=trust, reasons=reasons, passed=passed)
 
 
 def is_match(q: RequestCtx, s: Scored, cfg: Settings) -> bool:
-    return s.fit >= cfg.match_min_fit and s.score >= q.min_score
+    return s.passed and s.fit >= cfg.match_min_fit and s.score >= q.min_score
 
 
 # ------------------------------------------------------------------ ghi kết quả
@@ -572,9 +607,9 @@ def match_request(db: Session, req: SearchRequest, cfg: Settings | None = None, 
         if semantic:
             sync_request_embeddings(db, cfg, [req])  # có thể ném EmbeddingError
             _catch_up(db, cfg)
-        q = RequestCtx(req)
+        q, idf = RequestCtx(req), corpus_idf(db)
         for o, cos in (_nearest_opps(db, cfg, req, today) if semantic else _all_opps(db, today)):
-            s = score_pair(q, o, cos, cfg, today)
+            s = score_pair(q, o, cos, cfg, today, idf)
             if is_match(q, s, cfg):
                 _upsert_request_match(db, req.id, o.id, s, prev.pop(o.id, None))
                 touched.add(o.id)
@@ -604,9 +639,10 @@ def match_opportunity(db: Session, opp: Opportunity, cfg: Settings | None = None
         if semantic:
             sync_opp_embeddings(db, cfg, [opp])  # chỉ gọi API khi nội dung đổi; có thể ném EmbeddingError
             _catch_up(db, cfg)
+        idf = corpus_idf(db)
         for r, cos in (_nearest_requests(db, cfg, opp) if semantic else _all_requests(db)):
             q = RequestCtx(r)
-            s = score_pair(q, opp, cos, cfg, today)
+            s = score_pair(q, opp, cos, cfg, today, idf)
             if is_match(q, s, cfg):
                 existing = prev.pop(r.id, None)
                 _upsert_request_match(db, r.id, opp.id, s, existing)

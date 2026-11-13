@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Skeleton } from "@/components/admin/ui";
 import { useMember } from "@/components/member/MemberContext";
+import { TierCard } from "@/components/member/Tier";
 import { fmtDate, fmtDateTime } from "@/lib/admin/format";
 import { fmtPts, fmtVnd, ORDER_KIND, ORDER_STATUS, ORDER_STATUS_CLASS, type Order, TX_KIND, type Tx } from "@/lib/commerce";
 import { errMsg, mapi, qs } from "@/lib/member/api";
@@ -51,6 +52,7 @@ export default function WalletPage() {
           <span>{c.membership_expires_at ? `Hết hạn ${fmtDate(c.membership_expires_at)}` : "Thanh toán phí để kích hoạt"}</span>
         </div>
       </div>
+      <div style={{ marginBottom: 16 }}><TierCard t={c.tier} /></div>
 
       <section className="adm-card" style={{ marginBottom: 16 }}>
         <div className="hd">

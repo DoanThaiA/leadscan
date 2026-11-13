@@ -39,7 +39,7 @@ from app.registration_form import _valid_url as valid_url
 from app.schemas import LoginIn, PasswordChangeIn
 from app.schemas_commerce import EnrichIn, EnrichOut, InvoiceIn, OrderCreateIn, OrderOut, TxOut
 from app.security import DUMMY_HASH, add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
-from app.services import attachments, catalog, mcv_payments, payments
+from app.services import attachments, catalog, mcv_payments, payments, tiers
 from app.services import products as prod
 from app.services.mcv import McvClient, McvError
 from app.worker import enqueue, issue_einvoice_task, match_request_now, send_invoice_request_task, send_password_reset_task, send_search_request_task
@@ -63,6 +63,7 @@ def _me(user: MemberUser) -> dict:
             "points_balance": c.points_balance,
             "membership_expires_at": _iso(c.membership_expires_at),
             "membership_active": catalog.membership_active(c),
+            "tier": tiers.tier_out(c),
         },
     }
 
@@ -374,7 +375,9 @@ def get_opportunity(opp_id: int, user: MemberUser = Depends(current_member), db:
     if not p:
         saved = bool(catalog.saved_ids(db, user.company_id, [o.id]))
         # chưa mua: chỉ cho biết có bao nhiêu ảnh / tài liệu (mở khoá sau khi mua)
-        return {"opportunity": catalog.preview(o, saved=saved, match=u), "purchase": None, "attachment_counts": attachments.counts(db, o.id)}
+        pv = catalog.preview(o, saved=saved, match=u)
+        return {"opportunity": pv, "purchase": None, "attachment_counts": attachments.counts(db, o.id),
+                "exclusive": tiers.exclusive_offer(user.company, o, pv["price"])}
     enrich = db.scalars(select(EnrichRequest).where(EnrichRequest.purchase_id == p.id).order_by(EnrichRequest.id.desc())).unique().all()
     return {
         "opportunity": catalog.full(o, u),
@@ -400,7 +403,7 @@ def open_shared(opp_id: int, user: MemberUser = Depends(current_member), db: Ses
     cid = user.company_id
     if catalog.user_match(db, cid, o.id) is None and not db.scalar(select(Purchase.id).where(Purchase.company_id == cid, Purchase.opportunity_id == o.id)):
         urg, trust = urgency_of(o, _date.today()), _trust(o)
-        db.add(UserOpportunity(company_id=cid, opportunity_id=o.id, score=round(0.10 * urg + 0.15 * trust), score_fit=0,
+        db.add(UserOpportunity(company_id=cid, opportunity_id=o.id, score=0, score_fit=0,  # chưa so khớp với yêu cầu → điểm phù hợp 0 (giá cơ bản)
                                score_urgency=urg, score_trust=trust, via_share=True,
                                reasons=["Bạn mở cơ hội này từ liên kết chia sẻ — chưa so khớp với yêu cầu tìm cơ hội của bạn"]))
         if not catalog.saved_ids(db, cid, [o.id]):
@@ -409,9 +412,13 @@ def open_shared(opp_id: int, user: MemberUser = Depends(current_member), db: Ses
     return {"id": o.id}
 
 
+class PurchaseIn(BaseModel):
+    exclusive: bool = False  # mua độc quyền (hạng Vàng)
+
+
 @router.post("/opportunities/{opp_id}/purchase")
-def purchase(opp_id: int, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
-    p = catalog.buy(db, user, opp_id)
+def purchase(opp_id: int, body: PurchaseIn | None = None, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    p = catalog.buy(db, user, opp_id, exclusive=bool(body and body.exclusive))
     db.refresh(user.company)
     return {"ok": True, "purchase_id": p.id, "points_balance": user.company.points_balance}
 

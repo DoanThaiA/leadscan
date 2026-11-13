@@ -143,7 +143,7 @@ export function OppForm({ initial, onSubmit, submitLabel }: { initial?: Opp; onS
             <div className="hd"><div><h2>Điểm &amp; giá theo khách</h2><p className="muted" style={{ fontSize: 12.5 }}>Phiếu không nhập điểm</p></div></div>
             <div className="bd" style={{ display: "grid", gap: 8 }}>
               <p className="muted" style={{ fontSize: 13 }}>
-                Hệ thống tự so khớp phiếu với các phiếu tìm cơ hội của khách (tiêu chí + từ khoá + ngữ nghĩa) và chấm điểm riêng cho từng khách. Giá phiếu ở trên là <b>giá cơ bản</b>: khách điểm cao trả cao hơn, điểm thấp trả thấp hơn.
+                Hệ thống tự so khớp phiếu với các phiếu tìm cơ hội của khách (lọc bắt buộc theo tiêu chí ngành / khu vực / loại cơ hội, rồi chấm điểm theo ngữ nghĩa + từ khoá) và chấm điểm riêng cho từng khách. Giá phiếu ở trên là <b>giá cơ bản</b>: khách điểm cao trả cao hơn, điểm thấp trả thấp hơn.
               </p>
               {o ? <p style={{ fontSize: 13 }}>Hiện khớp <b>{o.match_count ?? 0}</b> khách hàng.</p> : <p className="muted" style={{ fontSize: 12.5 }}>Sau khi lưu ở trạng thái “Đang bán”, phiếu tự được so khớp với các phiếu tìm cơ hội đang có.</p>}
             </div>

@@ -142,7 +142,10 @@ class Settings(BaseSettings):
     # Khoá Trial (miễn phí) của Cohere: dùng được mọi model nhưng tối đa 1.000 lần gọi API/tháng, 2.000 văn bản/phút.
     # Hết hạn mức tháng → không gọi Cohere nữa, so khớp chỉ dùng tiêu chí + từ khoá tới tháng sau. 0 = không giới hạn.
     cohere_monthly_limit: int = 1000
-    match_min_fit: int = 35  # điểm "khớp yêu cầu" tối thiểu (0–100) để cơ hội được xem là phù hợp
+    gold_topup_threshold: int = 10_000_000  # tổng nạp từ mức này → hạng Vàng
+    exclusive_price_multiplier: float = 2.0  # mua độc quyền = hệ số × giá phiếu đang hiển thị cho thành viên
+    match_min_fit: int = 45  # điểm phù hợp (ngữ nghĩa + từ khoá) tối thiểu (0–100) để cơ hội được xem là phù hợp
+    match_min_criteria: int = 80  # vòng loại: điểm tiêu chí (ngành / khu vực / loại nguồn khách chọn) phải đạt mức này mới được chấm
     match_candidates: int = 500  # số ứng viên gần nhất (pgvector) đưa vào chấm điểm hybrid mỗi lần so khớp
     # Cosine Cohere quy ra điểm ngữ nghĩa: ≤ low → 0, ≥ high → 100. Nên chỉnh lại theo dữ liệu thật.
     cohere_cos_low: float = 0.20

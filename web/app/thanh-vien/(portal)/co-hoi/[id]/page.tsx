@@ -12,8 +12,15 @@ import { type Attachment, ENRICH_STATUS, type EnrichReq, fmtPts, type Opp, type 
 import { ApiError, errMsg, mapi } from "@/lib/member/api";
 import { DEFAULT_BACK, oppBackLink } from "@/lib/member/back";
 
+interface ExclusiveOffer {
+  available: boolean;
+  price: number;
+  reason: string;
+}
+
 interface Resp {
   opportunity: Opp;
+  exclusive?: ExclusiveOffer; // chưa mua: quyền mua độc quyền (hạng Vàng)
   purchase: (PurchaseInfo & { enrich_requests: EnrichReq[] }) | null;
   attachments?: Attachment[]; // chỉ khi đã mua — link xem/tải ký sẵn ngắn hạn
   attachment_counts?: { images: number; files: number }; // chưa mua: chỉ biết số lượng
@@ -24,7 +31,7 @@ export default function OppDetailPage() {
   const { me, refresh } = useMember();
   const [d, setD] = useState<Resp | null>(null);
   const [error, setError] = useState("");
-  const [buying, setBuying] = useState(false);
+  const [buying, setBuying] = useState<false | "normal" | "exclusive">(false);
   const [buyErr, setBuyErr] = useState<{ text: string; status: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [back, setBack] = useState(DEFAULT_BACK);
@@ -43,7 +50,7 @@ export default function OppDetailPage() {
     setBusy(true);
     setBuyErr(null);
     try {
-      await mapi.post(`/opportunities/${id}/purchase`);
+      await mapi.post(`/opportunities/${id}/purchase`, { exclusive: buying === "exclusive" });
       setBuying(false);
       await Promise.all([load(), refresh()]);
     } catch (e) {
@@ -78,7 +85,10 @@ export default function OppDetailPage() {
   // bản đã mua: nội dung + điểm lúc mua; số lượt bán luôn lấy hiện tại
   const o = bought ? { ...cur, ...p!.snapshot!, sold_count: cur.sold_count, max_buyers: cur.max_buyers, sold_out: cur.sold_out } : cur;
   const owned = !!p;
-  const enough = me.company.points_balance >= o.price;
+  const ex = !owned ? d.exclusive : undefined;
+  const pay = buying === "exclusive" && ex ? ex.price : o.price; // giá của lựa chọn đang xác nhận
+  const enough = me.company.points_balance >= pay;
+  const tier = me.company.tier;
 
   return (
     <>
@@ -179,16 +189,35 @@ export default function OppDetailPage() {
                 <small>{o.max_buyers === 1 ? "Phiếu độc quyền — chỉ 1 doanh nghiệp mua" : `Còn ${Math.max(0, o.max_buyers - o.sold_count)}/${o.max_buyers} lượt mua`}</small>
               </div>
               {owned ? (
-                <div className="adm-alert ok">Bạn đã mua phiếu này lúc {fmtDateTime(d.purchase!.created_at)} ({fmtPts(d.purchase!.price)}).</div>
+                <div className="adm-alert ok">
+                  Bạn đã {d.purchase!.exclusive ? <b>mua độc quyền</b> : "mua"} phiếu này lúc {fmtDateTime(d.purchase!.created_at)} ({fmtPts(d.purchase!.price)}).
+                  {d.purchase!.exclusive ? " Không doanh nghiệp nào khác mua được phiếu này." : ""}
+                </div>
               ) : o.sold_out ? (
                 <div className="adm-alert">Phiếu đã hết lượt mua.</div>
               ) : !me.company.membership_active ? (
                 <Link className="adm-btn primary" href="/thanh-vien/nap-tien" style={{ height: 42 }}>Kích hoạt thành viên để mua</Link>
               ) : (
-                <button className="adm-btn primary" style={{ height: 42 }} onClick={() => { setBuyErr(null); setBuying(true); }}>
+                <button className="adm-btn primary" style={{ height: 42 }} onClick={() => { setBuyErr(null); setBuying("normal"); }}>
                   <Icon name="ticket" size={16} /> Mua phiếu cơ hội
                 </button>
               )}
+              {ex && !o.sold_out && me.company.membership_active && o.max_buyers > 1 ? (
+                ex.available ? (
+                  <div className="mt-ex">
+                    <div><b>★ Mua độc quyền · {fmtPts(ex.price)}</b><span>Hạng Vàng: chỉ mình bạn có phiếu này, đóng {o.max_buyers - 1} lượt mua còn lại.</span></div>
+                    <button className="adm-btn" onClick={() => { setBuyErr(null); setBuying("exclusive"); }}>Mua độc quyền</button>
+                  </div>
+                ) : tier.key !== "gold" && o.sold_count === 0 ? (
+                  <div className="mt-ex locked">
+                    <div>
+                      <b>Mua độc quyền · {fmtPts(ex.price)}</b>
+                      <span>Dành cho hạng Vàng (tổng nạp từ {tier.gold_threshold.toLocaleString("vi-VN")}đ). Bạn cần nạp thêm {tier.to_gold.toLocaleString("vi-VN")}đ.</span>
+                    </div>
+                    <Link className="adm-btn sm" href="/thanh-vien/nap-tien">Nạp để lên hạng</Link>
+                  </div>
+                ) : null
+              ) : null}
               {!owned ? (
                 <button className={o.saved ? "adm-btn saved" : "adm-btn"} onClick={toggleSave} disabled={saving} aria-pressed={!!o.saved}
                   style={o.saved ? { color: "var(--brand-600)", borderColor: "var(--brand-100)", background: "var(--brand-50)" } : undefined}>
@@ -201,7 +230,7 @@ export default function OppDetailPage() {
           <section className="adm-card">
             <div className="hd"><h2>{bought ? "Điểm tại thời điểm mua" : "Điểm phù hợp với bạn"}</h2><ScoreChip score={o.score} /></div>
             <div className="bd adm-meter">
-              {[["Khớp yêu cầu của bạn", o.score_fit], ["Độ cấp thiết", o.score_urgency], ["Độ tin cậy nguồn", o.score_trust]].map(([label, v]) => (
+              {[["Độ cấp thiết (tham khảo)", o.score_urgency], ["Độ tin cậy nguồn (tham khảo)", o.score_trust]].map(([label, v]) => (
                 <div key={label as string}>
                   <span>{label}</span>
                   <span className="track"><i style={{ width: `${v}%` }} /></span>
@@ -215,15 +244,19 @@ export default function OppDetailPage() {
                   {o.reasons.map((r) => <li key={r}>{r}</li>)}
                 </ul>
               ) : null}
-              <p className="muted" style={{ fontSize: 12 }}>Điểm tính riêng cho doanh nghiệp bạn từ các phiếu tìm cơ hội; điểm càng cao thì giá phiếu càng cao.</p>
+              <p className="muted" style={{ fontSize: 12 }}>
+                Điểm tính riêng cho doanh nghiệp bạn: cơ hội phải đạt tiêu chí bạn chọn (ngành, khu vực, loại cơ hội) mới được chấm, rồi điểm
+                = mức gần nghĩa + trùng từ khoá giữa mô tả của bạn và cơ hội. Độ cấp thiết, độ tin cậy chỉ để tham khảo, không cộng vào điểm.
+                Điểm càng cao thì giá phiếu càng cao.
+              </p>
             </div>
           </section>
         </div>
       </div>
 
       <Dialog
-        open={buying}
-        title="Xác nhận mua phiếu"
+        open={!!buying}
+        title={buying === "exclusive" ? "Xác nhận mua độc quyền" : "Xác nhận mua phiếu"}
         onClose={() => setBuying(false)}
         footer={
           <>
@@ -231,17 +264,20 @@ export default function OppDetailPage() {
             {buyErr?.status === 402 && buyErr.text.includes("Số dư") ? (
               <Link className="adm-btn primary" href="/thanh-vien/nap-tien">Nạp thêm điểm</Link>
             ) : (
-              <button className="adm-btn primary" onClick={buy} disabled={busy || !enough}>{busy ? "Đang mua…" : `Mua với ${fmtPts(o.price)}`}</button>
+              <button className="adm-btn primary" onClick={buy} disabled={busy || !enough}>{busy ? "Đang mua…" : `${buying === "exclusive" ? "Mua độc quyền" : "Mua"} với ${fmtPts(pay)}`}</button>
             )}
           </>
         }
       >
         <p><b>{o.title}</b></p>
         <dl className="adm-kv">
-          <dt>Giá phiếu</dt><dd><b>{fmtPts(o.price)}</b></dd>
+          <dt>Giá phiếu</dt><dd>{buying === "exclusive" ? <><s className="muted">{fmtPts(o.price)}</s> → <b>{fmtPts(pay)}</b> (×{tier.exclusive_multiplier.toLocaleString("vi-VN")} độc quyền)</> : <b>{fmtPts(pay)}</b>}</dd>
           <dt>Số dư hiện tại</dt><dd>{fmtPts(me.company.points_balance)}</dd>
-          <dt>Số dư sau khi mua</dt><dd style={{ color: enough ? "var(--ink)" : "var(--danger)" }}>{fmtPts(me.company.points_balance - o.price)}</dd>
+          <dt>Số dư sau khi mua</dt><dd style={{ color: enough ? "var(--ink)" : "var(--danger)" }}>{fmtPts(me.company.points_balance - pay)}</dd>
         </dl>
+        {buying === "exclusive" ? (
+          <div className="adm-alert ok">Mua độc quyền: phiếu đóng ngay {o.max_buyers - 1} lượt mua còn lại, không doanh nghiệp nào khác mua được nữa.</div>
+        ) : null}
         {!enough ? <div className="adm-alert">Số dư không đủ. Vui lòng nạp thêm điểm.</div> : null}
         {buyErr ? <div className="adm-alert">{buyErr.text}</div> : null}
         <p className="muted" style={{ fontSize: 12.5 }}>Sau khi mua, thông tin bên có nhu cầu và đầu mối liên hệ được mở khoá ngay và lưu trong mục “Phiếu đã mua”.</p>

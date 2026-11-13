@@ -262,20 +262,21 @@ def test_khong_du_diem(admin, member):
 
 
 def test_loc_va_sap_xep(admin, member):
-    make_opp(admin, title="A rẻ: thùng carton cho kho logistics", price=29_000, region="Miền Nam", province="Đồng Nai", industry="Logistics & vận tải", detail="")
+    # A cùng ngành, khu vực "Toàn quốc" (qua vòng loại tiêu chí) nhưng nội dung ít liên quan hơn B
+    make_opp(admin, title="A rẻ: thùng carton cho kho logistics", summary="Kho hàng logistics cần thùng đóng gói", price=29_000, region="Toàn quốc", province="", detail="")
     make_opp(admin, title="B đắt: hộp carton 5 lớp cho nhà máy Bắc Ninh", price=5_000_000)
-    ask(member, "Cần mua hộp carton thùng carton bao bì cho nhà máy ở Bắc Ninh", regions=["Miền Bắc"])
+    ask(member, "Cần mua hộp carton 5 lớp cho nhà máy điện tử ở Bắc Ninh", regions=["Miền Bắc"])
     get = lambda **p: [i["title"][:1] for i in member.get("/api/member/opportunities", params=p).json()["items"]]  # noqa: E731
     assert get(sort="price_asc") == ["A", "B"]
     assert get(sort="price_desc") == ["B", "A"]
-    assert get(sort="score") == ["B", "A"]  # B khớp ngành + khu vực nên điểm cao hơn
-    assert get(region="Miền Nam") == ["A"]
+    assert get(sort="score") == ["B", "A"]  # B khớp nội dung hơn nên điểm cao hơn
+    assert get(region="Toàn quốc") == ["A"]
     top = member.get("/api/member/opportunities", params={"sort": "score"}).json()["items"]
     assert top[0]["score"] > top[1]["score"]
     assert get(min_score=top[0]["score"]) == ["B"]
     assert get(q="đắt") == ["B"]
     facets = member.get("/api/member/opportunities").json()["facets"]
-    assert "Logistics & vận tải" in facets["industries"]
+    assert facets["industries"] == ["Bao bì & in ấn"]  # ngành của các cơ hội khách thấy
 
 
 def test_yeu_cau_enrich(admin, member):

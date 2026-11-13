@@ -1,5 +1,24 @@
 /* Cổng thành viên — dùng chung token của admin.css (.adm) */
 
+/* ---------- Hạng thành viên ---------- */
+.mt-tier { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font: 600 12px/1.6 var(--head, inherit); white-space: nowrap; font-family: inherit; }
+.mt-tier.sm { padding: 0 7px; font-size: 11px; }
+.mt-tier.standard { background: var(--line-2); color: var(--muted); }
+.mt-tier.gold { background: var(--accent); color: var(--brand-800); }
+.mt-tier-card.gold { border-color: var(--accent-100); background: linear-gradient(135deg, var(--accent-50), #fff 60%); }
+.mt-tier-total { font-size: 14px; color: var(--muted); }
+.mt-tier-total b { font: 700 20px/1.2 var(--head); color: var(--ink); margin-left: 4px; }
+.mt-tier-card .bar { height: 6px; border-radius: 99px; background: var(--line-2); overflow: hidden; }
+.mt-tier-card .bar i { display: block; height: 100%; background: var(--brand); border-radius: 99px; }
+.mt-tier-perk { font-size: 13px; color: var(--ink-2); margin: 0; }
+.mt-ex { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius); background: var(--accent-50); border: 1px solid var(--accent-100); }
+.mt-ex div { display: grid; gap: 2px; min-width: 0; }
+.mt-ex b { font-size: 13.5px; color: var(--ink); }
+.mt-ex span { font-size: 12px; color: var(--muted); }
+.mt-ex .adm-btn { flex: none; }
+.mt-ex.locked { background: var(--line-2); border-color: var(--line); }
+@media (max-width: 480px) { .mt-ex { flex-direction: column; align-items: stretch; } }
+
 /* ---------- Tìm cơ hội phù hợp: form 2 cột cân đối + danh sách phiếu | chi tiết phiếu ---------- */
 .adm-badge.sr-live { background: #e6f6ec; color: #157f3b; }
 .adm-badge.sr-live::before { animation: sr-pulse 1.8s ease-in-out infinite; }

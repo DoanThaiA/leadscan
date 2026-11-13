@@ -51,7 +51,7 @@ from app.schemas_commerce import (
     TxOut,
 )
 from app.security import hash_password
-from app.services import attachments, catalog, payments, usage, wallet
+from app.services import attachments, catalog, payments, tiers, usage, wallet
 from app.worker import (
     enqueue,
     run_einvoice,
@@ -233,6 +233,7 @@ def _purchase_admin_out(db: Session, p: Purchase) -> dict:
     return {
         "id": p.id,
         "price": p.price,
+        "exclusive": p.exclusive,
         "created_at": _iso(p.created_at),
         "company": _company_ref(p.company),
         "score_at_purchase": (p.snapshot or {}).get("score"),
@@ -603,11 +604,12 @@ def company_account(company_id: int, _: AdminUser = Depends(current_user), db: S
         "points_balance": c.points_balance,
         "membership_expires_at": _iso(c.membership_expires_at),
         "membership_active": catalog.membership_active(c),
+        "tier": tiers.tier_out(c),
         "members": [_member_out(m) for m in members],
         "transactions": [TxOut.model_validate(t).model_dump(mode="json") for t in txs],
         "orders": [_order_out(o) for o in orders],
         "purchases": [
-            {"id": p.id, "price": p.price, "created_at": _iso(p.created_at), "opportunity": {"id": p.opportunity.id, "code": p.opportunity.code, "title": p.opportunity.title}}
+            {"id": p.id, "price": p.price, "exclusive": p.exclusive, "created_at": _iso(p.created_at), "opportunity": {"id": p.opportunity.id, "code": p.opportunity.code, "title": p.opportunity.title}}
             for p in buys
         ],
     }

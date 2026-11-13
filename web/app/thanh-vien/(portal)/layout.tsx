@@ -6,6 +6,7 @@ import { type ReactNode, useEffect, useState } from "react";
 
 import { Icon, initials } from "@/components/admin/ui";
 import { MemberProvider, useMember } from "@/components/member/MemberContext";
+import { TierBadge } from "@/components/member/Tier";
 import { NoticeBell, NoticeProvider, useNotices } from "@/components/member/Notifications";
 import { fmtPts } from "@/lib/commerce";
 import { mapi } from "@/lib/member/api";
@@ -73,7 +74,10 @@ function Shell({ children }: { children: ReactNode }) {
           })}
         </nav>
         <Link href="/thanh-vien/vi" className="mt-credit">
-          <small>Số dư thành viên còn lại</small>
+          <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+            <small>Số dư thành viên còn lại</small>
+            <TierBadge t={me.company.tier} small />
+          </span>
           <b>{fmtPts(me.company.points_balance)}</b>
           <span className="bar"><i style={{ width: `${Math.min(100, Math.round((me.company.points_balance / MEMBERSHIP_POINTS) * 100))}%` }} /></span>
           <span style={{ fontSize: 12, color: me.company.membership_active ? "var(--ok)" : "var(--danger)" }}>

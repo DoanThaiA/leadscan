@@ -77,11 +77,15 @@ def test_chi_xem_co_hoi_phu_hop_va_diem_rieng_tung_user(admin, member, client):
     pay_membership(b)
     assert b.post(f"/api/member/opportunities/{oid}/purchase").status_code == 404
 
-    # user C: khớp yếu (chỉ mô tả, ngành/khu vực khác) → có thấy nhưng điểm & giá thấp hơn user A
+    # user C: mô tả liên quan nhưng chọn ngành khác → không qua vòng loại tiêu chí, không thấy
     c = other_member(client, 3)
-    weak = ask(c, "Cần thùng carton, hộp giấy bao bì cho kho hàng", industries=["Logistics & vận tải"], regions=["Toàn quốc"])
+    assert ask(c, "Cần thùng carton, hộp giấy bao bì cho kho hàng", industries=["Logistics & vận tải"], regions=["Toàn quốc"])["match_count"] == 0
+
+    # user D: đúng tiêu chí, mô tả khớp ít hơn → có thấy nhưng điểm & giá thấp hơn user A
+    d = other_member(client, 4)
+    weak = ask(d, "Xưởng sản xuất hộp giấy, túi giấy kraft, nhận đơn toàn quốc", regions=["Toàn quốc"])
     assert weak["match_count"] == 1
-    theirs = view(c, oid)
+    theirs = view(d, oid)
     assert theirs["score"] < mine["score"] and theirs["price"] < mine["price"]
     assert view(member, oid)["score"] == mine["score"]  # điểm của A không bị ảnh hưởng
 
@@ -148,8 +152,8 @@ def test_phieu_tu_choi_va_so_khop_lai(admin, member):
 
 def test_min_score_cua_phieu_loc_bot_co_hoi(admin, member):
     make_opp(admin)
-    r = ask(member, CARTON_NOTE, min_score=100)
-    assert r["match_count"] == 0  # không cơ hội nào đạt 100 điểm
+    r = ask(member, "Xưởng sản xuất hộp giấy, túi giấy kraft, nhận đơn toàn quốc", regions=["Toàn quốc"], min_score=95)
+    assert r["match_count"] == 0  # khớp được nhưng chưa tới 95 điểm khách đặt
     assert member.get("/api/member/dashboard").json()["matched_count"] == 0
     ask(member)
     assert member.get("/api/member/dashboard").json()["matched_count"] == 1
@@ -248,14 +252,28 @@ def test_cung_nganh_khac_san_pham_khong_duoc_diem_cao(admin, member):
     assert any(x.startswith("Đúng sản phẩm") for x in items[synonym]["reasons"])
 
 
-def test_uu_tien_dia_diem_ghi_trong_mo_ta(admin, member):
-    """Khách để ô Khu vực = Quốc tế nhưng mô tả cần giao tại TP.HCM → cơ hội ở TP.HCM / miền Nam xếp trên cơ hội quốc tế."""
+def test_vong_loai_khu_vuc_theo_o_chon_hoac_mo_ta(admin, member):
+    """Khu vực là vòng loại: đúng ô khách chọn (Quốc tế) HOẶC đúng địa điểm ghi trong mô tả (TP.HCM / miền Nam) đều qua;
+    sai cả hai (Hà Nội) → loại dù cùng sản phẩm. Điểm chỉ tính theo nội dung, không cộng khu vực."""
     hcm = _bag_opp(admin, "Cần 5.000 túi giữ nhiệt giao kho Thủ Đức", province="TP.HCM")
     binh_duong = _bag_opp(admin, "Cần 5.000 túi giữ nhiệt cho nhà máy", province="Bình Dương")
     intl = _bag_opp(admin, "Importer needs 5,000 túi giữ nhiệt (thermal bag) OEM", province="Nhật Bản", region="Quốc tế")
+    ha_noi = _bag_opp(admin, "Cần 5.000 túi giữ nhiệt cho chuỗi cửa hàng", province="Hà Nội", region="Miền Bắc")
     r = ask(member, THERMAL_NOTE, industries=["Bao bì & in ấn"], regions=["Quốc tế"])
-    items = {i["id"]: i["score"] for i in member.get(f"/api/member/search-requests/{r['id']}/opportunities").json()["items"]}
-    assert items[hcm] > items[intl] and items[binh_duong] > items[intl]
+    items = {i["id"] for i in member.get(f"/api/member/search-requests/{r['id']}/opportunities").json()["items"]}
+    assert {hcm, binh_duong, intl} <= items and ha_noi not in items
+
+
+def test_tieu_chi_la_vong_loai_diem_theo_noi_dung(admin, member):
+    """Đúng ngành + khu vực nhưng nội dung không liên quan → không vào kết quả (trước đây tiêu chí tự cộng ~40 điểm).
+    Cùng tiêu chí, mô tả càng sát thì điểm càng cao; từ chung chung ("giao hàng", "thiết kế") không đẩy điểm."""
+    carton = make_opp(admin)
+    unrelated = make_opp(admin, title="Cần đơn vị thiết kế, giao hàng nhanh cho nhà máy tại Bắc Ninh", summary="Dịch vụ giao hàng, thiết kế",
+                         detail="Giao hàng mỗi tháng cho nhà máy")
+    r = ask(member)
+    items = {i["id"]: i for i in member.get(f"/api/member/search-requests/{r['id']}/opportunities").json()["items"]}
+    assert carton in items and unrelated not in items
+    assert items[carton]["score"] >= 60
 
 
 def test_co_hoi_da_mua_bi_sua(admin, member):

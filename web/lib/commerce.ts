@@ -175,6 +175,7 @@ export interface SearchReq {
 export interface PurchaseInfo {
   id: number;
   price: number;
+  exclusive?: boolean; // mua độc quyền (hạng Vàng)
   created_at: string;
   snapshot: Opp | null; // null = mua trước khi có bản lưu
   changed_fields: string[];

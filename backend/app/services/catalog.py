@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.db import utcnow
 from app.models import Activity, Company, MemberUser, Opportunity, Purchase, SavedOpportunity, UserOpportunity
 from app.schemas_commerce import OppFull, OppPreview
-from app.services import partner_wallet, wallet
+from app.services import partner_wallet, tiers, wallet
 from app.services.matching import price_of, urgency_of
 
 
@@ -84,7 +84,8 @@ def previews(db: Session, company_id: int, rows: list[Opportunity], scores: dict
     return [preview(o, o.id in owned, o.id in saved, mine.get(o.id)) for o in rows]
 
 
-def buy(db: Session, member: MemberUser, opp_id: int) -> Purchase:
+def buy(db: Session, member: MemberUser, opp_id: int, exclusive: bool = False) -> Purchase:
+    """Mua phiếu. exclusive=True: mua độc quyền (hạng Vàng, phiếu chưa ai mua) — giá ×2, đóng các lượt còn lại."""
     company = wallet.lock_company(db, member.company_id)
     if not membership_active(company):
         raise HTTPException(402, "Bạn cần thanh toán phí thành viên (hoặc gia hạn) trước khi mua phiếu.")
@@ -99,17 +100,25 @@ def buy(db: Session, member: MemberUser, opp_id: int) -> Purchase:
     if opp.status != "published" or opp.sold_count >= opp.max_buyers:
         raise HTTPException(409, "Phiếu cơ hội này đã hết lượt mua.")
     price = price_of(opp, mine.score, urgency_of(opp, date.today()))  # giá theo điểm của chính doanh nghiệp (khớp giá đang hiển thị)
+    if exclusive:
+        offer = tiers.exclusive_offer(company, opp, price)
+        if not offer["available"]:
+            raise HTTPException(403 if "hạng Vàng" in offer["reason"] else 409, offer["reason"])
+        price = offer["price"]
     if company.points_balance < price:
         raise HTTPException(402, f"Số dư không đủ: cần {price:,} điểm, hiện có {company.points_balance:,} điểm.".replace(",", "."))
 
     snap = full(opp, mine)
-    snap["price"] = price
-    purchase = Purchase(company_id=company.id, opportunity_id=opp.id, member_user_id=member.id, price=price, snapshot=snap)
+    snap["price"], snap["exclusive"] = price, exclusive
+    purchase = Purchase(company_id=company.id, opportunity_id=opp.id, member_user_id=member.id, price=price, snapshot=snap, exclusive=exclusive)
     db.add(purchase)
     db.flush()
-    wallet.post(db, company, -price, "purchase", f"Mua phiếu {opp.code}: {opp.title[:120]}", purchase_id=purchase.id)
+    what = "Mua độc quyền phiếu" if exclusive else "Mua phiếu"
+    wallet.post(db, company, -price, "purchase", f"{what} {opp.code}: {opp.title[:120]}", purchase_id=purchase.id)
     opp.sold_count += 1
-    db.add(Activity(company_id=company.id, kind="update", content=f"{member.full_name} mua phiếu {opp.code} ({price:,} điểm)".replace(",", ".")))
+    if exclusive:
+        opp.max_buyers = opp.sold_count  # đóng các lượt còn lại: không ai mua thêm được
+    db.add(Activity(company_id=company.id, kind="update", content=f"{member.full_name} {what.lower()} {opp.code} ({price:,} điểm)".replace(",", ".")))
     partner_wallet.safe(partner_wallet.on_purchase, db, purchase)  # phiếu từ cơ hội đối tác → ghi hoa hồng (cùng transaction)
     try:
         db.commit()
@@ -152,6 +161,7 @@ def purchase_out(p: Purchase, match: UserOpportunity | None = None) -> dict:
     return {
         "id": p.id,
         "price": p.price,
+        "exclusive": p.exclusive,
         "created_at": p.created_at.isoformat() + "Z" if p.created_at else None,
         "opportunity": full(p.opportunity, match),
         "snapshot": p.snapshot,  # điểm trong bản này là "điểm tại thời điểm mua"

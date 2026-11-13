@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Icon, Skeleton } from "@/components/admin/ui";
 import { useMember } from "@/components/member/MemberContext";
+import { TierBadge } from "@/components/member/Tier";
 import { SearchReqList } from "@/components/member/SearchReqList";
 import { fmtDate, fromNow } from "@/lib/admin/format";
 import { fmtPts, type Opp, type SearchReq } from "@/lib/commerce";
@@ -38,7 +39,7 @@ export default function MemberHome() {
         <div className="mt-hello">
           <h1>Xin chào, {me.full_name}</h1>
           <p className="mt-org" title={c.name}>{c.name}</p>
-          <p className="mono mt-code">Mã khách hàng {c.code}</p>
+          <p className="mono mt-code">Mã khách hàng {c.code} · <TierBadge t={c.tier} small /></p>
         </div>
         <div className="adm-actions">
           <Link className="adm-btn" href="/thanh-vien/nap-tien">Nạp điểm</Link>

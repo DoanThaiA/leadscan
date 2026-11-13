@@ -130,6 +130,7 @@ select.adm-input { padding-right: 28px; }
 .adm-badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; border: 1px solid transparent; }
 .adm-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .adm-badge.s-new { background: var(--brand-50); color: var(--brand); }
+.adm-badge.s-gold { background: var(--accent); color: var(--brand-800); } /* hạng Vàng / mua độc quyền */
 .adm-badge.s-contacted { background: #fff4e0; color: #a15c00; }
 .adm-badge.s-active { background: #e6f6ec; color: #157f3b; }
 .adm-badge.s-suspended { background: #eef0f2; color: #4b5563; }

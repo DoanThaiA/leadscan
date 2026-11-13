@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.db import utcnow
 from app.models import Activity, PaymentOrder
-from app.services import wallet
+from app.services import tiers, wallet
 from app.services.vietqr import build_payload
 
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -106,6 +106,11 @@ def mark_paid(
 
     label = "Phí thành viên" if order.kind == "membership" else "Nạp điểm"
     wallet.post(db, company, order.points, order.kind, f"{label} — đơn {order.code}", order_id=order.id, actor_id=admin_id)
+    was_gold = tiers.tier_key(company, cfg) == "gold"
+    company.topup_total = (company.topup_total or 0) + order.amount  # tổng nạp → hạng thành viên
+    if not was_gold and tiers.tier_key(company, cfg) == "gold":
+        db.add(Activity(company_id=company.id, kind="update", actor_id=admin_id,
+                        content=f"Lên hạng Vàng (tổng nạp {company.topup_total:,}đ) — được mua độc quyền phiếu cơ hội".replace(",", ".")))
 
     if order.kind == "membership":
         now = utcnow()

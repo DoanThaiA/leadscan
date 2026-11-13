@@ -20,6 +20,7 @@ interface Resp {
 interface Buyer {
   id: number;
   price: number;
+  exclusive: boolean; // mua độc quyền (hạng Vàng) — đã đóng các lượt còn lại
   created_at: string;
   company: { id: number; code: string; name: string };
   score_at_purchase: number | null;
@@ -114,7 +115,7 @@ Lý do (khách sẽ thấy trong lịch sử điểm):`, "Cơ hội đã chỉnh
                 {d.purchases.map((p) => (
                   <tr key={p.id}>
                     <td><Link className="name" href={`/admin/khach-hang/${p.company.id}`}>{p.company.name}</Link><div className="sub mono">{p.company.code}</div></td>
-                    <td className="adm-neg">{fmtPts(p.price)}</td>
+                    <td className="adm-neg">{fmtPts(p.price)}{p.exclusive ? <div><span className="adm-badge s-gold">Mua độc quyền</span></div> : null}</td>
                     <td style={{ whiteSpace: "nowrap" }}>{fmtDateTime(p.created_at)}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       {p.score_at_purchase ?? "—"} → {p.score_now ?? "—"}

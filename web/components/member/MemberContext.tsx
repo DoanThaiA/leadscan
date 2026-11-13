@@ -4,6 +4,17 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useS
 
 import { mapi } from "@/lib/member/api";
 
+/** Hạng thành viên theo tổng nạp (backend services/tiers.py) */
+export interface MemberTier {
+  key: "standard" | "gold";
+  label: string;
+  topup_total: number;
+  gold_threshold: number;
+  to_gold: number;
+  can_exclusive: boolean;
+  exclusive_multiplier: number;
+}
+
 export interface MemberMe {
   id: number;
   email: string;
@@ -18,6 +29,7 @@ export interface MemberMe {
     points_balance: number;
     membership_expires_at: string | null;
     membership_active: boolean;
+    tier: MemberTier;
   };
 }
 
