@@ -45,7 +45,8 @@ export default function TopupPage() {
     document.title = "Nạp tiền · LeadScan B2B";
     mapi.get<Packages>("/packages").then((r) => {
       setP(r);
-      setKind(r.membership_active ? "topup" : "membership");
+      const loai = new URLSearchParams(location.search).get("loai"); // từ popup khuyến mãi: mã chỉ áp cho 1 loại đơn
+      setKind(loai === "membership" ? "membership" : loai === "topup" && r.membership_active ? "topup" : r.membership_active ? "topup" : "membership");
       setAmount(r.topup.packs[0] ?? r.topup.min);
     }, (e) => setError(errMsg(e)));
   }, []);
@@ -75,6 +76,15 @@ export default function TopupPage() {
     const t = setTimeout(() => applyPromo(applied), 400);
     return () => clearTimeout(t);
   }, [kind, value, applied, stale]);
+
+  // mở từ popup khuyến mãi trang chủ (/thanh-vien/nap-tien?ma=MA) → điền sẵn và tự áp mã khi đã có gói
+  const [autoCode, setAutoCode] = useState(() => (typeof window === "undefined" ? "" : (new URLSearchParams(location.search).get("ma") ?? "").toUpperCase().slice(0, 30)));
+  useEffect(() => {
+    if (!autoCode || !p || value <= 0) return;
+    setPromoInput(autoCode);
+    setAutoCode("");
+    applyPromo(autoCode);
+  }, [autoCode, p, value]);
 
   const pay = promo ? promo.pay : value;
 

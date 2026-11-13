@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 
 import { useAdmin } from "@/components/admin/AdminContext";
+import { CoverImageField } from "@/components/admin/CoverImageField";
 import { Dialog, Field, Icon, Skeleton } from "@/components/admin/ui";
 import { api, errFields, errMsg, qs } from "@/lib/admin/api";
 import { fmtDate } from "@/lib/admin/format";
@@ -26,6 +27,10 @@ interface Promo {
   starts_on: string | null;
   ends_on: string | null;
   is_active: boolean;
+  show_banner: boolean;
+  banner_image: string;
+  banner_title: string;
+  banner_text: string;
   description: string;
   state: State;
   used: number;
@@ -119,7 +124,16 @@ export default function PromosPage() {
               <tbody>
                 {d.items.map((p) => (
                   <tr key={p.id}>
-                    <td><b className="mono">{p.code}</b>{p.name ? <div className="sub">{p.name}</div> : null}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        {p.banner_image ? <img src={p.banner_image} alt="" className="km-thumb" /> : null}
+                        <div>
+                          <b className="mono">{p.code}</b>{p.name ? <div className="sub">{p.name}</div> : null}
+                          {p.show_banner ? <div className="sub" style={{ color: "var(--brand-600)" }}>● Banner trang chủ</div> : null}
+                        </div>
+                      </div>
+                    </td>
                     <td>{p.description}{p.min_amount ? <div className="sub">Đơn từ {fmtVnd(p.min_amount)}</div> : null}</td>
                     <td>{d.scopes[p.applies_to]}<div className="sub">{p.per_company_limit ? `${p.per_company_limit} lượt / doanh nghiệp` : "Không giới hạn / doanh nghiệp"}</div></td>
                     <td style={{ whiteSpace: "nowrap" }}>{p.starts_on || p.ends_on ? <>{p.starts_on ? fmtDate(p.starts_on) : "…"} – {p.ends_on ? fmtDate(p.ends_on) : "…"}</> : "Không thời hạn"}</td>
@@ -156,12 +170,16 @@ function PromoDialog({ promo, scopes, onClose, onDone }: { promo: Promo | "new" 
   const [msg, setMsg] = useState("");
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [banner, setBanner] = useState("");
+  const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
     setType(p?.discount_type ?? "percent");
+    setBanner(p?.banner_image ?? "");
+    setShowBanner(p?.show_banner ?? false);
     setMsg("");
     setFields({});
-  }, [promo, p?.discount_type]);
+  }, [promo, p?.discount_type, p?.banner_image, p?.show_banner]);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -179,6 +197,10 @@ function PromoDialog({ promo, scopes, onClose, onDone }: { promo: Promo | "new" 
       starts_on: String(f.get("starts_on") ?? "") || null,
       ends_on: String(f.get("ends_on") ?? "") || null,
       is_active: f.get("is_active") === "on",
+      show_banner: showBanner,
+      banner_image: banner,
+      banner_title: String(f.get("banner_title") ?? ""),
+      banner_text: String(f.get("banner_text") ?? ""),
     };
     setBusy(true);
     setMsg("");
@@ -187,8 +209,9 @@ function PromoDialog({ promo, scopes, onClose, onDone }: { promo: Promo | "new" 
       else await api.post("/promos", body);
       onDone();
     } catch (err) {
-      setMsg(errMsg(err));
-      setFields(errFields(err));
+      const fs = errFields(err);
+      setMsg(fs._ || errMsg(err)); // lỗi chung của form (vd bật banner mà chưa có ảnh)
+      setFields(fs);
     } finally {
       setBusy(false);
     }
@@ -243,6 +266,31 @@ function PromoDialog({ promo, scopes, onClose, onDone }: { promo: Promo | "new" 
           <div className="adm-checks full">
             <label><input type="checkbox" name="is_active" defaultChecked={p ? p.is_active : true} /> Đang bật (khách dùng được)</label>
           </div>
+          <div className="km-section full">
+            <div className="km-section-hd">
+              <b>Banner trang chủ</b>
+              <span className="muted">Hiện popup trượt giữa các khuyến mãi khi khách vào trang chủ — chỉ khi mã còn dùng được.</span>
+            </div>
+            <div className="adm-checks">
+              <label><input type="checkbox" checked={showBanner} onChange={(e) => setShowBanner(e.target.checked)} /> Hiện banner trên trang chủ</label>
+            </div>
+          </div>
+          <CoverImageField
+            value={banner}
+            onChange={setBanner}
+            error={fields.banner_image}
+            endpoint="/promos/banners"
+            label="Ảnh banner"
+            hint="JPG, PNG, WebP · nên dùng tỉ lệ 16:9 (vd 1200×675). Ảnh hiện trong popup khuyến mãi ở trang chủ."
+            id="pm-banner"
+            placeholder="Hoặc dán đường dẫn ảnh https://…"
+          />
+          <Field label="Tiêu đề banner — trống thì dùng mô tả mã" htmlFor="pm-btitle" error={fields.banner_title}>
+            <input id="pm-btitle" className="adm-input" name="banner_title" maxLength={150} defaultValue={p?.banner_title} placeholder="VD: Tết sum vầy — giảm 30% phí thành viên" />
+          </Field>
+          <Field label="Nội dung banner" htmlFor="pm-btext" error={fields.banner_text}>
+            <textarea id="pm-btext" className="adm-input" name="banner_text" maxLength={500} rows={3} defaultValue={p?.banner_text} placeholder="VD: Nhập mã khi thanh toán phí thành viên. Áp dụng đến hết 15/02." style={{ height: "auto", padding: "8px 10px" }} />
+          </Field>
           <div className="adm-actions full">
             <button type="button" className="adm-btn" onClick={onClose}>Huỷ</button>
             <button className="adm-btn primary" disabled={busy}>{busy ? "Đang lưu…" : p ? "Lưu thay đổi" : "Tạo mã"}</button>

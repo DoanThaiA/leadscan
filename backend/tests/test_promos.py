@@ -120,3 +120,79 @@ def test_usage_limits_and_cancel_releases(admin, client, member):  # noqa: F811
     third = member_client("lienhe0108888888@minhan.vn")
     r = third.post("/api/member/orders", json={"kind": "membership", "promo_code": "MOTLAN"})
     assert r.status_code == 400 and "hết lượt sử dụng" in r.json()["detail"]  # tổng 2 lượt
+
+
+# ------------------------------------------------------------------ banner trang chủ
+
+
+def _png(w=1200, h=600) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (w, h), (0, 75, 135)).save(buf, "PNG")
+    return buf.getvalue()
+
+
+@pytest.fixture
+def r2():
+    from app.services import storage
+
+    st = storage.MemoryStorage()
+    storage.set_backend(st)
+    yield st
+    storage.set_backend(None)
+
+
+def upload_banner(admin, r2) -> str:
+    png = _png()
+    init = admin.post("/api/admin/promos/banners/init", json={"filename": "Banner KM.png", "size": len(png)})
+    assert init.status_code == 201, init.text
+    uid = init.json()["upload_id"]
+    r2.put_bytes(f"promo-banners/upload/{uid}", png, "image/png")  # thay cho trình duyệt PUT lên R2
+    done = admin.post(f"/api/admin/promos/banners/{uid}/complete")
+    assert done.status_code == 200, done.text
+    return done.json()["url"]
+
+
+def test_banner_upload_and_public_popup(admin, staff, client, r2):
+    url = upload_banner(admin, r2)
+    assert url.startswith("/api/promos/banners/") and url.endswith(".webp")
+    img = client.get(url)
+    assert img.status_code == 200 and img.headers["content-type"] == "image/webp" and "immutable" in img.headers["cache-control"]
+    assert client.get("/api/promos/banners/khong-co.webp").status_code == 404
+    assert staff.post("/api/admin/promos/banners/init", json={"filename": "a.png", "size": 10}).status_code == 403
+
+    # bật banner mà chưa có ảnh → báo lỗi rõ ràng
+    r = admin.post("/api/admin/promos", json={"code": "NOIMG", "discount_type": "amount", "discount_value": 1, "show_banner": True})
+    assert r.status_code == 422 and "ảnh banner" in r.json()["fields"]["_"]
+    r = admin.post("/api/admin/promos", json={"code": "XSS", "discount_type": "amount", "discount_value": 1, "banner_image": "javascript:alert(1)"})
+    assert r.status_code == 422
+
+    p = promo(admin, code="TET2027", name="Ưu đãi Tết", discount_value=30, show_banner=True, banner_image=url,
+              banner_title="Tết sum vầy — giảm 30%", banner_text="Áp dụng cho phí thành viên và nạp điểm.",
+              ends_on=(date.today() + timedelta(days=10)).isoformat())
+    assert p["show_banner"] and p["banner_image"] == url
+    promo(admin, code="KHONGBANNER", discount_value=10)  # không bật banner → không hiện
+    promo(admin, code="CO-ANH-TAT", discount_value=10, show_banner=True, banner_image=url, is_active=False)  # mã tắt → không hiện
+
+    r = client.get("/api/promos")
+    assert r.status_code == 200 and "max-age=60" in r.headers["cache-control"]
+    items = r.json()["items"]
+    assert [i["code"] for i in items] == ["TET2027"]
+    b = items[0]
+    assert (b["title"], b["text"], b["image"], b["description"]) == ("Tết sum vầy — giảm 30%", "Áp dụng cho phí thành viên và nạp điểm.", url, "Giảm 30%")
+    assert b["ends_on"] == (date.today() + timedelta(days=10)).isoformat()
+
+    # hết hạn → tự ẩn khỏi trang chủ
+    admin.put(f"/api/admin/promos/{p['id']}", json={**p, "starts_on": None, "ends_on": (date.today() - timedelta(days=2)).isoformat()})
+    assert client.get("/api/promos").json()["items"] == []
+
+
+def test_banner_hidden_when_used_up(admin, client, member, r2):  # noqa: F811
+    url = upload_banner(admin, r2)
+    promo(admin, code="MOTLUOT", discount_value=10, max_uses=1, show_banner=True, banner_image=url)
+    assert [i["code"] for i in client.get("/api/promos").json()["items"]] == ["MOTLUOT"]
+    assert member.post("/api/member/orders", json={"kind": "membership", "promo_code": "MOTLUOT"}).status_code == 201
+    assert client.get("/api/promos").json()["items"] == []  # hết lượt → không quảng cáo nữa

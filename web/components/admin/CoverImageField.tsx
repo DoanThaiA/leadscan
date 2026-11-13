@@ -9,9 +9,30 @@ import { Field, Icon } from "./ui";
 
 const ACCEPT = "image/jpeg,image/png,image/webp";
 
-/** Ảnh bìa (banner) bài tuyển dụng: chọn / kéo-thả ảnh → tải thẳng lên Cloudflare R2 → lưu đường dẫn công khai.
- *  Vẫn cho dán đường dẫn sẵn có (vd ảnh trong web/public: /careers/ten-vi-tri.webp, hoặc URL https). */
-export function CoverImageField({ value, error, onChange }: { value: string; error?: string; onChange: (url: string) => void }) {
+const JOB_HINT = "JPG, PNG, WebP · nên dùng tỉ lệ 16:9 (vd 1672×941). Ảnh hiện ở đầu bài, thẻ danh sách và khi chia sẻ link.";
+
+/** Ảnh bìa (banner): chọn / kéo-thả ảnh → tải thẳng lên Cloudflare R2 → lưu đường dẫn công khai.
+ *  Vẫn cho dán đường dẫn sẵn có (vd ảnh trong web/public: /careers/ten-vi-tri.webp, hoặc URL https).
+ *  Mặc định cho bài tuyển dụng; banner khuyến mãi truyền endpoint="/promos/banners". */
+export function CoverImageField({
+  value,
+  error,
+  onChange,
+  endpoint = "/jobs/covers",
+  label = "Ảnh bìa (banner)",
+  hint = JOB_HINT,
+  id = "j-cover_image",
+  placeholder = "Hoặc dán đường dẫn: /careers/ten-vi-tri.webp hoặc https://…",
+}: {
+  value: string;
+  error?: string;
+  onChange: (url: string) => void;
+  endpoint?: string;
+  label?: string;
+  hint?: string;
+  id?: string;
+  placeholder?: string;
+}) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
@@ -22,9 +43,9 @@ export function CoverImageField({ value, error, onChange }: { value: string; err
     setMsg("");
     setProgress(0);
     try {
-      const init = await api.post<{ upload_id: string; upload_url: string; content_type: string }>("/jobs/covers/init", { filename: file.name, size: file.size });
+      const init = await api.post<{ upload_id: string; upload_url: string; content_type: string }>(`${endpoint}/init`, { filename: file.name, size: file.size });
       await putToR2(init.upload_url, file, init.content_type, setProgress);
-      const done = await api.post<{ url: string }>(`/jobs/covers/${init.upload_id}/complete`);
+      const done = await api.post<{ url: string }>(`${endpoint}/${init.upload_id}/complete`);
       onChange(done.url);
     } catch (e) {
       setMsg(errMsg(e));
@@ -46,7 +67,7 @@ export function CoverImageField({ value, error, onChange }: { value: string; err
   };
 
   return (
-    <Field label="Ảnh bìa (banner)" error={error || msg} full htmlFor="j-cover_image">
+    <Field label={label} error={error || msg} full htmlFor={id}>
       <div className="job-cover">
         <div
           className={over ? "job-cover-box over" : "job-cover-box"}
@@ -58,7 +79,7 @@ export function CoverImageField({ value, error, onChange }: { value: string; err
             // eslint-disable-next-line @next/next/no-img-element
             <img src={url} alt="Xem trước ảnh bìa" />
           ) : (
-            <p>Kéo-thả ảnh vào đây hoặc bấm <b>Chọn ảnh</b>.<br />JPG, PNG, WebP · nên dùng tỉ lệ 16:9 (vd 1672×941). Ảnh hiện ở đầu bài, thẻ danh sách và khi chia sẻ link.</p>
+            <p>Kéo-thả ảnh vào đây hoặc bấm <b>Chọn ảnh</b>.<br />{hint}</p>
           )}
           {progress !== null ? <div className="job-cover-prog" role="status">Đang tải lên… {progress}%</div> : null}
         </div>
@@ -74,12 +95,12 @@ export function CoverImageField({ value, error, onChange }: { value: string; err
           <input ref={fileRef} type="file" accept={ACCEPT} hidden onChange={pick} />
         </div>
         <input
-          id="j-cover_image"
+          id={id}
           className="adm-input"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           maxLength={500}
-          placeholder="Hoặc dán đường dẫn: /careers/ten-vi-tri.webp hoặc https://…"
+          placeholder={placeholder}
           aria-invalid={!!error}
         />
       </div>

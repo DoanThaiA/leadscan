@@ -369,3 +369,9 @@ body:has(.adm) { margin: 0; background: #f6f7f9; }
 .ms-list li.on { background: var(--brand-50); color: var(--brand-600); }
 .ms-list li.ms-empty { color: var(--muted); cursor: default; }
 .mt-group select.adm-input { width: 100%; }
+
+/* Khuyến mãi: ảnh banner nhỏ trong danh sách, mục "Banner trang chủ" trong form */
+.km-thumb { width: 64px; height: 36px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); flex: none; }
+.km-section { border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 8px; }
+.km-section-hd { display: grid; gap: 2px; }
+.km-section-hd .muted { font-size: 12.5px; }

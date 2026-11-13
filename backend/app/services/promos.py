@@ -126,3 +126,47 @@ def describe(p: PromoCode) -> str:
         s = f"Giảm {p.discount_value}%"
         return s + (f" (tối đa {vnd(p.max_discount)})" if p.max_discount else "")
     return f"Giảm {vnd(p.discount_value)}"
+
+
+# ------------------------------------------------------------------ banner trang chủ
+
+BANNER_PREFIX = "promo-banners"  # thư mục ảnh trên R2
+BANNER_PATH = "/api/promos/banners"  # đường dẫn công khai đọc ảnh
+BANNER_IMAGE_RE = re.compile(r"^(/(?!/)\S*|https://\S+)$")  # ảnh tải lên / ảnh trong web/public / URL https
+MAX_BANNERS = 10
+
+
+def usable_now(db: Session, p: PromoCode) -> bool:
+    """Mã đang dùng được với khách nói chung (bật, trong thời gian, còn lượt)."""
+    now = utcnow()
+    if not p.is_active or (p.starts_at and p.starts_at > now) or (p.ends_at and p.ends_at < now):
+        return False
+    return p.max_uses is None or used_count(db, p.id) < p.max_uses
+
+
+def active_banners(db: Session) -> list[dict]:
+    """Banner khuyến mãi hiện trên trang chủ: mã bật banner, có ảnh và còn dùng được. Mới nhất trước."""
+    rows = db.scalars(
+        select(PromoCode)
+        .where(PromoCode.show_banner.is_(True), PromoCode.is_active.is_(True), PromoCode.banner_image != "")
+        .order_by(PromoCode.id.desc())
+        .limit(50)
+    ).unique().all()
+    out = []
+    for p in rows:
+        if not usable_now(db, p):
+            continue
+        out.append({
+            "id": p.id,
+            "code": p.code,
+            "title": p.banner_title or p.name or describe(p),
+            "text": p.banner_text,
+            "description": describe(p),
+            "applies_to": p.applies_to,
+            "applies_label": PROMO_SCOPES[p.applies_to],
+            "image": p.banner_image,
+            "ends_on": vn_date(p.ends_at),
+        })
+        if len(out) >= MAX_BANNERS:
+            break
+    return out

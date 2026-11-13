@@ -1,4 +1,5 @@
 """Ảnh bìa (banner) bài tuyển dụng, lưu trên Cloudflare R2, thư mục job-covers/.
+Dùng chung cho ảnh banner mã khuyến mãi (prefix promo-banners/, đường dẫn /api/promos/banners).
 
 Luồng (admin soạn bài):
   1. init     : khai báo tên + dung lượng → trả link PUT ký sẵn lên R2 (trình duyệt gửi thẳng, không qua Nginx)
@@ -31,7 +32,7 @@ def _ext(filename: str) -> str:
     return filename.rpartition(".")[2].lower() if "." in filename else ""
 
 
-def init_upload(filename: str, size: int) -> dict:
+def init_upload(filename: str, size: int, *, prefix: str = PREFIX) -> dict:
     """→ {upload_id, upload_url, content_type}. Sai loại / quá dung lượng → 400; chưa cấu hình R2 → 503."""
     _require_storage()
     ext = _ext(filename)
@@ -44,11 +45,11 @@ def init_upload(filename: str, size: int) -> dict:
         raise HTTPException(400, f"Ảnh bìa tối đa {max_mb} MB.")
     uid = uuid.uuid4().hex
     ctype = COVER_TYPES[ext]
-    key = f"{PREFIX}/upload/{uid}.{ext}"
+    key = f"{prefix}/upload/{uid}.{ext}"
     return {"upload_id": f"{uid}.{ext}", "upload_url": storage.backend().presign_put(key, ctype), "content_type": ctype, "expires_in": 600}
 
 
-def complete_upload(upload_id: str) -> dict:
+def complete_upload(upload_id: str, *, prefix: str = PREFIX, public_path: str = PUBLIC_PATH) -> dict:
     """Ảnh đã lên R2 → chuẩn hoá thành WebP → {url, width, height}."""
     from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -58,7 +59,7 @@ def complete_upload(upload_id: str) -> dict:
         raise HTTPException(400, "Mã tải lên không hợp lệ.")
     uid, ext = m.groups()
     st = storage.backend()
-    src = f"{PREFIX}/upload/{upload_id}"
+    src = f"{prefix}/upload/{upload_id}"
     info = st.head(src)
     if info is None:
         raise HTTPException(400, "Chưa thấy ảnh trên kho lưu trữ — vui lòng tải lên lại.")
@@ -82,17 +83,17 @@ def complete_upload(upload_id: str) -> dict:
     buf = io.BytesIO()
     img.save(buf, "WEBP", quality=85, method=6)  # bản lưu không còn EXIF (có thể lộ toạ độ GPS)
     name = f"{uid}.webp"
-    st.put_bytes(f"{PREFIX}/{name}", buf.getvalue(), "image/webp")
+    st.put_bytes(f"{prefix}/{name}", buf.getvalue(), "image/webp")
     st.delete([src])
-    return {"url": f"{PUBLIC_PATH}/{name}", "width": img.width, "height": img.height}
+    return {"url": f"{public_path}/{name}", "width": img.width, "height": img.height}
 
 
-def read_cover(name: str) -> bytes:
+def read_cover(name: str, *, prefix: str = PREFIX) -> bytes:
     """Ảnh bìa công khai theo tên tệp. Không có / sai tên → 404."""
     if not NAME_RE.fullmatch(name) or not storage.configured():
         raise HTTPException(404, "Không tìm thấy ảnh.")
     st = storage.backend()
-    key = f"{PREFIX}/{name}"
+    key = f"{prefix}/{name}"
     if st.head(key) is None:
         raise HTTPException(404, "Không tìm thấy ảnh.")
     return st.get_bytes(key)

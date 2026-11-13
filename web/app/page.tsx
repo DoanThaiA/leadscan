@@ -10,6 +10,7 @@ import IconSprite from "@/components/landing/IconSprite";
 import LandingEffects from "@/components/landing/LandingEffects";
 import MobileCta from "@/components/landing/MobileCta";
 import Pricing from "@/components/landing/Pricing";
+import PromoPopup from "@/components/landing/PromoPopup";
 import Register from "@/components/landing/Register";
 import Tickets from "@/components/landing/Tickets";
 import Workflow from "@/components/landing/Workflow";
@@ -54,6 +55,7 @@ export default function LandingPage() {
       <Footer />
       <MobileCta />
       <LandingEffects />
+      <PromoPopup />
     </>
   );
 }

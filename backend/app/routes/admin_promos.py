@@ -4,6 +4,7 @@ GET     danh sách mã + lượt đã dùng, tổng tiền đã giảm (nhân vi
 POST    tạo mã (chỉ quản trị viên)
 PUT     /{id} sửa mã (chỉ quản trị viên; mã đã có đơn dùng thì không đổi được chữ mã)
 DELETE  /{id} xoá mã chưa có đơn nào dùng (đã dùng thì tắt mã thay vì xoá)
+POST    /banners/init, /banners/{upload_id}/complete  tải ảnh banner thẳng lên R2 → đường dẫn công khai
 """
 
 from datetime import date
@@ -17,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.auth import current_user, require_admin
 from app.db import get_db, utcnow
 from app.models import PROMO_SCOPES, PROMO_TYPES, AdminUser, PaymentOrder, PromoCode
-from app.services import promos
+from app.services import job_covers, promos
 
 router = APIRouter(prefix="/api/admin/promos")
 
@@ -56,6 +57,10 @@ def _out(db: Session, p: PromoCode, stats: dict[int, tuple[int, int]] | None = N
         "starts_on": promos.vn_date(p.starts_at),
         "ends_on": promos.vn_date(p.ends_at),
         "is_active": p.is_active,
+        "show_banner": p.show_banner,
+        "banner_image": p.banner_image,
+        "banner_title": p.banner_title,
+        "banner_text": p.banner_text,
         "description": promos.describe(p),
         "state": _state(p, used),
         "used": used,  # đơn đã thanh toán + đơn đang chờ còn hạn
@@ -99,6 +104,10 @@ class PromoIn(BaseModel):
     starts_on: date | None = None
     ends_on: date | None = None
     is_active: bool = True
+    show_banner: bool = False
+    banner_image: str = Field("", max_length=500)
+    banner_title: str = Field("", max_length=150)
+    banner_text: str = Field("", max_length=500)
 
     @field_validator("code")
     @classmethod
@@ -131,12 +140,19 @@ class PromoIn(BaseModel):
         if self.starts_on and self.ends_on and self.ends_on < self.starts_on:
             raise ValueError("Ngày kết thúc phải sau ngày bắt đầu.")
         self.name = " ".join(self.name.split())
+        self.banner_image = self.banner_image.strip()
+        self.banner_title = " ".join(self.banner_title.split())
+        self.banner_text = self.banner_text.strip()
+        if self.banner_image and not promos.BANNER_IMAGE_RE.match(self.banner_image):
+            raise ValueError("Ảnh banner phải là ảnh tải lên hoặc đường dẫn https://.")
+        if self.show_banner and not self.banner_image:
+            raise ValueError("Vui lòng tải ảnh banner trước khi bật hiển thị trên trang chủ.")
         return self
 
 
 def _apply(p: PromoCode, body: PromoIn) -> None:
     for f in ("code", "name", "discount_type", "discount_value", "max_discount", "min_amount", "applies_to", "max_uses",
-              "per_company_limit", "is_active"):
+              "per_company_limit", "is_active", "show_banner", "banner_image", "banner_title", "banner_text"):
         setattr(p, f, getattr(body, f))
     p.starts_at = promos.start_of_day_utc(body.starts_on) if body.starts_on else None
     p.ends_at = promos.end_of_day_utc(body.ends_on) if body.ends_on else None
@@ -152,6 +168,23 @@ def _save(db: Session, p: PromoCode) -> None:
     except IntegrityError:
         db.rollback()
         raise HTTPException(409, "Mã khuyến mãi này đã tồn tại.") from None
+
+
+class BannerInitIn(BaseModel):
+    filename: str = Field(min_length=1, max_length=200)
+    size: int = Field(ge=1)
+
+
+@router.post("/banners/init", status_code=201)
+def banner_init(body: BannerInitIn, _: AdminUser = Depends(require_admin)):
+    """Ảnh banner: cấp link PUT ký sẵn để trình duyệt tải thẳng lên R2."""
+    return job_covers.init_upload(body.filename, body.size, prefix=promos.BANNER_PREFIX)
+
+
+@router.post("/banners/{upload_id}/complete")
+def banner_complete(upload_id: str, _: AdminUser = Depends(require_admin)):
+    """Ảnh đã lên R2 → kiểm tra, xoá EXIF, chuẩn hoá WebP → đường dẫn công khai để lưu vào mã."""
+    return job_covers.complete_upload(upload_id, prefix=promos.BANNER_PREFIX, public_path=promos.BANNER_PATH)
 
 
 @router.post("", status_code=201)
