@@ -2,6 +2,7 @@
 
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 
+import { goLogin, isUnauthorized } from "@/lib/api";
 import { mapi } from "@/lib/member/api";
 
 /** Hạng thành viên theo tổng nạp (backend services/tiers.py) */
@@ -55,7 +56,10 @@ export function MemberProvider({ children, fallback }: { children: ReactNode; fa
     setMe(await mapi.get<MemberMe>("/auth/me"));
   }, []);
   useEffect(() => {
-    refresh().catch(() => {});
+    // chưa đăng nhập (vd bấm "Dùng mã ngay" từ popup khuyến mãi) → sang trang đăng nhập, xong quay lại đúng trang này
+    refresh().catch((e) => {
+      if (isUnauthorized(e)) goLogin("/thanh-vien/dang-nhap");
+    });
   }, [refresh]);
   if (!me) return <>{fallback}</>;
   return <MemberCtx.Provider value={{ me, refresh, setMe }}>{children}</MemberCtx.Provider>;

@@ -11,6 +11,8 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const [error, setError] = useState("");
+  // đến từ "Dùng mã ngay" của popup khuyến mãi (…/nap-tien?ma=MA): báo rõ vì sao cần đăng nhập
+  const promo = /[?&]ma=([A-Za-z0-9_-]{1,30})/.exec(params.get("next") ?? "")?.[1]?.toUpperCase();
   const [busy, setBusy] = useState(false);
   // 1 tài khoản cho cả 2 cổng: email chỉ có hồ sơ đối tác → cho chọn vào cổng đối tác hoặc đăng ký thành viên
   const [partnerOnly, setPartnerOnly] = useState<string | null>(null);
@@ -64,6 +66,11 @@ function LoginForm() {
         <p className="muted" style={{ marginTop: 4 }}>Xem kho cơ hội, mua phiếu và quản lý điểm</p>
         <p className="muted" style={{ marginTop: 4, fontSize: 12.5 }}>Một tài khoản LeadScan dùng cho cả cổng thành viên và cổng đối tác.</p>
       </div>
+      {promo ? (
+        <div className="adm-alert ok" role="status">
+          Đăng nhập để dùng mã khuyến mãi <b>{promo}</b> — mã sẽ được áp dụng sẵn khi bạn thanh toán.
+        </div>
+      ) : null}
       {error ? <div className="adm-alert" role="alert">{error}</div> : null}
       <div className="adm-field">
         <label htmlFor="email">Email</label>
@@ -75,7 +82,7 @@ function LoginForm() {
         </label>
         <input className="adm-input" id="password" name="password" type="password" autoComplete="current-password" required />
       </div>
-      <button className="adm-btn primary" type="submit" disabled={busy} style={{ height: 40 }}>{busy ? "Đang đăng nhập…" : "Đăng nhập"}</button>
+      <button className="adm-btn primary" type="submit" disabled={busy} style={{ height: 40 }}>{busy ? "Đang đăng nhập…" : promo ? "Đăng nhập và dùng mã" : "Đăng nhập"}</button>
       <p className="muted" style={{ textAlign: "center", fontSize: 13 }}>
         Chưa có tài khoản? <a href="/#dang-ky" style={{ color: "var(--brand-600)", fontWeight: 600 }}>Đăng ký thành viên</a>
       </p>

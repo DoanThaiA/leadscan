@@ -12,6 +12,14 @@ export class ApiError extends Error {
 
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
+/** Chuyển tới trang đăng nhập, nhớ trang đang xem (?next=) để đăng nhập xong quay lại đúng chỗ (kể cả ?ma=… của khuyến mãi). */
+export function goLogin(loginPath: string) {
+  if (typeof window === "undefined") return;
+  location.replace(`${loginPath}?next=${encodeURIComponent(location.pathname + location.search)}`);
+}
+
+export const isUnauthorized = (e: unknown) => e instanceof ApiError && e.status === 401;
+
 export function createApi(base: string, loginPath: string) {
   async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
     let res: Response;
@@ -32,10 +40,7 @@ export function createApi(base: string, loginPath: string) {
       data = await res.json();
     } catch {}
     if (!res.ok) {
-      if (res.status === 401 && !path.startsWith("/auth/") && typeof window !== "undefined") {
-        const next = encodeURIComponent(location.pathname + location.search);
-        location.replace(`${loginPath}?next=${next}`);
-      }
+      if (res.status === 401 && !path.startsWith("/auth/")) goLogin(loginPath);
       const msg = typeof data.detail === "string" ? data.detail : "Có lỗi xảy ra, vui lòng thử lại.";
       throw new ApiError(res.status, msg, data.fields ?? {});
     }

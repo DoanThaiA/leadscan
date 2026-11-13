@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 
+import { goLogin, isUnauthorized } from "@/lib/api";
 import { papi, type PartnerMe, type RewardConfig } from "@/lib/partner/api";
 import { type Reward, rewardFrom } from "@/lib/partner/content";
 
@@ -29,7 +30,9 @@ export function PartnerProvider({ children, fallback }: { children: ReactNode; f
     setMe(await papi.get<PartnerMe>("/auth/me"));
   }, []);
   useEffect(() => {
-    refresh().catch(() => {});
+    refresh().catch((e) => {
+      if (isUnauthorized(e)) goLogin("/doi-tac/dang-nhap"); // chưa đăng nhập → sang trang đăng nhập, xong quay lại đúng trang này
+    });
     papi.get<RewardConfig>("/reward-config").then((c) => setReward(rewardFrom(c)), () => {});
   }, [refresh]);
   useEffect(() => {
