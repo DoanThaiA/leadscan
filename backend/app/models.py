@@ -71,9 +71,19 @@ class AdminUser(Base):
     full_name: Mapped[str] = mapped_column(String(100))
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(16), default="staff")
+    # Vai trò trong phân hệ làm giàu dữ liệu theo MST (models_enrich.ENRICH_ROLES). None = không truy cập,
+    # riêng quản trị viên mặc định là "quan_tri" — xem enrich_access.
+    enrich_role: Mapped[str | None] = mapped_column(String(16))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    @property
+    def enrich_access(self) -> str | None:
+        """Vai trò hiệu lực trong phân hệ làm giàu dữ liệu (kho B mặc định ẩn: không có vai trò → không truy cập)."""
+        if self.enrich_role:
+            return self.enrich_role
+        return "quan_tri" if self.role == "admin" else None
 
 
 class AdminSession(Base):
@@ -1271,3 +1281,7 @@ class PartnerAttachment(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(12), default="pending", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+# Phân hệ làm giàu dữ liệu theo MST — kho A / kho B / thu thập (đăng ký bảng vào Base.metadata)
+from app import models_enrich  # noqa: E402, F401

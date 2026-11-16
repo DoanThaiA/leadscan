@@ -7,7 +7,7 @@ from alembic import context
 import pgvector.sqlalchemy  # noqa: F401 — để alembic nhận kiểu cột vector khi so sánh schema
 
 from app import models  # noqa: F401 — đăng ký các bảng vào metadata
-from app.db import Base, get_engine
+from app.db import ENRICH_SCHEMAS, Base, get_engine
 
 config = context.config
 if config.config_file_name is not None:
@@ -30,10 +30,14 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     with get_engine().connect() as connection:
+        pg = connection.dialect.name == "postgresql"
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
             render_as_batch=connection.dialect.name == "sqlite",
+            # bảng phân hệ làm giàu dữ liệu nằm trong schema kho_a / kho_b / thu_thap (app/models_enrich.py)
+            include_schemas=pg,
+            include_name=lambda name, type_, _parent: type_ != "schema" or name in (None, "public", *ENRICH_SCHEMAS),
         )
         with context.begin_transaction():
             context.run_migrations()

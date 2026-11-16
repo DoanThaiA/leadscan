@@ -17,3 +17,4 @@ web/next-env.d.ts
 
 # Khoá RSA ký giao dịch InfoCMS
 secrets/
+backend/data/enrich-raw/

@@ -163,6 +163,20 @@ class Settings(BaseSettings):
     r2_secret_access_key: str = ""
     r2_bucket: str = ""
     r2_endpoint: str = ""  # mặc định https://<account_id>.r2.cloudflarestorage.com
+    # Làm giàu dữ liệu MST: bản gốc đã tải (HTML/PDF/file nhập) lưu nén gzip. Có R2 → lưu trên R2 (prefix enrich-raw/);
+    # không có → thư mục này trên máy chủ (trống = backend/data/enrich-raw). Giữ 12 tháng (N07).
+    enrich_raw_dir: str = ""
+    enrich_user_agent: str = "LeadScanBot/1.0 (+https://leadscan.net)"
+    # Tầng 3 bóc tách (B01): mô hình ngôn ngữ Claude cho tài liệu mà bảng + luật không đọc được. TẮT mặc định —
+    # bật chỉ khi pháp chế đồng ý gửi văn bản (đã cắt phần người nội bộ) ra API nước ngoài. Khoá: ANTHROPIC_API_KEY.
+    enrich_llm_enabled: bool = False
+    enrich_llm_model: str = "claude-opus-5-5"
+    enrich_llm_effort: str = "low"  # low | medium | high — bóc tách danh sách là việc đơn giản
+    # N05: khoá mã hoá kho B (MST cá nhân, bản gốc) — base64 64 byte: python -m app.cli gen-data-key. Mất khoá = mất dữ liệu đã mã hoá.
+    enrich_data_key: str = ""
+    enrich_raw_retention_days: int = 365  # N07: giữ bản gốc 12 tháng (có thể đặt ngắn hơn để xoá sớm)
+    enrich_retention_months: int = 24  # T07: dữ liệu cá nhân không dùng quá thời hạn này → danh sách rà soát xoá
+    enrich_export_valid_days: int = 90  # T11: hạn sử dụng ghi trên file xuất
     attach_max_files: int = 20  # số tệp tối đa mỗi phiếu
     attach_image_max_mb: int = 10
     attach_file_max_mb: int = 25

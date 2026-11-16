@@ -13,6 +13,9 @@ x-backend: &backend
     LEADSCAN_DATABASE_URL: postgresql+psycopg://leadscan:${POSTGRES_PASSWORD:?Đặt POSTGRES_PASSWORD trong .env}@db:5432/leadscan
     LEADSCAN_REDIS_URL: redis://redis:6379/0
     LEADSCAN_CLIENT_IP_HEADER: X-Real-IP
+    LEADSCAN_ENRICH_RAW_DIR: /data/enrich-raw  # bản gốc làm giàu MST (khi chưa cấu hình R2)
+  volumes:
+    - enrichraw:/data/enrich-raw
   depends_on:
     migrate:
       condition: service_completed_successfully
@@ -89,3 +92,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  enrichraw:

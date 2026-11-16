@@ -5,6 +5,10 @@ export interface User {
   email: string;
   full_name: string;
   role: Role;
+  /** vai trò làm giàu dữ liệu đã gán (null = theo mặc định) */
+  enrich_role: string | null;
+  /** vai trò hiệu lực — quản trị viên mặc định "quan_tri"; null = không vào được phân hệ */
+  enrich_access: string | null;
   is_active: boolean;
   created_at: string;
   last_login_at: string | null;
@@ -86,6 +90,7 @@ export interface Page<T> {
 export interface Meta {
   statuses: Record<string, string>;
   roles: Record<Role, string>;
+  enrich_roles: Record<string, string>;
   sizes: string[];
   regions: string[];
   opp_types: string[];

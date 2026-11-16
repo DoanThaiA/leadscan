@@ -7,6 +7,7 @@ from typing import Annotated
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PlainSerializer, field_validator
 
 from app.models import COMPANY_STATUSES, ROLES
+from app.models_enrich import ENRICH_ROLES
 from app.registration_form import OPP_TYPES, REGIONS, SIZES, TICKETS
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -62,6 +63,8 @@ class UserOut(Out):
     email: str
     full_name: str
     role: str
+    enrich_role: str | None = None  # vai trò làm giàu dữ liệu đã gán (None = theo mặc định)
+    enrich_access: str | None = None  # vai trò hiệu lực (quản trị viên mặc định "quan_tri")
     is_active: bool
     created_at: UtcDatetime
     last_login_at: UtcDatetime | None
@@ -82,10 +85,19 @@ class PasswordChangeIn(BaseModel):
     new_password: str = Field(min_length=10, max_length=200)
 
 
+def _check_enrich_role(v: str | None) -> str | None:
+    if not v:
+        return None
+    if v not in ENRICH_ROLES:
+        raise ValueError("Vai trò làm giàu dữ liệu không hợp lệ.")
+    return v
+
+
 class UserCreateIn(BaseModel):
     email: Email = Field(max_length=150)
     full_name: Line = Field(min_length=1, max_length=100)
     role: str = "staff"
+    enrich_role: str | None = None
     password: str = Field(min_length=10, max_length=200)
 
     @field_validator("role")
@@ -95,10 +107,16 @@ class UserCreateIn(BaseModel):
             raise ValueError("Vai trò không hợp lệ.")
         return v
 
+    @field_validator("enrich_role")
+    @classmethod
+    def _enrich_role(cls, v: str | None) -> str | None:
+        return _check_enrich_role(v)
+
 
 class UserUpdateIn(BaseModel):
     full_name: Line | None = Field(None, min_length=1, max_length=100)
     role: str | None = None
+    enrich_role: str | None = None  # "" = bỏ vai trò (về mặc định); chỉ áp dụng khi có gửi trường này
     is_active: bool | None = None
     password: str | None = Field(None, min_length=10, max_length=200)
 
@@ -108,6 +126,11 @@ class UserUpdateIn(BaseModel):
         if v is not None and v not in ROLES:
             raise ValueError("Vai trò không hợp lệ.")
         return v
+
+    @field_validator("enrich_role")
+    @classmethod
+    def _enrich_role(cls, v: str | None) -> str | None:
+        return _check_enrich_role(v)
 
 
 # ------------------------------------------------------------------ khách hàng

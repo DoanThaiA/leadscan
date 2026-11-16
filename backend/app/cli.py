@@ -379,9 +379,19 @@ def cmd_crawl_profit500(args) -> int:
     return 1 if stats.errors and not (stats.created or stats.updated or stats.skipped) else 0
 
 
+
+def cmd_gen_data_key(_args) -> int:
+    from app.enrich.crypto import generate_key
+
+    print(generate_key())
+    print("Đặt giá trị trên vào LEADSCAN_ENRICH_DATA_KEY trong .env và cất bản sao ở nơi an toàn (mất khoá = mất MST cá nhân + bản gốc đã mã hoá).", file=sys.stderr)
+    return 0
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python -m app.cli", description="Lệnh quản trị LeadScan")
     sub = p.add_subparsers(dest="cmd", required=True)
+    k = sub.add_parser("gen-data-key", help="Tạo khoá mã hoá kho B (LEADSCAN_ENRICH_DATA_KEY) — cất giữ cẩn thận")
+    k.set_defaults(fn=cmd_gen_data_key)
     a = sub.add_parser("create-admin", help="Tạo hoặc đặt lại tài khoản quản trị")
     a.add_argument("--email", required=True)
     a.add_argument("--name", default="")

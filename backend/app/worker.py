@@ -31,6 +31,13 @@ celery_app.conf.update(
         "match-digest": {"task": "leadscan.send_match_digest", "schedule": 900.0},
         # hoa hồng đối tác hết thời gian giữ → Khả dụng
         "partner-release": {"task": "leadscan.partner_release_due", "schedule": 3600.0},
+        # làm giàu dữ liệu MST: giao việc thu thập cho worker (tôn trọng dừng khẩn cấp / khung giờ / giới hạn tốc độ)
+        "enrich-dispatch": {"task": "leadscan.enrich_dispatch", "schedule": 60.0},
+        # giai đoạn 5: chạy một tuần không cần can thiệp
+        "enrich-recrawl": {"task": "leadscan.enrich_recrawl", "schedule": 86400.0},  # A12 lịch tái thu thập
+        "enrich-alerts": {"task": "leadscan.enrich_alerts", "schedule": 600.0},  # C06 cảnh báo thay đổi
+        "enrich-digest": {"task": "leadscan.enrich_digest", "schedule": 3600.0},  # email tổng hợp cảnh báo
+        "enrich-raw-purge": {"task": "leadscan.enrich_raw_purge", "schedule": 86400.0},  # N07 dọn bản gốc quá hạn
     },
 )
 
@@ -634,3 +641,87 @@ def enqueue_job_application(app_id: int) -> None:
     else:
         deliver_job_application(app_id)
         deliver_application_receipt(app_id)
+
+
+# ------------------------------------------------------------------ làm giàu dữ liệu theo MST (app/enrich/runner.py)
+
+
+@celery_app.task(name="leadscan.enrich_dispatch")
+def enrich_dispatch_task() -> int:
+    from app.db import new_session
+    from app.enrich import runner
+
+    from app.enrich import documents
+
+    with new_session() as db:
+        ids = runner.dispatch(db)
+        doc_ids = documents.pending_ids(db)
+    for job_id in ids:
+        enqueue(enrich_run_job_task, job_id)
+    for doc_id in doc_ids:
+        enqueue(enrich_fetch_document_task, doc_id)
+    return len(ids) + len(doc_ids)
+
+
+@celery_app.task(name="leadscan.enrich_run_job", acks_late=True)
+def enrich_run_job_task(job_id: int) -> str:
+    from app.db import new_session
+    from app.enrich import runner
+
+    with new_session() as db:
+        res = runner.run_job(db, job_id)
+    if res.retry_in is not None:  # tên miền đang bận: xếp lại đúng lúc tới lượt
+        try:
+            enrich_run_job_task.apply_async((job_id,), countdown=res.retry_in, retry=False)
+        except Exception as e:  # noqa: BLE001 — Redis lỗi: việc vẫn "queued", recover_stale sẽ trả về pending
+            log.warning("Không xếp lại được việc thu thập %s: %s", job_id, e)
+    return res.status
+
+
+@celery_app.task(name="leadscan.enrich_fetch_document", acks_late=True)
+def enrich_fetch_document_task(doc_id: int) -> str:
+    """Tải + bóc tách một tài liệu công bố thông tin (giai đoạn 3)."""
+    from app.db import new_session
+    from app.enrich import documents
+
+    with new_session() as db:
+        return documents.fetch_document(db, doc_id)
+
+
+@celery_app.task(name="leadscan.enrich_recrawl")
+def enrich_recrawl_task() -> int:
+    from app.db import new_session
+    from app.enrich import scheduler
+
+    with new_session() as db:
+        created = scheduler.schedule_recrawl(db)
+    if created:
+        enqueue(enrich_dispatch_task)
+    return len(created)
+
+
+@celery_app.task(name="leadscan.enrich_alerts")
+def enrich_alerts_task() -> int:
+    from app.db import new_session
+    from app.enrich import scheduler
+
+    with new_session() as db:
+        return scheduler.scan_alerts(db)
+
+
+@celery_app.task(name="leadscan.enrich_digest")
+def enrich_digest_task() -> int:
+    from app.db import new_session
+    from app.enrich import scheduler
+
+    with new_session() as db:
+        return scheduler.send_digests(db)
+
+
+@celery_app.task(name="leadscan.enrich_raw_purge")
+def enrich_raw_purge_task() -> int:
+    from app.db import new_session
+    from app.enrich import scheduler
+
+    with new_session() as db:
+        return scheduler.purge_raw(db)

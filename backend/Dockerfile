@@ -15,7 +15,9 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY . .
 
-RUN useradd --system --uid 10001 app
+# /data/enrich-raw: bản gốc làm giàu dữ liệu MST khi không dùng R2 (volume enrichraw trong docker-compose)
+RUN useradd --system --uid 10001 app \
+    && mkdir -p /data/enrich-raw && chown app /data/enrich-raw
 USER app
 
 EXPOSE 8000

@@ -26,7 +26,7 @@ export default function StaffPage() {
     load();
   }, [load]);
 
-  async function update(u: User, body: Partial<{ role: Role; is_active: boolean }>) {
+  async function update(u: User, body: Partial<{ role: Role; is_active: boolean; enrich_role: string }>) {
     try {
       await api.patch(`/users/${u.id}`, body);
       load();
@@ -45,7 +45,7 @@ export default function StaffPage() {
       <div className="adm-head">
         <div>
           <h1>Nhân viên</h1>
-          <p>Tài khoản đăng nhập trang quản trị. Nhân viên xem và chăm sóc khách hàng; quản trị viên thêm quản lý tài khoản và xoá khách hàng.</p>
+          <p>Tài khoản đăng nhập trang quản trị. Nhân viên xem và chăm sóc khách hàng; quản trị viên thêm quản lý tài khoản và xoá khách hàng. Cột “Làm giàu theo MST” quyết định ai xem được dữ liệu doanh nghiệp (kho A) và dữ liệu cá nhân (kho B).</p>
         </div>
         <button className="adm-btn primary" onClick={() => setCreating(true)}><Icon name="plus" size={16} /> Thêm nhân viên</button>
       </div>
@@ -59,7 +59,7 @@ export default function StaffPage() {
           <div className="adm-table-wrap">
             <table className="adm-table">
               <thead>
-                <tr><th>Nhân viên</th><th>Vai trò</th><th>Trạng thái</th><th>Đăng nhập gần nhất</th><th style={{ textAlign: "right" }}>Thao tác</th></tr>
+                <tr><th>Nhân viên</th><th>Vai trò</th><th>Làm giàu theo MST</th><th>Trạng thái</th><th>Đăng nhập gần nhất</th><th style={{ textAlign: "right" }}>Thao tác</th></tr>
               </thead>
               <tbody>
                 {users.map((u) => {
@@ -78,6 +78,12 @@ export default function StaffPage() {
                       <td>
                         <select className="adm-input" style={{ width: 130, height: 32 }} value={u.role} disabled={self} onChange={(e) => update(u, { role: e.target.value as Role })} aria-label={`Vai trò của ${u.full_name}`}>
                           {Object.entries(meta.roles).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <select className="adm-input" style={{ width: 190, height: 32 }} value={u.enrich_role ?? ""} onChange={(e) => update(u, { enrich_role: e.target.value })} aria-label={`Vai trò làm giàu dữ liệu của ${u.full_name}`}>
+                          <option value="">{u.role === "admin" ? `Mặc định (${meta.enrich_roles.quan_tri})` : "Không truy cập"}</option>
+                          {Object.entries(meta.enrich_roles).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                         </select>
                       </td>
                       <td>
@@ -103,13 +109,13 @@ export default function StaffPage() {
         )}
       </section>
 
-      <CreateUserDialog open={creating} onClose={() => setCreating(false)} onCreated={() => { setCreating(false); load(); reloadMeta(); }} roles={meta.roles} />
+      <CreateUserDialog open={creating} onClose={() => setCreating(false)} onCreated={() => { setCreating(false); load(); reloadMeta(); }} roles={meta.roles} enrichRoles={meta.enrich_roles} />
       <ResetPasswordDialog user={resetFor} onClose={() => setResetFor(null)} />
     </>
   );
 }
 
-function CreateUserDialog({ open, onClose, onCreated, roles }: { open: boolean; onClose: () => void; onCreated: () => void; roles: Record<string, string> }) {
+function CreateUserDialog({ open, onClose, onCreated, roles, enrichRoles }: { open: boolean; onClose: () => void; onCreated: () => void; roles: Record<string, string>; enrichRoles: Record<string, string> }) {
   const [errors, setErrors] = useState<Errors>({});
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -148,6 +154,12 @@ function CreateUserDialog({ open, onClose, onCreated, roles }: { open: boolean; 
           <Field label="Vai trò" error={errors.role} htmlFor="u-role">
             <select id="u-role" className="adm-input" name="role" defaultValue="staff">
               {Object.entries(roles).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </Field>
+          <Field label="Làm giàu theo MST" error={errors.enrich_role} htmlFor="u-enrich">
+            <select id="u-enrich" className="adm-input" name="enrich_role" defaultValue="">
+              <option value="">Không truy cập (quản trị viên: mặc định Quản trị hệ thống)</option>
+              {Object.entries(enrichRoles).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </Field>
           <Field label="Mật khẩu ban đầu (≥ 10 ký tự)" error={errors.password} htmlFor="u-pw">

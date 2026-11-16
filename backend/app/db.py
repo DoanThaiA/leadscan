@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -8,6 +9,8 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.types import TypeDecorator
 
 from app.config import get_settings
+
+ENRICH_SCHEMAS = ("kho_a", "kho_b", "thu_thap")  # phân hệ làm giàu dữ liệu MST — app/models_enrich.py
 
 
 class Base(DeclarativeBase):
@@ -43,12 +46,19 @@ def utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def _json_dumps(o) -> str:
+    return json.dumps(o, ensure_ascii=False)
+
+
 @lru_cache
 def get_engine() -> Engine:
     url = get_settings().database_url
-    kwargs: dict = {"pool_pre_ping": True}
+    # JSON lưu chữ Việt nguyên dạng (không thoát kiểu \\u00ec) để lọc "chứa" trên cột JSON (vd ngành nghề) tìm được
+    kwargs: dict = {"pool_pre_ping": True, "json_serializer": _json_dumps}
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
+        # SQLite không có schema: bỏ tên schema kho_a/kho_b/thu_thap (tên bảng đã duy nhất nhờ tiền tố enrich_)
+        return create_engine(url, **kwargs).execution_options(schema_translate_map=dict.fromkeys(ENRICH_SCHEMAS))
     return create_engine(url, **kwargs)
 
 

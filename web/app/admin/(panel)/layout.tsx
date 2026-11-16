@@ -14,6 +14,7 @@ const NAV = [
   { href: "/admin/khach-hang", label: "Khách hàng", icon: "building" },
   { href: "/admin/co-hoi", label: "Cơ hội & phiếu", icon: "grid" },
   { href: "/admin/kho-doanh-nghiep", label: "Kho doanh nghiệp (AI)", icon: "scan" },
+  { href: "/admin/lam-giau", label: "Làm giàu theo MST", icon: "layers", enrich: true },
   { href: "/admin/thanh-toan", label: "Thanh toán", icon: "card" },
   { href: "/admin/hoa-don", label: "Hoá đơn", icon: "receipt" },
   { href: "/admin/khuyen-mai", label: "Khuyến mãi", icon: "tag" },
@@ -56,7 +57,7 @@ function Shell({ children }: { children: ReactNode }) {
           <Logo height={24} /><small>Admin</small>
         </Link>
         <nav className="adm-nav" aria-label="Quản trị">
-          {NAV.filter((n) => !n.adminOnly || user.role === "admin").map((n) => {
+          {NAV.filter((n) => (!n.adminOnly || user.role === "admin") && (!n.enrich || user.enrich_access)).map((n) => {
             const on = n.exact ? path === n.href : path.startsWith(n.href);
             return (
               <Link key={n.href} href={n.href} className={on ? "on" : undefined} aria-current={on ? "page" : undefined}>

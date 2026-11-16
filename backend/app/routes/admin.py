@@ -13,6 +13,7 @@ from app.auth import create_session, current_user, destroy_session, require_admi
 from app.config import get_settings
 from app.db import get_db, utcnow
 from app.models import COMPANY_STATUSES, ROLES, Activity, AdminSession, AdminUser, Company, Contact, Profile
+from app.models_enrich import ENRICH_ROLES
 from app.registration_form import OPP_TYPES, REGIONS, SIZES, TICKETS, tax_key
 from app.schemas import (
     CompanyListItem,
@@ -94,6 +95,7 @@ def meta(_: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
     return {
         "statuses": COMPANY_STATUSES,
         "roles": ROLES,
+        "enrich_roles": ENRICH_ROLES,
         "sizes": SIZES,
         "regions": REGIONS,
         "opp_types": OPP_TYPES,
@@ -322,7 +324,13 @@ def list_users(_: AdminUser = Depends(require_admin), db: Session = Depends(get_
 def create_user(body: UserCreateIn, _: AdminUser = Depends(require_admin), db: Session = Depends(get_db)):
     if db.scalar(select(AdminUser.id).where(AdminUser.email == body.email)):
         raise HTTPException(409, "Email này đã có tài khoản.")
-    u = AdminUser(email=body.email, full_name=body.full_name, role=body.role, password_hash=hash_password(body.password))
+    u = AdminUser(
+        email=body.email,
+        full_name=body.full_name,
+        role=body.role,
+        enrich_role=body.enrich_role,
+        password_hash=hash_password(body.password),
+    )
     db.add(u)
     db.commit()
     db.refresh(u)
@@ -340,6 +348,8 @@ def update_user(user_id: int, body: UserUpdateIn, me_: AdminUser = Depends(requi
         u.full_name = body.full_name
     if body.role is not None:
         u.role = body.role
+    if "enrich_role" in body.model_fields_set:
+        u.enrich_role = body.enrich_role
     if body.is_active is not None:
         u.is_active = body.is_active
     if body.password:

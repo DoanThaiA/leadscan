@@ -106,6 +106,88 @@ docker compose exec api python -m app.cli crawl-profit500 --chart 12 --year 2026
 - Mặc định chỉ thêm doanh nghiệp mới (khớp theo mã doanh nghiệp tại nguồn, rồi theo MST); `--update` làm mới bản ghi đã có nhưng **giữ nguyên** trạng thái AI và ghi chú nội bộ.
 - Đi chậm 1 giây/request (`--delay`), 500 doanh nghiệp mất khoảng 10 phút. Mỗi bản ghi lưu link nguồn — khi dùng lại thông tin cần ghi nguồn "Vietnam Report".
 
+## Làm giàu dữ liệu theo MST (`/admin/lam-giau`) — Giai đoạn 1: nền dữ liệu
+
+Theo tài liệu "Yêu cầu nghiệp vụ — Hệ thống làm giàu dữ liệu doanh nghiệp theo mã số thuế". MST là khoá của toàn hệ thống.
+
+- **Hai kho tách biệt** (`backend/app/models_enrich.py`): PostgreSQL có 3 schema `kho_a` (doanh nghiệp), `kho_b` (dữ liệu cá nhân), `thu_thap` (lô, nguồn, bản gốc, hàng đợi). SQLite khi dev/test bỏ tên schema (`schema_translate_map` trong `app/db.py`).
+- **Không ghi đè giá trị**: mỗi lần một nguồn nói một điều là một dòng bằng chứng (`enrich_company_evidence`). Cột trên hồ sơ chỉ là giá trị hiển thị do `app/enrich/merge.py` chọn (biên tập viên > độ tin cậy nguồn > mới hơn); đổi giá trị thì ghi `enrich_company_changes`. **Trường không có bằng chứng thì không hiển thị.**
+- **Nhập lô MST** (`/admin/lam-giau/nhap-lo`): CSV hoặc .xlsx ≤ 10 MB, cột "MST" bắt buộc, "Tên doanh nghiệp" tuỳ chọn. Bấm *Kiểm tra file* để xem số dòng hợp lệ / trùng / sai định dạng trước khi nhập. MST 9 hoặc 12 số (Excel làm rơi số 0) được bù số 0 và báo riêng. Mỗi lô bắt buộc khai nguồn danh sách và **mục đích sử dụng được phép**; hồ sơ truy ngược được về lô + dòng trong file. 20.000 MST nhập mất khoảng 5 giây.
+- **Hồ sơ doanh nghiệp** (`/admin/lam-giau/<MST>`): Thông tin pháp lý (mỗi trường kèm nguồn, đường dẫn, thời điểm, số bằng chứng, cờ xung đột) · Người liên quan · Tín hiệu · Lịch sử thay đổi · Nguồn gốc.
+- **Vai trò** (gán ở trang Nhân viên, cột "Làm giàu theo MST"; quản trị viên mặc định là *Quản trị hệ thống*, nhân viên chưa gán thì không vào được phân hệ):
+
+  | Vai trò | Kho A | Tên, chức danh, liên hệ công việc | MST cá nhân, năm sinh | Tra cứu thẳng kho B | Nhập lô |
+  |---|---|---|---|---|---|
+  | Quản trị hệ thống, Biên tập dữ liệu | ✓ | ✓ | ✓ | ✓ | ✓ |
+  | Thẩm định / pháp chế | ✓ | ✓ | ✓ | ✓ | — |
+  | Nhân viên kinh doanh | ✓ | ✓ (trong hồ sơ DN) | — | — | — |
+  | Phân tích thị trường | ✓ | — | — | — | — |
+
+- **Kho B chỉ đọc qua `app/enrich/khob.py`**: kiểm quyền, lọc trường theo vai trò, ẩn người / email / SĐT trong danh sách từ chối, và ghi `enrich_access_logs`. Nhật ký này **chỉ ghi thêm** — trigger trong CSDL chặn UPDATE/DELETE, nên tài khoản đã từng xem kho B chỉ khoá được, không xoá được.
+- Kho B không có cột nào cho CCCD, hộ khẩu, tài khoản ngân hàng, sức khoẻ, quan hệ gia đình (`tests/test_enrich.py` kiểm tra).
+- **Nginx**: endpoint nhập lô cần body lớn hơn mức 64 KB của `/api/` — xem block `location ~ ^/api/admin/enrich/batches` trong `deploy/nginx.conf`. Trên VPS đã chạy certbot, **chép riêng block này** vào `/etc/nginx/sites-available/leadscan.conf` (đặt trước `location /api/`) rồi `sudo nginx -t && sudo systemctl reload nginx` — đừng chép đè cả file vì sẽ mất phần HTTPS certbot đã thêm.
+
+### Giai đoạn 2: nguồn chính thức và thu thập
+
+- **Connector** (`backend/app/enrich/connectors/`): mỗi nguồn là một lớp độc lập — thêm nguồn = thêm lớp + đăng ký trong `registry.py`. Ba kiểu: *tự động* (http), *tra cứu thủ công* (nguồn có captcha — không bao giờ tự vượt), *nhập file*. Nguồn hiện có: dữ liệu mua ĐKKD (tin cậy 0,95), tra cứu Cổng ĐKKD và tra cứu người nộp thuế (thủ công), danh sách nợ thuế, kết quả đấu thầu (file). Cơ sở pháp lý từng nguồn là bản nháp — **pháp chế cần duyệt**; nguồn chưa khai cơ sở pháp lý không bật được.
+- **Nhập nguồn chính thức** (`/admin/lam-giau/nhap-nguon`): file CSV/.xlsx, tự nhận cột theo tiêu đề (dòng tiêu đề có thể nằm dưới tên bảng). Chỉ ghi cho MST đã có trong hệ thống; cột CCCD / ngày sinh / địa chỉ cá nhân… bị bỏ qua và liệt kê trong biên bản. Dữ liệu ĐKKD sinh người đại diện pháp luật vào kho B (chỉ họ tên + chức danh).
+- **Chuẩn hoá** (`normalize.py`, `titles.py`): tỉnh/thành theo 34 đơn vị sau 1/7/2025 (địa chỉ ghi tên tỉnh cũ vẫn tách đúng), loại hình doanh nghiệp, tình trạng hoạt động, điện thoại +84, tiền, ngày, website/tên miền, chức danh → danh mục cố định + cờ người ra quyết định.
+- **Điểm tin cậy từng trường**: độ tin cậy nguồn được chọn + 0,05 mỗi nguồn khác đồng thuận (so không phân biệt hoa thường/dấu), × 0,7 khi quá hạn tái thu thập (hiện nhãn "Dữ liệu cũ").
+- **Khử trùng**: cùng nội dung (mã băm trang / nội dung dòng file) chỉ sinh một bằng chứng; nhập lại cùng file không tạo gì mới.
+- **Vòng thu thập** (`/admin/lam-giau/vong`, `app/enrich/runner.py`): mỗi MST × nguồn là một `CrawlJob` lưu trong CSDL → dừng/chạy lại không mất tiến độ, MST đang có việc mở không bị tạo trùng, việc bị bỏ dở > 30 phút tự trả về hàng đợi. Celery beat giao việc mỗi phút (`leadscan.enrich_dispatch`). Lỗi tạm thời thử lại lùi dần; quá số lần thì "Lỗi".
+- **Giới hạn tốc độ**: mỗi request đặt lượt trên `enrich_domain_slots` (khoá dòng) → mọi worker cách nhau ≥ 2 giây/tên miền (cấu hình không cho thấp hơn); tôn trọng robots.txt; mỗi request ghi `enrich_fetch_logs` — trang Nguồn hiện khoảng cách nhỏ nhất theo tên miền làm bằng chứng.
+- **Tự tạm dừng nguồn hỏng**: > 20% request lỗi trong 1 giờ (từ 10 request) → tắt nguồn, ghi lý do, email `LEADSCAN_NOTIFY_EMAIL`.
+- **Dừng khẩn cấp / khung giờ chạy** ở trang Nguồn & cấu hình (quản trị hệ thống).
+- **Bản gốc**: lưu gzip theo mã băm trên R2 (nếu đã cấu hình) hoặc `LEADSCAN_ENRICH_RAW_DIR` (mặc định `backend/data/enrich-raw`). Nút bóc tách lại (API `POST /api/admin/enrich/sources/{code}/reparse`) chạy lại bộ bóc tách trên bản gốc, không tải lại.
+- **Hàng đợi thủ công** (`/admin/lam-giau/thu-cong`): mỗi lần một MST + nút mở trang tra cứu + form; giữ việc 15 phút cho người đang mở; "Bỏ qua" đẩy sang 24 giờ sau.
+- Quyền mới: *Quản trị hệ thống* cấu hình nguồn, dừng khẩn cấp, tạo vòng; *Biên tập* nhập file nguồn và làm hàng đợi thủ công; *Thẩm định* xem vòng thu thập.
+- Nginx: block nhập file lớn nay là `location ~ ^/api/admin/enrich/(batches|imports)(/preview)?$` — trên VPS sửa lại block đã chép ở giai đoạn 1.
+
+### Giai đoạn 3: doanh nghiệp niêm yết (`/admin/lam-giau/niem-yet`)
+
+- **Gắn mã CK**: nhập "Danh sách niêm yết (HOSE, HNX, UPCoM)" ở trang Nhập nguồn chính thức (cột Mã CK + Mã số thuế) → MST trong hệ thống được gắn `ma_ck`, `niem_yet`.
+- **Nạp tài liệu công bố thông tin** (báo cáo tình hình quản trị, báo cáo thường niên, nghị quyết): tải file lên (.pdf / .html / .txt) hoặc khai danh sách đường dẫn (mỗi dòng: mã CK hoặc MST, URL, kỳ). Hệ thống **không tự dò cả trang công bố** — chỉ tải đúng đường dẫn được khai, qua cùng giới hạn tốc độ / robots.txt / nhật ký với connector tự động (Celery `leadscan.enrich_fetch_document`, giao việc trong `leadscan.enrich_dispatch`).
+- **Bóc tách ba tầng** (`app/enrich/governance.py`): (1) bảng theo mẫu Phụ lục V Thông tư 96/2020/TT-BTC; (2) dòng "Ông/Bà … – chức danh" trong từng mục; (3) mô hình ngôn ngữ (`app/enrich/llm.py`) — **tắt mặc định**. Nhận được cả PDF bị mất dấu khi trích chữ. Ngày sinh, trình độ không bao giờ được đọc; ngày bổ nhiệm / miễn nhiệm được ghi vào vai trò (miễn nhiệm → `den_ngay`).
+- **Bảo vệ dữ liệu**: mục "Danh sách người có liên quan / người nội bộ", "Giao dịch cổ phiếu của người nội bộ" và mọi thứ sau đó bị **cắt trước khi bóc tách** (kể cả trước khi gửi mô hình); bảng có cột CCCD / địa chỉ / quan hệ bị bỏ qua. Tài liệu + kết quả bóc tách nằm trong kho B; xem chi tiết hoặc bản gốc cần quyền xem bằng chứng kho B và luôn ghi nhật ký.
+- **Tự ghi hay chờ duyệt**: đủ HĐQT + Ban điều hành (≥ 3 người) bằng bảng/luật → ghi luôn. Còn lại (thiếu nhóm, PDF ảnh, kết quả mô hình) → hàng chờ duyệt: biên tập viên sửa / thêm / bỏ người rồi duyệt; phần sửa / thêm ghi là quyết định biên tập (vòng sau không đè).
+- **Tín hiệu bổ nhiệm**: tài liệu mới có người ra quyết định mới (so với các tài liệu trước của cùng doanh nghiệp) → tín hiệu "Bổ nhiệm" ở kho A (chỉ ghi chức danh, không ghi tên).
+- **Độ phủ**: trang Niêm yết hiện tỷ lệ DN niêm yết có đủ HĐQT + Ban điều hành (mục tiêu ≥ 90%), lọc DN còn thiếu.
+- **Mô hình ngôn ngữ (tuỳ chọn)**: `LEADSCAN_ENRICH_LLM_ENABLED=true` + `ANTHROPIC_API_KEY`. Mặc định `claude-opus-5-5` (`LEADSCAN_ENRICH_LLM_MODEL`), effort `low` (`LEADSCAN_ENRICH_LLM_EFFORT`), có fallback phía máy chủ khi model từ chối. Chỉ gửi văn bản đã cắt mục nhạy cảm, không gửi file gốc; kết quả lưu đệm theo mã băm nội dung (`kho_b.enrich_llm_cache`) và **luôn qua duyệt**. Gửi văn bản ra API nước ngoài là chuyển dữ liệu cá nhân xuyên biên giới — cần pháp chế đồng ý trước khi bật.
+- Nginx: thêm `documents/upload` vào block upload lớn: `location ~ ^/api/admin/enrich/(batches|imports|documents/upload)(/preview)?$`.
+
+### Giai đoạn 4: doanh nghiệp chưa niêm yết, người & quan hệ (`/admin/lam-giau/nguoi`)
+
+- **Connector website** (`app/enrich/connectors/website.py`, mã `website`, tự động — **mặc định tắt**, quản trị bật ở trang Nguồn): chỉ tải website đã có trong hồ sơ (từ ĐKKD / tài liệu / nhập tay, không tìm qua Google), từ trang chủ đi tiếp tối đa `max_pages` (mặc định 5) trang **cùng website** có từ khoá giới thiệu / liên hệ / ban lãnh đạo; trang phụ bị robots.txt chặn thì bỏ qua. Bóc tách JSON-LD schema.org (tầng cấu trúc) rồi dòng "Ông/Bà … – chức danh", "Chức danh: Ông/Bà …", tên + chức danh ở dòng kế (tầng luật). Chỉ nhận người khi từ đầu là họ Việt Nam phổ biến; email chỉ nhận khi cùng tên miền doanh nghiệp, và chỉ gắn cho người khi nằm ngay cạnh tên **và** phần trước @ khớp tên — còn lại là liên hệ chung của doanh nghiệp.
+- **Khớp người** (`app/enrich/people.py`, B06): MST cá nhân → cùng doanh nghiệp + cùng tên chuẩn hoá → hồ sơ mới. Cùng tên ở doanh nghiệp khác **không tự gộp**: tạo cặp "Nghi trùng" (điểm < 0,85) chờ biên tập viên chọn Gộp vào A / Gộp vào B / Hai người khác nhau. Chỉ tự gộp khi MST cá nhân chứng minh.
+- **Gộp / tách có hoàn tác** (B07): gộp chuyển vai trò, liên hệ, bằng chứng sang hồ sơ giữ lại, hồ sơ kia ẩn (`merged_into_id`) chứ không xoá; tách chuyển các vai trò đã chọn sang hồ sơ mới cùng tên. Mọi thao tác ghi `kho_b.enrich_entity_ops` (ai, lúc nào, đã chuyển gì) và hoàn tác được; hai MST cá nhân khác nhau thì không gộp được.
+- **Nhập MST cá nhân nội bộ**: file có MST cá nhân, Họ và tên, MST doanh nghiệp (tuỳ chọn Chức danh). Bắt buộc ghi nguồn và xác nhận **không mua từ bên thứ ba** (T03). MST cá nhân chỉ để khớp người, không bao giờ có trong bản xuất (T04).
+- **Hồ sơ người** (C02) + **đồ thị quan hệ** (C03): vai trò hiện tại / trước đây ở các doanh nghiệp, đồ thị người ↔ doanh nghiệp ↔ người cùng doanh nghiệp, **xuất danh sách bên liên quan** (CSV, bắt buộc khai mục đích, không có MST cá nhân, email suy luận chỉ khi tick chọn). Nhân viên kinh doanh xem được hồ sơ + đồ thị (không MST cá nhân), không xuất được.
+- **Suy luận email** (`app/enrich/emails.py`, B10/B11): học mẫu đặt tên (an.nguyen, annv, nguyenvanan…) từ email **thật** của người cùng tên miền; không có email thật → không suy luận. Tra **MX** của tên miền trước khi lưu (thư viện `dnspython`); không có MX / không tra được → không lưu. Chỉ cho người ra quyết định đang tại vị, bỏ người / email trong danh sách từ chối. Email suy luận luôn có cờ "Suy luận" + trạng thái `mx_ok` + bằng chứng ghi mẫu đã dùng. Chạy bằng nút "Suy luận email" (trang Người & quan hệ) hoặc API `POST /api/admin/enrich/emails/infer`.
+- Quyền mới `people.manage` (Quản trị hệ thống, Biên tập): gộp / tách / hoàn tác, nhập MST cá nhân, suy luận email.
+- Nginx: thêm `persons/import-mst` vào block upload lớn: `location ~ ^/api/admin/enrich/(batches|imports|documents/upload|persons/import-mst)(/preview)?$`.
+
+### Giai đoạn 5: vận hành và tuân thủ
+
+**Chạy tự động** (Celery beat — `app/enrich/scheduler.py`):
+
+| Việc | Chu kỳ | Ghi chú |
+|---|---|---|
+| `enrich_dispatch` | 1 phút | giao việc thu thập + tải tài liệu |
+| `enrich_recrawl` | mỗi ngày | A12: MST quá "Tái thu thập sau (ngày)" của từng nguồn tự động / thủ công đang bật → vòng mới (tối đa `daily_limit` MST/nguồn/ngày). Tra cứu ĐKKD mặc định **30 ngày** (mục tiêu phát hiện thay đổi trong 30 ngày), tra cứu NNT 30 ngày, nợ thuế / đấu thầu 7 ngày (nguồn file: trang Nguồn hiện nhắc nhập lại) |
+| `enrich_alerts` | 10 phút | C06: thay đổi địa chỉ / tình trạng, tín hiệu nợ thuế / trúng thầu / bổ nhiệm, người ra quyết định thôi giữ chức → cảnh báo cho chủ danh sách theo dõi (chỉ thay đổi sau lúc bắt đầu theo dõi; nội dung không ghi tên người) |
+| `enrich_digest` | mỗi giờ | email tổng hợp cảnh báo (danh sách bật email) |
+| `enrich_raw_purge` | mỗi ngày | N07: xoá bản gốc quá `LEADSCAN_ENRICH_RAW_RETENTION_DAYS` (365); bằng chứng giữ lại |
+
+- **Lọc nâng cao** (trang Hồ sơ doanh nghiệp → "Bộ lọc nâng cao", `app/enrich/search.py`): mọi trường, AND/OR (nhóm lồng qua API), biểu thức chính quy, trường dẫn xuất (có người ra quyết định, có tín hiệu trong N ngày, thuộc lô, được phép cho mục đích). 20.000 hồ sơ lọc dưới 2 giây (có test). **Lưu bộ lọc**, chia sẻ cho nhóm.
+- **Xuất CSV** (`app/enrich/export.py`): bắt buộc khai mục đích; doanh nghiệp mà lô không cho phép mục đích đó bị **chặn** (cả bộ lọc bị chặn → từ chối xuất); cột kho B (người ra quyết định, email) chỉ cho Quản trị / Thẩm định — vai trò khác tự bị loại; **không bao giờ** có MST cá nhân; email suy luận chỉ khi tick; người / email / SĐT từ chối bị loại; dòng đầu file ghi mục đích + **hạn sử dụng** (`LEADSCAN_ENRICH_EXPORT_VALID_DAYS`, 90 ngày); mọi lần xuất (kể cả bị chặn) ghi `thu_thap.enrich_exports`. Phân tích thị trường chỉ xem / tải **Báo cáo thị trường** (số liệu tổng hợp).
+- **Theo dõi & cảnh báo** (`/admin/lam-giau/canh-bao`): danh sách theo dõi (chọn loại cảnh báo, email tổng hợp, chia sẻ nhóm); thêm doanh nghiệp từ kết quả lọc ("Theo dõi kết quả").
+- **Tuân thủ** (`/admin/lam-giau/tuan-thu`, Quản trị + Thẩm định / pháp chế): danh sách từ chối (C10); **yêu cầu của chủ thể dữ liệu** — tìm theo tên / email / MST cá nhân, "Dữ liệu đang lưu" (T06, tải JSON trả lời), **Ẩn vĩnh viễn** hoặc **Xoá** (T05: xoá vai trò, liên hệ, bằng chứng; email / SĐT vào danh sách từ chối; tên + doanh nghiệp và MST cá nhân lưu dạng **khoá băm** để không thu thập lại); rà soát hồ sơ không dùng 24 tháng (T07, `LEADSCAN_ENRICH_RETENTION_MONTHS`); nhật ký xuất (C09); nhật ký truy cập kho B (N06); **báo cáo đánh giá tác động** (T10, tải JSON).
+- **Mã hoá** (N05, `app/enrich/crypto.py`): MST cá nhân lưu bằng **AES-SIV** (tất định — vẫn tìm bằng `==`, vẫn duy nhất); bản gốc trang / file nguồn nén rồi mã hoá **Fernet** trước khi ghi R2 / đĩa. Khoá: `LEADSCAN_ENRICH_DATA_KEY` — tạo bằng `docker compose exec api python -m app.cli gen-data-key`, đặt vào `.env` **trước khi có dữ liệu thật** và cất bản sao ở nơi khác (mất khoá = mất MST cá nhân và bản gốc). Thiếu khoá thì dùng khoá phát triển cố định (có cảnh báo trong log).
+- **Sao lưu mã hoá** (N08): `deploy/backup.sh` (pg_dump → gzip → `openssl` AES-256 với `BACKUP_PASSPHRASE`, giữ `BACKUP_KEEP_DAYS` ngày, kèm volume bản gốc), cron 2:30 hằng ngày — cách cài ở đầu file. `deploy/restore-test.sh` phục hồi bản mới nhất vào CSDL tạm, đếm bảng chính, ghi `~/leadscan-restore-test.log` — chạy ít nhất mỗi quý. Hai script chưa chạy thử trên VPS thật.
+- Quyền mới: `a.export` (Quản trị, Biên tập, Kinh doanh, Thẩm định), `b.export` (Quản trị, Thẩm định), `compliance.read` / `compliance.manage` (Quản trị, Thẩm định).
+
+Chưa làm: tự dò đường dẫn tài liệu trên trang công bố HOSE / HNX / UBCKNN và connector tự động cho Cổng ĐKKD / nợ thuế / đấu thầu (cần khảo sát trang + pháp chế duyệt); xác minh email sâu hơn MX; tách quyền ở mức **tài khoản CSDL** cho kho B (hiện tách bằng schema + kiểm quyền ở ứng dụng); API nội bộ đọc theo MST (C12 — giai đoạn sau theo tài liệu); tích hợp CRM.
+
 ## Tuyển dụng (`/tuyen-dung`)
 
 - **Trang công khai** `/tuyen-dung`: danh sách vị trí đang mở (lọc theo phòng ban), "Vì sao chọn LeadScan", quy trình 4 bước. `/tuyen-dung/<slug>`: mô tả đánh số 01–05 (mục tiêu, mô tả, yêu cầu, quyền lợi, cách ứng tuyển), cột "Thông tin chung", form ứng tuyển, JSON-LD `JobPosting` cho Google Jobs.
