@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 
 import { fetchJobs } from "@/lib/careers-server";
-import { AREA_PAGES } from "@/lib/areas";
+import { AREA_PAGES, articleAreasFor } from "@/lib/areas";
 import { fetchArticles } from "@/lib/blog";
 import { INDUSTRY_PAGES } from "@/lib/industries";
 import { fetchPublicOpps } from "@/lib/public-opps";
@@ -67,6 +67,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
   const [inds, opps, posts, jobs] = await Promise.all([topicUrls().catch(() => []), oppUrls().catch(() => []), articleUrls().catch(() => []), fetchJobs()]);
   const jobUrls: MetadataRoute.Sitemap = (jobs ?? []).map((j) => ({ url: `${SITE_URL}/tuyen-dung/${encodeURIComponent(j.slug)}`, changeFrequency: "weekly", priority: 0.4 }));
-  const blog: MetadataRoute.Sitemap = posts.length ? [{ url: `${SITE_URL}/cam-nang`, lastModified: posts[0].lastModified, changeFrequency: "weekly", priority: 0.8 }, ...posts] : [];
+  const counts = (await fetchArticles({ page_size: "1" }).catch(() => null))?.area_counts ?? {};
+  const guideHubs: MetadataRoute.Sitemap = AREA_PAGES.filter((x) => articleAreasFor(x.slug).some((s) => (counts[s] ?? 0) > 0))
+    .map((x) => ({ url: `${SITE_URL}/cam-nang/khu-vuc/${x.slug}`, lastModified: posts[0]?.lastModified, changeFrequency: "weekly" as const, priority: 0.6 }));
+  const blog: MetadataRoute.Sitemap = posts.length ? [{ url: `${SITE_URL}/cam-nang`, lastModified: posts[0].lastModified, changeFrequency: "weekly", priority: 0.8 }, ...posts, ...guideHubs] : [];
   return [...fixed, ...blog, ...inds, ...opps, ...jobUrls];
 }

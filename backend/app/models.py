@@ -763,6 +763,7 @@ class Article(Base):
     seo_title: Mapped[str] = mapped_column(String(200), default="")  # trống = dùng title
     excerpt: Mapped[str] = mapped_column(String(400), default="")  # mô tả ngắn: thẻ danh sách + meta description
     category: Mapped[str] = mapped_column(String(80), default="", index=True)
+    area: Mapped[str] = mapped_column(String(60), default="", index=True)  # slug khu vực (web/lib/areas.ts): "bac-ninh", "mien-nam"… trống = bài chung
     cover_image: Mapped[str] = mapped_column(String(500), default="")
     body: Mapped[str] = mapped_column(Text, default="")
     author_name: Mapped[str] = mapped_column(String(120), default="")  # trống = "LeadScan"

@@ -119,6 +119,17 @@ export const AREA_PAGES: AreaPage[] = [
   },
 ];
 
+/** Tỉnh/thành → miền (slug). Trang cẩm nang của tỉnh gom cả bài cấp miền; trang miền chỉ gom bài của miền. */
+const REGION_OF: Record<string, string> = {
+  "ha-noi": "mien-bac", "hai-phong": "mien-bac", "bac-ninh": "mien-bac", "bac-giang": "mien-bac", "hai-duong": "mien-bac",
+  "hung-yen": "mien-bac", "vinh-phuc": "mien-bac", "thai-nguyen": "mien-bac", "quang-ninh": "mien-bac",
+  "da-nang": "mien-trung",
+  "tp-ho-chi-minh": "mien-nam", "binh-duong": "mien-nam", "dong-nai": "mien-nam", "long-an": "mien-nam", "ba-ria-vung-tau": "mien-nam", "can-tho": "mien-nam",
+};
+export const regionOf = (slug: string): string => REGION_OF[slug] ?? "";
+/** Các slug khu vực mà bài cẩm nang có thể gắn để hiện trên trang của khu vực này (chính nó + miền của nó) */
+export const articleAreasFor = (slug: string): string[] => [slug, regionOf(slug)].filter(Boolean);
+
 export const areaBySlug = (slug: string) => AREA_PAGES.find((x) => x.slug === slug);
 export const areaByName = (name: string) => AREA_PAGES.find((x) => x.name === name);
 /** Trang khu vực cho 1 giá trị tỉnh (nhập tự do): tỉnh khớp trước, rồi tới miền */

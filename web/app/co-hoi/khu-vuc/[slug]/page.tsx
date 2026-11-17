@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 
 import TopicPage, { pageOf, TOPIC_PAGE_SIZE, topicMetadata } from "@/components/public-opp/TopicPage";
-import { AREA_PAGES, areaBySlug } from "@/lib/areas";
+import { AREA_PAGES, areaBySlug, articleAreasFor } from "@/lib/areas";
+import { fetchArticles } from "@/lib/blog";
 import { INDUSTRY_PAGES } from "@/lib/industries";
 import { fetchPublicOpps } from "@/lib/public-opps";
 
@@ -37,6 +38,7 @@ export default async function AreaPage({ params, searchParams }: Props) {
   const page = pageOf(await searchParams);
   const data = await getList(a.terms.join("|"), page);
   const where = inSentence(a);
+  const guides = await fetchArticles({ areas: articleAreasFor(a.slug).join(","), page_size: "4" });
   return (
     <TopicPage
       base={`/co-hoi/khu-vuc/${a.slug}`} name={a.name} crumbLabel={a.name}
@@ -51,6 +53,7 @@ export default async function AreaPage({ params, searchParams }: Props) {
       emptyTitle={`Chưa có cơ hội tại ${where} đang mở bán.`}
       listTitle={<>{a.name}: <b>{data?.total ?? 0}</b> cơ hội đang mở · mới nhất trước</>}
       others={[
+        ...(guides?.items.length ? [{ title: `Cẩm nang tìm khách hàng tại ${where}`, links: [...guides.items.map((g) => [`/cam-nang/${g.slug}`, g.title] as [string, string]), [`/cam-nang/khu-vuc/${a.slug}`, "Xem tất cả cẩm nang khu vực này →"] as [string, string]] }] : []),
         { title: "Cơ hội theo khu vực khác", links: [["/co-hoi", "Tất cả khu vực"], ...AREA_PAGES.filter((x) => x.slug !== a.slug).map((x) => [`/co-hoi/khu-vuc/${x.slug}`, x.name] as [string, string])] },
         { title: "Cơ hội theo ngành", links: INDUSTRY_PAGES.map((x) => [`/co-hoi/nganh/${x.slug}`, x.name] as [string, string]) },
       ]}

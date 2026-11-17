@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import ArticleCardItem from "@/components/cam-nang/ArticleCardItem";
+import { AREA_PAGES, articleAreasFor } from "@/lib/areas";
 import { fetchArticles, slugify } from "@/lib/blog";
 import { breadcrumbLd, ldJson, orgRef, SITE_URL } from "@/lib/seo";
 
@@ -34,6 +35,8 @@ export default async function BlogPage({ searchParams }: Props) {
   const cats = (all?.categories ?? []).filter(([, n]) => n > 0);
   const cat = cats.find(([c]) => slugify(c) === sp.chu_de)?.[0] ?? "";
   const data = await fetchArticles({ category: cat, page: String(page), page_size: String(PAGE_SIZE) });
+  const areaCounts = all?.area_counts ?? {};
+  const areasWithPosts = AREA_PAGES.filter((x) => articleAreasFor(x.slug).some((s) => (areaCounts[s] ?? 0) > 0));
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
   const href = (o: { chu_de?: string; trang?: number }) => {
     const q = new URLSearchParams();
@@ -62,6 +65,12 @@ export default async function BlogPage({ searchParams }: Props) {
             <nav className="blog-cats" aria-label="Chủ đề">
               <a className={!cat ? "on" : undefined} href="/cam-nang">Tất cả<span>{all?.total ?? 0}</span></a>
               {cats.map(([c, n]) => <a key={c} className={c === cat ? "on" : undefined} href={href({ chu_de: slugify(c), trang: 1 })}>{c}<span>{n}</span></a>)}
+            </nav>
+          ) : null}
+          {areasWithPosts.length ? (
+            <nav className="blog-cats" aria-label="Theo khu vực">
+              <strong style={{ alignSelf: "center", fontSize: 14, color: "var(--muted)" }}>Theo khu vực:</strong>
+              {areasWithPosts.map((x) => <a key={x.slug} href={`/cam-nang/khu-vuc/${x.slug}`}>{x.name}</a>)}
             </nav>
           ) : null}
         </div>

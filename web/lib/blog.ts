@@ -5,6 +5,7 @@ export interface ArticleCard {
   title: string;
   excerpt: string;
   category: string;
+  area: string;
   cover_image: string;
   published_at: string | null;
   updated_at: string | null;
@@ -24,6 +25,7 @@ export interface ArticleList {
   page_size: number;
   items: ArticleCard[];
   categories: [string, number][];
+  area_counts: Record<string, number>;
 }
 
 export interface ArticleAdmin extends Omit<Article, "related"> {

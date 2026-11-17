@@ -5,6 +5,7 @@ import "@/components/cam-nang/article-preview.css";
 import { type FormEvent, useMemo, useState } from "react";
 
 import ArticleBody from "@/components/cam-nang/ArticleBody";
+import { AREA_PAGES } from "@/lib/areas";
 import { errFields, errMsg } from "@/lib/admin/api";
 import { ARTICLE_STATUS, type ArticleAdmin, articleToc, plain, slugify } from "@/lib/blog";
 
@@ -12,7 +13,7 @@ import { CoverImageField } from "./CoverImageField";
 import { Field, Icon } from "./ui";
 
 type Values = Record<string, string>;
-const KEYS = ["title", "slug", "status", "seo_title", "excerpt", "category", "cover_image", "body", "author_name", "published_at"] as const;
+const KEYS = ["title", "slug", "status", "seo_title", "excerpt", "category", "area", "cover_image", "body", "author_name", "published_at"] as const;
 
 const TEMPLATE = [
   "Mở đầu 2–3 câu: người đọc gặp vấn đề gì, bài này giúp gì.",
@@ -106,6 +107,7 @@ export function ArticleForm({
       [/\]\(\/(co-hoi|doi-tac|cam-nang|#dang-ky)/.test(v.body), "Có link nội bộ tới /co-hoi, /doi-tac hoặc bài cẩm nang khác"],
       [Boolean(v.cover_image), "Có ảnh bìa (hiện khi chia sẻ link)"],
       [Boolean(v.category), "Đã chọn chủ đề"],
+      [!v.area || v.body.includes(`/co-hoi/khu-vuc/${v.area}`) || /\]\(\/co-hoi\/(khu-vuc|nganh)\//.test(v.body), "Bài theo khu vực nên link tới trang cơ hội của khu vực / ngành"],
     ] as [boolean, string][];
   }, [v, n, h2]);
 
@@ -132,6 +134,13 @@ export function ArticleForm({
                 <select id="a-cat" className="adm-input" value={v.category} onChange={set("category")}>
                   <option value="">— Chọn chủ đề —</option>
                   {[...new Set([...categories, ...(v.category ? [v.category] : [])])].map((c) => <option key={c}>{c}</option>)}
+                </select>
+              </Field>
+              <Field label="Khu vực (tỉnh / miền)" error={errors.area} htmlFor="a-area">
+                <select id="a-area" className="adm-input" value={v.area} onChange={set("area")}>
+                  <option value="">— Bài chung, không gắn khu vực —</option>
+                  <optgroup label="Miền">{AREA_PAGES.filter((x) => x.kind === "region").map((x) => <option key={x.slug} value={x.slug}>{x.name}</option>)}</optgroup>
+                  <optgroup label="Tỉnh / thành">{AREA_PAGES.filter((x) => x.kind === "province").map((x) => <option key={x.slug} value={x.slug}>{x.name}</option>)}</optgroup>
                 </select>
               </Field>
               <Field label="Tác giả" error={errors.author_name} htmlFor="a-author">

@@ -4,6 +4,7 @@ import { cache } from "react";
 
 import ArticleBody from "@/components/cam-nang/ArticleBody";
 import ArticleCardItem from "@/components/cam-nang/ArticleCardItem";
+import { areaBySlug } from "@/lib/areas";
 import { articleToc, fetchArticle, fmtDate, slugify } from "@/lib/blog";
 import { breadcrumbLd, ldJson, orgRef, SITE_URL } from "@/lib/seo";
 
@@ -39,6 +40,7 @@ export default async function ArticlePage({ params }: Props) {
   const toc = articleToc(a.body);
   const url = `${SITE_URL}/cam-nang/${a.slug}`;
   const abs = (u: string) => (u.startsWith("/") ? `${SITE_URL}${u}` : u);
+  const area = areaBySlug(a.area);
   const catHref = a.category ? `/cam-nang?chu_de=${slugify(a.category)}` : "/cam-nang";
 
   const ld = ldJson([
@@ -56,7 +58,7 @@ export default async function ArticlePage({ params }: Props) {
       inLanguage: "vi-VN",
       ...(a.category ? { articleSection: a.category } : {}),
     },
-    breadcrumbLd([["Trang chủ", "/"], ["Cẩm nang", "/cam-nang"], ...(a.category ? [[a.category, catHref] as [string, string]] : []), [a.title, `/cam-nang/${a.slug}`]]),
+    breadcrumbLd([["Trang chủ", "/"], ["Cẩm nang", "/cam-nang"], ...(area ? [[area.name, `/cam-nang/khu-vuc/${area.slug}`] as [string, string]] : a.category ? [[a.category, catHref] as [string, string]] : []), [a.title, `/cam-nang/${a.slug}`]]),
   ]);
 
   return (
@@ -68,6 +70,7 @@ export default async function ArticlePage({ params }: Props) {
             <nav className="art-crumb" aria-label="Đường dẫn">
               <a href="/cam-nang">Cẩm nang</a>
               {a.category ? <><span>/</span><a href={catHref}>{a.category}</a></> : null}
+              {area ? <><span>/</span><a href={`/cam-nang/khu-vuc/${area.slug}`}>{area.name}</a></> : null}
             </nav>
             <h1 className="h-display">{a.title}</h1>
             <div className="art-meta">
@@ -91,7 +94,7 @@ export default async function ArticlePage({ params }: Props) {
                 <p>Xem trước cơ hội B2B đã được xác minh, miễn phí. Mua phiếu để mở khoá đầu mối liên hệ.</p>
               </div>
               <div className="acts">
-                <a className="btn btn-primary" href="/co-hoi">Xem cơ hội đang mở</a>
+                <a className="btn btn-primary" href={area ? `/co-hoi/khu-vuc/${area.slug}` : "/co-hoi"}>{area ? `Cơ hội đang mở tại ${area.name}` : "Xem cơ hội đang mở"}</a>
                 <a className="btn btn-outline" href="/#dang-ky">Đăng ký thành viên</a>
               </div>
             </div>

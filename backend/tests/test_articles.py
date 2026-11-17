@@ -79,3 +79,21 @@ def test_import_articles_cli(tmp_path, admin):
     assert cli(["import-articles", str(tmp_path), "--status", "published"]) == 0  # chạy lại = cập nhật, không nhân bản
     assert new_client().get("/api/articles").json()["total"] == 1
     assert admin.get(f"/api/admin/articles/{lst['items'][0]['id']}").json()["body"] == "## Mở đầu\nNội dung"
+
+
+def test_area_filter_counts_and_related(admin):
+    admin.post("/api/admin/articles", json=body(title="Tìm khách hàng B2B tại Bắc Ninh", area="bac-ninh"))
+    admin.post("/api/admin/articles", json=body(title="Tìm khách hàng B2B miền Bắc nói chung", area="mien-bac", category="Kiến thức ngành"))
+    admin.post("/api/admin/articles", json=body(title="Bài chung không gắn khu vực nào", category="Kiến thức ngành"))
+    anon = new_client()
+    lst = anon.get("/api/articles?areas=bac-ninh,mien-bac").json()
+    assert lst["total"] == 2 and {i["area"] for i in lst["items"]} == {"bac-ninh", "mien-bac"}
+    assert lst["area_counts"] == {"bac-ninh": 1, "mien-bac": 1}
+    assert anon.get("/api/articles?areas=bac-ninh").json()["total"] == 1
+    assert anon.get("/api/articles?areas=,,").json()["total"] == 3  # chỉ dấu phẩy = không lọc
+    # liên quan: cùng khu vực trước, rồi cùng chủ đề (bài số 3), rồi còn lại
+    d = anon.get("/api/articles/tim-khach-hang-b2b-tai-bac-ninh").json()
+    assert d["area"] == "bac-ninh" and len(d["related"]) == 2 and len({r["slug"] for r in d["related"]}) == 2
+    bad = admin.post("/api/admin/articles", json=body(title="Bài sai khu vực thử", area="Bắc Ninh!"))
+    assert bad.status_code == 422 and "area" in bad.json()["fields"]
+

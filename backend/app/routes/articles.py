@@ -44,7 +44,7 @@ def _visible():
 
 def card_out(a: Article) -> dict:
     return {
-        "slug": a.slug, "title": a.title, "excerpt": a.excerpt, "category": a.category, "cover_image": a.cover_image,
+        "slug": a.slug, "title": a.title, "excerpt": a.excerpt, "category": a.category, "area": a.area, "cover_image": a.cover_image,
         "published_at": _iso(a.published_at), "updated_at": _iso(a.updated_at), "reading_minutes": reading_minutes(a.body),
     }
 
@@ -57,16 +57,20 @@ def full_out(a: Article) -> dict:
 
 
 @public.get("")
-def list_articles(category: str = "", page: int = Query(1, ge=1), page_size: int = Query(12, ge=1, le=60), db: Session = Depends(get_db)):
+def list_articles(category: str = "", areas: str = Query("", max_length=300), page: int = Query(1, ge=1), page_size: int = Query(12, ge=1, le=60), db: Session = Depends(get_db)):
     stmt = select(Article).where(*_visible())
     if category:
         stmt = stmt.where(Article.category == category)
+    area_list = [x.strip() for x in areas.split(",") if x.strip()][:10]  # trang khu vực: "bac-ninh,mien-bac" = bài của tỉnh và của miền
+    if area_list:
+        stmt = stmt.where(Article.area.in_(area_list))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(Article.published_at.desc(), Article.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
     counts = dict(db.execute(select(Article.category, func.count()).where(*_visible()).group_by(Article.category)).all())
+    area_counts = {k: n for k, n in db.execute(select(Article.area, func.count()).where(*_visible()).group_by(Article.area)).all() if k}
     return {
         "total": total, "page": page, "page_size": page_size, "items": [card_out(a) for a in rows],
-        "categories": [[c, counts.get(c, 0)] for c in ARTICLE_CATEGORIES] + [[c, n] for c, n in counts.items() if c and c not in ARTICLE_CATEGORIES],
+        "area_counts": area_counts, "categories": [[c, counts.get(c, 0)] for c in ARTICLE_CATEGORIES] + [[c, n] for c, n in counts.items() if c and c not in ARTICLE_CATEGORIES],
     }
 
 
@@ -86,11 +90,15 @@ def get_article(slug: str, db: Session = Depends(get_db)):
     a = db.scalar(select(Article).where(Article.slug == slug, *_visible()))
     if not a:
         raise HTTPException(404, "Không tìm thấy bài viết.")
-    rel = select(Article).where(*_visible(), Article.id != a.id)
-    related = db.scalars(rel.where(Article.category == a.category).order_by(Article.published_at.desc()).limit(3)).all() if a.category else []
-    if len(related) < 3:
-        more = db.scalars(rel.where(Article.id.not_in([r.id for r in related] or [0])).order_by(Article.published_at.desc()).limit(3 - len(related))).all()
-        related = [*related, *more]
+    # Bài liên quan: cùng khu vực trước, rồi cùng chủ đề, rồi bài mới nhất — tối đa 3, không trùng
+    related: list[Article] = []
+    for cond in ([Article.area == a.area] if a.area else []) + ([Article.category == a.category] if a.category else []) + [None]:
+        if len(related) >= 3:
+            break
+        stmt = select(Article).where(*_visible(), Article.id != a.id, Article.id.not_in([r.id for r in related] or [0]))
+        if cond is not None:
+            stmt = stmt.where(cond)
+        related += db.scalars(stmt.order_by(Article.published_at.desc()).limit(3 - len(related))).all()
     return {**full_out(a), "related": [card_out(r) for r in related]}
 
 
@@ -104,6 +112,7 @@ class ArticleIn(BaseModel):
     seo_title: Line = Field("", max_length=200)
     excerpt: Line = Field("", max_length=400)
     category: Line = Field("", max_length=80)
+    area: str = Field("", max_length=60)  # slug khu vực, trống = bài chung
     cover_image: str = Field("", max_length=500)
     body: str = Field("", max_length=100_000)
     author_name: Line = Field("", max_length=120)
@@ -118,6 +127,14 @@ class ArticleIn(BaseModel):
     @classmethod
     def _slug(cls, v: str) -> str:
         return slugify(v)
+
+    @field_validator("area")
+    @classmethod
+    def _area(cls, v: str) -> str:
+        v = v.strip()
+        if v and slugify(v) != v:
+            raise ValueError("Khu vực không hợp lệ.")
+        return v
 
     @field_validator("status")
     @classmethod
