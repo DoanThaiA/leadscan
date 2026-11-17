@@ -41,16 +41,17 @@ export interface ProfileField {
   key: string;
   label: string;
   value: unknown;
-  source: { code: string; name: string; trust: number | null };
-  source_url: string;
-  method: string;
+  /** null khi trường chưa có bằng chứng */
+  source: { code: string; name: string; trust: number | null } | null;
+  source_url: string | null;
+  method: string | null;
   is_inferred: boolean;
-  fetched_at: string;
+  fetched_at: string | null;
   evidence_count: number;
   agree: number;
   conflict: boolean;
-  /** B08: điểm tin cậy 0–100 */
-  score: number;
+  /** B08: điểm tin cậy 0–100; null khi chưa có bằng chứng */
+  score: number | null;
   /** B13: quá hạn tái thu thập */
   stale: boolean;
   recrawl_days: number;

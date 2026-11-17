@@ -88,19 +88,23 @@ function InfoTab({ p, meta }: { p: CompanyProfile; meta: EnrichMeta }) {
             <dt>{f.label}</dt>
             <dd>
               <div className="v" style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-                <span>{fmtValue(f.key, f.value)}</span>
-                <span className={`er-score ${f.score >= 85 ? "hi" : f.score >= 60 ? "mid" : "lo"}`} title="Điểm tin cậy: độ tin cậy nguồn + số nguồn đồng thuận, giảm khi dữ liệu cũ">{f.score}</span>
+                <span>{f.value === null || f.value === undefined || f.value === "" ? "—" : fmtValue(f.key, f.value)}</span>
+                {f.score !== null ? <span className={`er-score ${f.score >= 85 ? "hi" : f.score >= 60 ? "mid" : "lo"}`} title="Điểm tin cậy: độ tin cậy nguồn + số nguồn đồng thuận, giảm khi dữ liệu cũ">{f.score}</span> : null}
                 {f.stale ? <span className="adm-badge warn" title={`Quá ${f.recrawl_days} ngày chưa thu thập lại`}>Dữ liệu cũ</span> : null}
               </div>
+              {!f.source ? (
+                <div className="er-src"><span className="muted">Chưa có nguồn</span></div>
+              ) : (
               <div className="er-src">
                 <span>{f.source.name}{f.source.trust !== null ? ` (tin cậy ${f.source.trust})` : ""}</span>
                 <span>{fmtDateTime(f.fetched_at)}</span>
-                <SourceLink url={f.source_url} />
+                {f.source_url ? <SourceLink url={f.source_url} /> : null}
                 <span>{f.evidence_count} bằng chứng{f.evidence_count > 1 ? ` · ${f.agree} đồng thuận` : ""}</span>
                 {f.conflict ? <span className="adm-badge warn" title="Các nguồn đưa ra giá trị khác nhau — xem tab Nguồn gốc">Xung đột</span> : null}
                 {f.is_inferred ? <span className="adm-badge plain role">Suy luận</span> : null}
-                <span className="muted">{meta.methods[f.method] ?? f.method}</span>
+                <span className="muted">{f.method ? meta.methods[f.method] ?? f.method : null}</span>
               </div>
+              )}
             </dd>
           </div>
         ))}
@@ -129,13 +133,6 @@ function InfoTab({ p, meta }: { p: CompanyProfile; meta: EnrichMeta }) {
           </dl>
         </>
       ) : null}
-      {p.missing_fields.length ? (
-        <p className="er-note" style={{ marginTop: 12 }}>
-          <Icon name="note" />
-          <span>Chưa có bằng chứng nên không hiển thị: {p.missing_fields.join(", ")}.</span>
-        </p>
-      ) : null}
-
       <h3 style={{ margin: "22px 0 8px", fontSize: 14 }}>Lô nhập</h3>
       <div className="adm-table-wrap">
         <table className="adm-table">

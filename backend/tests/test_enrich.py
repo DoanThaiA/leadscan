@@ -123,7 +123,8 @@ def test_import_creates_companies_with_evidence_and_purposes(admin):
 
     p = admin.get("/api/admin/enrich/companies/0101234567").json()
     shown = {f["key"]: f for f in p["fields"]}
-    assert set(shown) == {"mst", "ten"}  # chỉ trường có bằng chứng
+    assert {k for k, f in shown.items() if f["source"]} == {"mst", "ten"}  # chỉ hai trường có nguồn
+    assert shown["dia_chi"]["value"] is None and shown["dia_chi"]["evidence_count"] == 0  # vẫn hiển thị, để trống
     assert shown["ten"]["value"] == "Công ty Cổ phần Đại Việt"
     assert shown["ten"]["source"]["code"] == "nhap_lo" and shown["ten"]["source_url"] == "ds.csv#dong=2"
     assert shown["ten"]["fetched_at"]
@@ -301,8 +302,8 @@ def test_batch_requires_purpose(admin):
     assert r.status_code == 422
 
 
-def test_field_without_evidence_is_not_displayed(admin):
-    """Ràng buộc mục 8: kể cả khi cột có giá trị, thiếu bằng chứng thì không hiển thị."""
+def test_field_without_evidence_is_displayed_without_source(admin):
+    """Trường có giá trị nhưng chưa có bằng chứng vẫn hiển thị, chỉ không kèm nguồn."""
     import_csv(admin, ["MST", "0101234567"])
     from app.models_enrich import EnrichCompany
 
@@ -311,8 +312,12 @@ def test_field_without_evidence_is_not_displayed(admin):
         c.dia_chi = "Ghi thẳng không có nguồn"
         c.ngay_thanh_lap = date(2001, 1, 1)
         db.commit()
-    keys = [f["key"] for f in admin.get("/api/admin/enrich/companies/0101234567").json()["fields"]]
-    assert keys == ["mst"]
+    p = admin.get("/api/admin/enrich/companies/0101234567").json()
+    shown = {f["key"]: f for f in p["fields"]}
+    assert shown["dia_chi"]["value"] == "Ghi thẳng không có nguồn" and shown["dia_chi"]["source"] is None
+    assert shown["ngay_thanh_lap"]["value"] == "2001-01-01" and shown["ngay_thanh_lap"]["score"] is None
+    assert shown["mst"]["source"] is not None
+    assert "Địa chỉ trụ sở" not in p["missing_fields"]
 
 
 def test_stats_coverage(admin):
