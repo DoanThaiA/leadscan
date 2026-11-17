@@ -105,15 +105,7 @@ docker compose exec api python -m app.cli crawl-profit500 --chart 12 --year 2026
 - Mặc định bỏ qua doanh nghiệp đã có bằng chứng PROFIT500 (không tải lại trang hồ sơ); `--update` tải lại — nội dung không đổi thì không sinh bằng chứng mới.
 - Đi chậm 1 giây/request (`--delay`), 500 doanh nghiệp mất khoảng 10 phút. Mỗi bằng chứng trỏ về trang hồ sơ và ghi "Nguồn: Vietnam Report".
 
-**Chuyển dữ liệu kho cũ (một lần, trên VPS)** — bảng `knowledge_companies` còn giữ trong CSDL tới khi kiểm tra xong:
-
-```bash
-docker compose exec api python -m app.cli enrich-from-knowledge --purposes ban_hang_b2b --dry-run
-docker compose exec api python -m app.cli enrich-from-knowledge --purposes ban_hang_b2b --missing-csv /tmp/thieu-mst.csv
-docker compose cp api:/tmp/thieu-mst.csv ./thieu-mst.csv   # lấy file CSV ra máy chủ
-```
-
-Doanh nghiệp PROFIT500 → nguồn `profit500`; doanh nghiệp nhập tay vào kho → nguồn *nhập lô*. Doanh nghiệp chưa có MST ghi ra CSV để bổ sung MST rồi nhập lại bằng Nhập lô. Chạy lại an toàn. Kiểm tra xong thì một migration sau sẽ xoá bảng `knowledge_companies`, model `KnowledgeCompany` và `app/enrich/knowledge_sync.py`.
+Bảng `knowledge_companies` của kho cũ đã chuyển sang phân hệ (501 doanh nghiệp, lô #4 và #5) rồi **xoá** ở migration `c4e1f7a9b3d2` — tên CEO, logo, trạng thái AI, ghi chú nội bộ của kho cũ không còn.
 
 ## Làm giàu dữ liệu theo MST (`/admin/lam-giau`) — Giai đoạn 1: nền dữ liệu
 

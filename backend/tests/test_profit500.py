@@ -1,4 +1,4 @@
-"""Quét PROFIT500 thẳng vào phân hệ làm giàu theo MST + chuyển một lần dữ liệu Kho doanh nghiệp cũ."""
+"""Quét PROFIT500 thẳng vào phân hệ làm giàu theo MST (kho doanh nghiệp cũ đã xoá)."""
 
 import httpx
 import respx
@@ -153,59 +153,7 @@ def test_loi_mot_doanh_nghiep_khong_dung_ca_luot():
             assert s.created == 0 and len(s.errors) == 1
 
 
-# ------------------------------------------------------------------ chuyển một lần từ Kho doanh nghiệp cũ
-
-
-def _seed_old_store():
-    from app.models import KnowledgeCompany
-
-    with dbmod.new_session() as db:
-        db.add_all([
-            KnowledgeCompany(
-                name="Ngân hàng TMCP Ví Dụ", name_en="VIDU BANK", tax_code="0100230800", stock_code="VDB", industry="Ngân hàng",
-                address="Số 1 Láng Hạ, Quận Đống Đa, Hà Nội", province="Hà Nội", phone="024 3934 3137 / 1900545413", fax="024 3934 3138",
-                email="info@vidu.vn", website="www.vidu.vn", founded_year=1988, description="Ngân hàng lâu đời.", ceo_name="Nguyễn Văn CEO",
-                rank=1, rank_label="1(B1/2026)", rank_list="PROFIT500 – Top 500", rank_year=2026,
-                source="profit500", source_id="123", source_url="https://profit500.vn/Thong-tin-doanh-nghiep/VIDU-Chart--123-2026.html",
-            ),
-            KnowledgeCompany(name="Công ty chưa có MST", tax_code=None, source="profit500", source_id="124", industry="Bán lẻ"),
-            KnowledgeCompany(name="Công ty Nhập Tay", tax_code="0309876543", industry="Bán lẻ", source="manual"),
-        ])  # fmt: skip
-        db.commit()
-
-
-def test_chuyen_kho_cu_sang_lam_giau(admin, tmp_path, capsys):
-    from app import cli
-
-    _seed_old_store()
-    assert cli.main(["enrich-from-knowledge", "--purposes", "ban_hang_b2b", "--dry-run"]) == 0
-    assert "chuyển được 2" in capsys.readouterr().out
-    assert admin.get("/api/admin/enrich/stats").json()["total"] == 0
-
-    out = tmp_path / "thieu.csv"
-    assert cli.main(["enrich-from-knowledge", "--purposes", "ban_hang_b2b", "--missing-csv", str(out)]) == 0
-    text = capsys.readouterr().out
-    assert text.count("Đã tạo lô") == 2 and "1 doanh nghiệp không có MST" in text
-    csv_text = out.read_text(encoding="utf-8-sig")
-    assert "Công ty chưa có MST" in csv_text and "Chưa có MST" in csv_text
-
-    p = admin.get("/api/admin/enrich/companies/0100230800").json()
-    shown = {f["key"]: f["value"] for f in p["fields"]}
-    assert shown["ten_tieng_anh"] == "VIDU BANK" and shown["nam_thanh_lap"] == 1988 and shown["mo_ta"] == "Ngân hàng lâu đời."
-    assert shown["ma_ck"] == "VDB" and shown["niem_yet"] is True and shown["nhom_nganh"] == "Ngân hàng"
-    assert sorted(c["value"] for c in p["contacts"]) == ["+842439343137", "+842439343138", "1900545413", "info@vidu.vn"]
-    assert {c["kind"] for c in p["contacts"]} == {"phone", "fax", "email"}
-    assert p["signals"][0]["kind"] == "xep_hang"
-    ev = admin.get("/api/admin/enrich/companies/0100230800/evidence").json()
-    assert not any("CEO" in e["value"] for e in ev)
-
-    manual = {f["key"]: f for f in admin.get("/api/admin/enrich/companies/0309876543").json()["fields"]}
-    assert manual["ten"]["source"]["code"] == "nhap_lo"
-
-    # chạy lại: MST đã có, không sinh bằng chứng trùng
-    assert cli.main(["enrich-from-knowledge", "--purposes", "ban_hang_b2b"]) == 0
-    assert len(admin.get("/api/admin/enrich/companies/0100230800/evidence").json()) == len(ev)
-    assert cli.main(["enrich-from-knowledge", "--purposes", "sai"]) == 1
+# ------------------------------------------------------------------ kho doanh nghiệp cũ đã xoá
 
 
 def test_kho_cu_khong_con_tren_giao_dien(admin):

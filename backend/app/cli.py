@@ -400,39 +400,6 @@ def cmd_crawl_profit500(args) -> int:
     return 1 if stats.errors and not (stats.created or stats.updated or stats.skipped) else 0
 
 
-def cmd_enrich_from_knowledge(args) -> int:
-    from app.enrich import knowledge_sync
-    from app.enrich.importer import ImportError_
-
-    purposes = _purposes_arg(args.purposes)
-    if purposes is None:
-        return 1
-    kinds = [s.strip() for s in args.sources.split(",") if s.strip()]
-    with new_session() as db:
-        try:
-            rep = knowledge_sync.preview(db, kinds)
-            print(
-                f"Kho doanh nghiệp cũ: {rep['total']} DN · chuyển được {rep['valid']} (mới {rep['new']}, đã có {rep['existing']}) · "
-                f"không có MST / MST sai {rep['missing']} · trùng MST {rep['duplicate']}"
-            )
-            if args.dry_run:
-                return 0
-            batches, plan = knowledge_sync.sync(db, _user_arg(db, args.by), kinds=kinds, purposes=purposes, name=args.name)
-        except ImportError_ as e:
-            print(f"Lỗi: {e}")
-            return 1
-    for b in batches:
-        print(f"Đã tạo lô #{b.id} “{b.name}”: {b.mst_count} MST ({b.new_count} mới)")
-    if plan.missing:
-        if args.missing_csv:
-            Path(args.missing_csv).write_text(knowledge_sync.missing_csv(plan), encoding="utf-8")
-            print(f"Đã ghi {len(plan.missing)} doanh nghiệp không có MST vào {args.missing_csv} (bổ sung MST rồi nhập lại bằng Nhập lô).")
-        else:
-            print(f"{len(plan.missing)} doanh nghiệp không có MST không chuyển được — chạy lại với --missing-csv <file> để lưu danh sách.")
-    return 0
-
-
-
 def cmd_gen_data_key(_args) -> int:
     from app.enrich.crypto import generate_key
 
@@ -485,14 +452,6 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--purposes", required=True, help="Mục đích sử dụng được phép của lô, vd ban_hang_b2b,nghien_cuu_thi_truong")
     c.add_argument("--by", default="", help="Email quản trị ghi là người nhập (không bắt buộc)")
     c.set_defaults(fn=cmd_crawl_profit500)
-    ek = sub.add_parser("enrich-from-knowledge", help="Chuyển một lần dữ liệu Kho doanh nghiệp cũ sang phân hệ làm giàu MST")
-    ek.add_argument("--purposes", required=True, help="Mục đích sử dụng được phép, vd ban_hang_b2b,nghien_cuu_thi_truong")
-    ek.add_argument("--sources", default="profit500,manual", help="Nguồn trong kho cũ: profit500, manual (phân cách bằng dấu phẩy)")
-    ek.add_argument("--name", default="Chuyển từ Kho doanh nghiệp", help="Tên lô")
-    ek.add_argument("--missing-csv", default="", help="Ghi doanh nghiệp không có MST ra file CSV này")
-    ek.add_argument("--by", default="", help="Email quản trị ghi là người nhập (không bắt buộc)")
-    ek.add_argument("--dry-run", action="store_true", help="Chỉ đếm, không ghi")
-    ek.set_defaults(fn=cmd_enrich_from_knowledge)
     args = p.parse_args(argv)
     return args.fn(args)
 

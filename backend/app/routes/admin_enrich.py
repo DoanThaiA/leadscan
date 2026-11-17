@@ -1,7 +1,7 @@
 """API phân hệ làm giàu dữ liệu doanh nghiệp theo MST — /api/admin/enrich/* (giai đoạn 1: nền dữ liệu).
 
 Quyền theo vai trò làm giàu dữ liệu (app/enrich/permissions.py). Dữ liệu kho B chỉ đọc qua app/enrich/khob.py.
-Ràng buộc mục 8: trường hồ sơ chỉ hiển thị khi có ít nhất một bằng chứng.
+Mọi trường hồ sơ đều hiển thị; trường chưa có bằng chứng thì không kèm nguồn (nguồn về sau sẽ ghi đè).
 """
 
 import base64
@@ -169,7 +169,26 @@ def get_company(mst: str, user: AdminUser = Depends(perm.require("a.read")), db:
     for key, label in COMPANY_FIELDS.items():
         v = views.get(key)
         if not v:
-            continue  # không có bằng chứng → không hiển thị (mục 8)
+            # chưa có bằng chứng: vẫn hiển thị giá trị đang có trong cột (hoặc trống); nguồn nào về sau sẽ ghi đè
+            fields.append(
+                {
+                    "key": key,
+                    "label": label,
+                    "value": c.mst if key == "mst" else _display(key, getattr(c, key)),
+                    "source": None,
+                    "source_url": None,
+                    "method": None,
+                    "is_inferred": False,
+                    "fetched_at": None,
+                    "evidence_count": 0,
+                    "agree": 0,
+                    "conflict": False,
+                    "score": None,
+                    "stale": False,
+                    "recrawl_days": 0,
+                }
+            )
+            continue
         e = v.chosen
         src = srcs.get(e.source_code)
         recrawl = int(sources.setting(src, "recrawl_days", 90)) if src and e.source_code not in sources.INTERNAL else 0
@@ -192,7 +211,7 @@ def get_company(mst: str, user: AdminUser = Depends(perm.require("a.read")), db:
                 "recrawl_days": recrawl,
             }
         )
-    missing = [COMPANY_FIELDS[k] for k in COMPANY_FIELDS if k not in views]
+    missing = [f["label"] for f in fields if f["value"] in (None, "", [])]
 
     batches = db.execute(
         select(EnrichBatch.id, EnrichBatch.name, EnrichBatch.purposes, EnrichBatch.created_at, EnrichBatchItem.row_no)
