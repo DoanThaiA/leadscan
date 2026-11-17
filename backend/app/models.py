@@ -21,7 +21,7 @@ AdminUser / AdminSession   nhân viên quản trị và phiên đăng nhập
 MemberSession / PasswordReset   phiên đăng nhập & đặt lại mật khẩu của thành viên
 RateHit                    đếm lượt để giới hạn tần suất (đăng ký, đăng nhập)
 ApiUsage                   đếm số lần gọi API ngoài theo tháng (Cohere: khoá Trial giới hạn 1.000 lần/tháng)
-KnowledgeCompany           kho doanh nghiệp để AI quét (crawl từ bảng xếp hạng như PROFIT500 hoặc nhập tay)
+KnowledgeCompany           (cũ) kho doanh nghiệp — đã gộp vào phân hệ làm giàu MST, chỉ còn để chuyển dữ liệu (app/enrich/knowledge_sync.py)
 JobPost                    bài tuyển dụng đăng trên /tuyen-dung
   └─ JobApplication         hồ sơ ứng viên gửi qua form (đồng thời email về hộp thư tuyển dụng)
 PromoCode                  mã khuyến mãi giảm tiền đơn thanh toán (admin cấu hình)

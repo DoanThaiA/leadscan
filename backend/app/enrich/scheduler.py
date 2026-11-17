@@ -137,6 +137,8 @@ def _signal_alert(s: EnrichSignal) -> tuple[str, str] | None:
         title = p.get("chuc_danh") or ""
         kind = "nguoi_dai_dien" if "đại diện" in title.lower() else "bo_nhiem"
         return kind, f"Bổ nhiệm {title}"
+    if s.kind == "xep_hang":
+        return "khac", f"Xếp hạng: {p.get('bang') or ''} {p.get('nam') or ''} — hạng {p.get('hang') or p.get('nhan') or '?'}".strip()
     return "khac", f"Tín hiệu: {s.kind}"
 
 

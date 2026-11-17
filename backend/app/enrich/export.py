@@ -43,6 +43,7 @@ MAX_ROWS = 50_000
 COLUMNS_A = {
     "mst": "Mã số thuế",
     "ten": "Tên doanh nghiệp",
+    "ten_tieng_anh": "Tên tiếng Anh",
     "loai_hinh": "Loại hình",
     "dia_chi": "Địa chỉ",
     "tinh": "Tỉnh/thành",
@@ -52,11 +53,14 @@ COLUMNS_A = {
     "nhom_san_pham": "Nhóm sản phẩm",
     "ma_hs": "Mã HS",
     "ngay_thanh_lap": "Ngày thành lập",
+    "nam_thanh_lap": "Năm thành lập",
     "von": "Vốn điều lệ",
     "website": "Website",
     "ma_ck": "Mã CK",
     "email_dn": "Email chung doanh nghiệp",
     "dien_thoai_dn": "Điện thoại doanh nghiệp",
+    "fax_dn": "Fax doanh nghiệp",
+    "mo_ta": "Giới thiệu",
 }
 COLUMNS_B = {
     "nguoi_quyet_dinh": "Người ra quyết định (họ tên — chức danh)",
@@ -108,7 +112,7 @@ def export_companies(
     optout_count = 0
 
     company_contacts: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
-    if {"email_dn", "dien_thoai_dn"} & set(columns) and msts:
+    if {"email_dn", "dien_thoai_dn", "fax_dn"} & set(columns) and msts:
         for i in range(0, len(msts), 1000):
             for ct in db.scalars(select(EnrichContact).where(EnrichContact.owner_type == "company", EnrichContact.owner_id.in_(msts[i : i + 1000]))):
                 if ct.value.strip().lower() in blocked_values:
@@ -178,6 +182,8 @@ def export_companies(
                 out.append("; ".join(company_contacts[c.mst]["email"]))
             elif col == "dien_thoai_dn":
                 out.append("; ".join(company_contacts[c.mst]["phone"]))
+            elif col == "fax_dn":
+                out.append("; ".join(company_contacts[c.mst]["fax"]))
             elif col == "nguoi_quyet_dinh":
                 out.append("; ".join(f"{n} — {t}" for _, n, t in people.get(c.mst, [])))
             elif col == "email_nguoi":

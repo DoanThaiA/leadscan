@@ -26,7 +26,7 @@ from app.enrich import merge, sources
 from app.enrich.connectors.base import CompanyFact
 from app.enrich.normalize import bo_dau, normalize_phone, parse_mst
 from app.models import AdminUser
-from app.models_enrich import COMPANY_FIELDS, CompanyEvidence, EnrichBatch, EnrichBatchItem, EnrichCompany, EnrichContact, OptOut
+from app.models_enrich import COMPANY_FIELDS, CompanyEvidence, EnrichBatch, EnrichBatchItem, EnrichCompany, EnrichContact, EnrichSignal, OptOut
 
 MAX_FILE_BYTES = 10 * 1024 * 1024
 MAX_ROWS = 100_000
@@ -39,6 +39,10 @@ NAME_HEADERS = {"ten", "ten doanh nghiep", "ten cong ty", "ten dn", "ten_doanh_n
 # (theo ranh giới từ: "mã hs (4 số)" khớp "ma hs"); nhiều từ khoá cùng khớp thì từ khoá dài nhất thắng
 # ("ngành nghề kinh doanh chính" → ngành nghề ĐKKD, "ngành nghề" trơn → nhóm ngành theo danh sách).
 EXTRA_HEADERS: dict[str, list[str]] = {
+    "ten_tieng_anh": ["ten tieng anh", "ten giao dich quoc te", "ten quoc te", "english name", "ten nuoc ngoai"],
+    "fax": ["fax", "so fax"],
+    "nam_thanh_lap": ["nam thanh lap", "nam thanh lap doanh nghiep", "founded"],
+    "mo_ta": ["gioi thieu", "mo ta", "gioi thieu doanh nghiep", "gioi thieu chung", "description"],
     "dia_chi": ["dia chi", "dia chi tru so", "dia chi tru so chinh", "dia chi doanh nghiep", "dia chi cong ty", "address"],
     "tinh": ["tinh", "tinh/thanh", "tinh thanh", "tinh/thanh pho", "tinh thanh pho", "province"],
     "dien_thoai": ["dien thoai", "so dien thoai", "sdt", "so dt", "dt", "phone", "tel", "telephone", "hotline"],
@@ -52,8 +56,8 @@ EXTRA_HEADERS: dict[str, list[str]] = {
     "ngay_thanh_lap": ["ngay thanh lap", "ngay cap phep", "ngay dang ky"],
     "von": ["von dieu le", "von"],
 }
-CONTACT_FIELDS = {"dien_thoai": "phone", "email": "email"}
-EXTRA_LABELS = {**COMPANY_FIELDS, "dien_thoai": "Điện thoại doanh nghiệp", "email": "Email chung doanh nghiệp"}
+CONTACT_FIELDS = {"dien_thoai": "phone", "fax": "fax", "email": "email"}
+EXTRA_LABELS = {**COMPANY_FIELDS, "dien_thoai": "Điện thoại doanh nghiệp", "fax": "Fax doanh nghiệp", "email": "Email chung doanh nghiệp"}
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 
 
@@ -68,6 +72,10 @@ class Row:
     name: str
     raw: str
     extra: dict[str, object] = field(default_factory=dict)  # trường phụ → giá trị thô trong ô
+    url: str = ""  # nguồn riêng của dòng (vd trang hồ sơ PROFIT500); rỗng = file#dong=
+    excerpt: str = ""  # trích đoạn riêng; rỗng = "Dòng N: <cả dòng>"
+    content_hash: str = ""  # mã băm nội dung riêng của dòng (khử trùng khi đồng bộ lại); rỗng = mã băm file
+    signals: list = field(default_factory=list)  # SignalFact — vd xếp hạng PROFIT500
 
 
 @dataclass
@@ -287,6 +295,10 @@ def analyze(file_name: str, data: bytes) -> Analysis:
                 if not phones:
                     continue
                 v = phones
+            elif target == "fax":
+                v = split_phones(v)[0]
+                if not v:
+                    continue
             elif target == "email":
                 v = split_emails(v)
                 if not v:
@@ -347,12 +359,38 @@ def create_batch(
     an = analyze(file_name, data)
     if not an.rows:
         raise ImportError_("File không có mã số thuế hợp lệ nào.")
-    msts = [r.mst for r in an.rows]
+    return save_batch(
+        db, user, an.rows, an.report(),
+        name=name, list_source=list_source, purposes=purposes, note=note,
+        file_name=file_name, file_sha256=hashlib.sha256(data).hexdigest(),
+    )
+
+
+def save_batch(
+    db: Session,
+    user: AdminUser | None,
+    rows: list[Row],
+    report: dict,
+    *,
+    name: str,
+    list_source: str,
+    purposes: list[str],
+    note: str,
+    file_name: str,
+    file_sha256: str,
+    source_code: str = sources.IMPORT,
+    method: str = "nhap_lo",
+) -> EnrichBatch:
+    """Ghi một lô từ các dòng đã phân tích (file nhập, crawler PROFIT500 — app/services/profit500.py).
+
+    Dòng có `url` / `content_hash` riêng (vd hồ sơ PROFIT500) thì bằng chứng trỏ về đó; không thì về file + số dòng.
+    """
+    msts = [r.mst for r in rows]
     existing = existing_msts(db, msts)
     now = utcnow()
-    src = sources.ensure(db, sources.IMPORT)
+    src = sources.ensure(db, source_code)
 
-    report = an.report()
+    report = dict(report)
     report["existing"] = len(existing)
     report["new"] = len(msts) - len(existing)
     batch = EnrichBatch(
@@ -361,17 +399,17 @@ def create_batch(
         purposes=purposes,
         note=note,
         file_name=file_name[:255],
-        file_sha256=hashlib.sha256(data).hexdigest(),
+        file_sha256=file_sha256,
         report=report,
         mst_count=len(msts),
         new_count=report["new"],
-        created_by_id=user.id,
+        created_by_id=user.id if user else None,
         created_at=now,
     )
     db.add(batch)
     db.flush()
 
-    new_rows = [r for r in an.rows if r.mst not in existing]
+    new_rows = [r for r in rows if r.mst not in existing]
     if new_rows:
         db.execute(
             insert(EnrichCompany),
@@ -379,42 +417,43 @@ def create_batch(
         )
     db.execute(
         insert(EnrichBatchItem),
-        [{"batch_id": batch.id, "mst": r.mst, "row_no": r.row_no, "is_new": r.mst not in existing} for r in an.rows],
+        [{"batch_id": batch.id, "mst": r.mst, "row_no": r.row_no, "is_new": r.mst not in existing} for r in rows],
     )
-    # B12: cùng một file nhập lại → không sinh bằng chứng lặp (khoá: MST, trường, giá trị, mã băm file)
-    seen: set[tuple[str, str, str]] = set()
+    # B12: cùng nội dung nhập lại → không sinh bằng chứng lặp (khoá: MST, trường, giá trị, mã băm nội dung)
+    seen: set[tuple[str, str, str, str]] = set()
     for i in range(0, len(msts), 1000):
         seen.update(
             db.execute(
-                select(CompanyEvidence.mst, CompanyEvidence.field, CompanyEvidence.value).where(
+                select(CompanyEvidence.mst, CompanyEvidence.field, CompanyEvidence.value, CompanyEvidence.content_hash).where(
                     CompanyEvidence.source_code == src.code,
-                    CompanyEvidence.content_hash == batch.file_sha256,
                     CompanyEvidence.mst.in_(msts[i : i + 1000]),
                 )
             ).all()
         )
     evidence = []
-    for r in an.rows:
+    for r in rows:
+        h = r.content_hash or file_sha256
         common = {
             "mst": r.mst,
             "source_code": src.code,
-            "source_url": f"{batch.file_name}#dong={r.row_no}",
-            "excerpt": f"Dòng {r.row_no}: {r.raw}",
-            "method": "nhap_lo",
+            "source_url": (r.url or f"{batch.file_name}#dong={r.row_no}")[:1000],
+            "excerpt": (r.excerpt or f"Dòng {r.row_no}: {r.raw}")[:2000],
+            "method": method,
             "is_inferred": False,
-            "content_hash": batch.file_sha256,
+            "content_hash": h,
             "batch_id": batch.id,
             "fetched_at": now,
         }
         pairs = [("mst", r.mst), ("ten", r.name)]
         pairs += [(f.field, merge.encode(f.field, f.value)) for f in _company_facts(r)]
         for field_, value in pairs:
-            if value and (r.mst, field_, value) not in seen:
-                seen.add((r.mst, field_, value))
+            if value and (r.mst, field_, value, h) not in seen:
+                seen.add((r.mst, field_, value, h))
                 evidence.append({**common, "field": field_, "value": value})
     for i in range(0, len(evidence), 5000):
         db.execute(insert(CompanyEvidence), evidence[i : i + 5000])
-    _add_company_contacts(db, an.rows, src.code)
+    _add_company_contacts(db, rows, src.code)
+    _add_signals(db, rows, src.code)
     merge.recompute_companies(db, msts)
     db.commit()
     db.refresh(batch)
@@ -448,4 +487,26 @@ def _add_company_contacts(db: Session, rows: list[Row], source_code: str) -> int
         )
     for i in range(0, len(new), 5000):
         db.execute(insert(EnrichContact), new[i : i + 5000])
+    return len(new)
+
+
+def _add_signals(db: Session, rows: list[Row], source_code: str) -> int:
+    """Tín hiệu đi kèm dòng (vd xếp hạng PROFIT500). Khử trùng theo khoá nội dung như apply_facts."""
+    from app.enrich.apply import signal_key  # trễ: tránh vòng import
+
+    wanted = [(r, s) for r in rows for s in r.signals]
+    if not wanted:
+        return 0
+    keys = {(r.mst, signal_key(s.kind, s.payload, source_code)): (r, s) for r, s in wanted}
+    msts = list({m for m, _ in keys})
+    have: set[tuple[str, str]] = set()
+    for i in range(0, len(msts), 1000):
+        have.update(db.execute(select(EnrichSignal.mst, EnrichSignal.dedupe_key).where(EnrichSignal.mst.in_(msts[i : i + 1000]))).all())
+    new = [
+        {"mst": m, "kind": s.kind, "payload": s.payload, "day": s.day, "source_code": source_code, "source_url": (r.url or "")[:1000], "dedupe_key": k}
+        for (m, k), (r, s) in keys.items()
+        if (m, k) not in have
+    ]
+    for i in range(0, len(new), 5000):
+        db.execute(insert(EnrichSignal), new[i : i + 5000])
     return len(new)

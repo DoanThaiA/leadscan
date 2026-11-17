@@ -15,10 +15,13 @@ from app.db import utcnow
 from app.enrich.normalize import bo_dau, parse_date
 from app.models_enrich import EnrichBatch, EnrichBatchItem, EnrichCompany, EnrichSignal, PersonRole
 
-TEXT = {"mst", "ten", "dia_chi", "tinh", "trang_thai", "website", "domain", "ma_ck", "loai_hinh", "nhom_nganh"}
+TEXT = {"mst", "ten", "dia_chi", "tinh", "trang_thai", "website", "domain", "ma_ck", "loai_hinh", "nhom_nganh", "ten_tieng_anh", "mo_ta"}
 FIELDS = {
     "mst": ("Mã số thuế", "text"),
     "ten": ("Tên doanh nghiệp", "text"),
+    "ten_tieng_anh": ("Tên tiếng Anh", "text"),
+    "mo_ta": ("Giới thiệu", "text"),
+    "nam_thanh_lap": ("Năm thành lập", "number"),
     "loai_hinh": ("Loại hình", "text"),
     "dia_chi": ("Địa chỉ", "text"),
     "tinh": ("Tỉnh/thành", "text"),

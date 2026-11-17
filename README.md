@@ -92,19 +92,28 @@ Người ngoài thực địa giới thiệu cơ hội B2B, LeadScan xác minh, 
 - **Mua**: chưa đăng nhập → hộp "Đăng ký thành viên" / "Đăng nhập", xong quay lại đúng cơ hội (`?mua=1` tự tiếp tục). Đã đăng nhập → `POST /api/member/opportunities/<id>/open-shared` thêm cơ hội vào "Tất cả cơ hội" + Kho của tôi (`user_opportunities.via_share`, so khớp lại không xoá), rồi mở trong cổng thành viên để mua như thường.
 - Trang quản trị phiếu có nút **Trang công khai / Sao chép link** khi phiếu đang bán. Menu trang chủ có mục "Cơ hội".
 
-## Kho doanh nghiệp (`/admin/kho-doanh-nghiep`)
+## Quét PROFIT500 (vào phân hệ làm giàu theo MST)
 
-Bảng `knowledge_companies` — danh sách doanh nghiệp làm đầu vào cho AI quét tìm cơ hội. Admin thêm / sửa / xoá, lọc theo trạng thái AI (Chờ quét · Đã quét · Lỗi · Bỏ qua), nguồn, tìm theo tên / MST / ngành / tỉnh.
-
-Nạp dữ liệu từ bảng xếp hạng PROFIT500 (phần "Giới thiệu chung" của từng doanh nghiệp: tên, tên tiếng Anh, MST, mã CK, trụ sở, điện thoại, fax, email, website, năm thành lập, ngành nghề, CEO, đoạn giới thiệu, logo, hạng):
+"Kho doanh nghiệp" (`/admin/kho-doanh-nghiep`) **đã gộp** vào phân hệ làm giàu theo MST — đây là nơi duy nhất chứa doanh nghiệp; link cũ chuyển hướng về `/admin/lam-giau`. Crawler PROFIT500 ghi thẳng vào phân hệ, mỗi lượt quét là một lô (bắt buộc khai mục đích sử dụng):
 
 ```bash
-docker compose exec api python -m app.cli crawl-profit500 --chart 12 --year 2026
+docker compose exec api python -m app.cli crawl-profit500 --chart 12 --year 2026 --purposes ban_hang_b2b
 ```
 
-- `--chart`: 12 = Top 500 lợi nhuận tốt nhất, 13 = Top 500 tư nhân, 17 = Top 50 xuất sắc.
-- Mặc định chỉ thêm doanh nghiệp mới (khớp theo mã doanh nghiệp tại nguồn, rồi theo MST); `--update` làm mới bản ghi đã có nhưng **giữ nguyên** trạng thái AI và ghi chú nội bộ.
-- Đi chậm 1 giây/request (`--delay`), 500 doanh nghiệp mất khoảng 10 phút. Mỗi bản ghi lưu link nguồn — khi dùng lại thông tin cần ghi nguồn "Vietnam Report".
+- `--chart`: 12 = Top 500 lợi nhuận tốt nhất, 13 = Top 500 tư nhân, 17 = Top 50 xuất sắc. `--limit 20` để thử.
+- Nguồn `profit500` (tin cậy 0,7 — trên nhập lô 0,5, dưới ĐKKD 0,95). Ghi: tên, tên tiếng Anh, địa chỉ / tỉnh, điện thoại, fax, email, website, ngành (→ nhóm ngành), năm thành lập, giới thiệu, mã CK + niêm yết, **xếp hạng** (tín hiệu "Xếp hạng"). **Không** lưu tên CEO (dữ liệu cá nhân) và logo. Doanh nghiệp không có MST bị bỏ qua (MST là khoá).
+- Mặc định bỏ qua doanh nghiệp đã có bằng chứng PROFIT500 (không tải lại trang hồ sơ); `--update` tải lại — nội dung không đổi thì không sinh bằng chứng mới.
+- Đi chậm 1 giây/request (`--delay`), 500 doanh nghiệp mất khoảng 10 phút. Mỗi bằng chứng trỏ về trang hồ sơ và ghi "Nguồn: Vietnam Report".
+
+**Chuyển dữ liệu kho cũ (một lần, trên VPS)** — bảng `knowledge_companies` còn giữ trong CSDL tới khi kiểm tra xong:
+
+```bash
+docker compose exec api python -m app.cli enrich-from-knowledge --purposes ban_hang_b2b --dry-run
+docker compose exec api python -m app.cli enrich-from-knowledge --purposes ban_hang_b2b --missing-csv /tmp/thieu-mst.csv
+docker compose cp api:/tmp/thieu-mst.csv ./thieu-mst.csv   # lấy file CSV ra máy chủ
+```
+
+Doanh nghiệp PROFIT500 → nguồn `profit500`; doanh nghiệp nhập tay vào kho → nguồn *nhập lô*. Doanh nghiệp chưa có MST ghi ra CSV để bổ sung MST rồi nhập lại bằng Nhập lô. Chạy lại an toàn. Kiểm tra xong thì một migration sau sẽ xoá bảng `knowledge_companies`, model `KnowledgeCompany` và `app/enrich/knowledge_sync.py`.
 
 ## Làm giàu dữ liệu theo MST (`/admin/lam-giau`) — Giai đoạn 1: nền dữ liệu
 
@@ -114,6 +123,7 @@ Theo tài liệu "Yêu cầu nghiệp vụ — Hệ thống làm giàu dữ li�
 - **Không ghi đè giá trị**: mỗi lần một nguồn nói một điều là một dòng bằng chứng (`enrich_company_evidence`). Cột trên hồ sơ chỉ là giá trị hiển thị do `app/enrich/merge.py` chọn (biên tập viên > độ tin cậy nguồn > mới hơn); đổi giá trị thì ghi `enrich_company_changes`. **Trường không có bằng chứng thì không hiển thị.**
 - **Nhập lô MST** (`/admin/lam-giau/nhap-lo`): CSV hoặc .xlsx ≤ 10 MB, cột "MST" bắt buộc, "Tên doanh nghiệp" tuỳ chọn. Bấm *Kiểm tra file* để xem số dòng hợp lệ / trùng / sai định dạng trước khi nhập. MST 9 hoặc 12 số (Excel làm rơi số 0) được bù số 0 và báo riêng. Mỗi lô bắt buộc khai nguồn danh sách và **mục đích sử dụng được phép**; hồ sơ truy ngược được về lô + dòng trong file. 20.000 MST nhập mất khoảng 5 giây.
   - **Cột phụ nhận theo tiêu đề** (`EXTRA_HEADERS` trong `app/enrich/importer.py`, chỉ đọc sheet đầu): địa chỉ (tự tách tỉnh), tỉnh/thành, điện thoại, email, website, ngành nghề ĐKKD ("ngành nghề kinh doanh…"), **nhóm ngành** ("Ngành nghề" / "Nhóm ngành" trơn — phân loại của danh sách, không phải ngành ĐKKD), **nhóm sản phẩm**, **mã HS**, tình trạng, ngày thành lập, vốn. Mỗi giá trị là bằng chứng của nguồn *nhập lô* (tin cậy 0,5) → dữ liệu ĐKKD / nguồn chính thức nhập sau được ưu tiên hiển thị. Điện thoại / email chung vào bảng liên hệ doanh nghiệp (hiện ở hồ sơ, xuất được); số Excel đã đổi sang dạng khoa học (`8.4E+11`) hoặc thiếu mã vùng bị bỏ và liệt kê trong biên bản. Cột nhạy cảm (CCCD…) bị bỏ qua; cột không nhận ra chỉ nằm trong trích đoạn. Nhóm ngành / nhóm sản phẩm / mã HS lọc được ở Bộ lọc nâng cao và có trong cột xuất. Migration `a7b3c9d1e5f2`.
+  - Nhận thêm tiêu đề: tên tiếng Anh, fax, năm thành lập, giới thiệu. Migration `b2c8d4e6f0a1`.
 - **Hồ sơ doanh nghiệp** (`/admin/lam-giau/<MST>`): Thông tin pháp lý (mỗi trường kèm nguồn, đường dẫn, thời điểm, số bằng chứng, cờ xung đột) · Người liên quan · Tín hiệu · Lịch sử thay đổi · Nguồn gốc.
 - **Vai trò** (gán ở trang Nhân viên, cột "Làm giàu theo MST"; quản trị viên mặc định là *Quản trị hệ thống*, nhân viên chưa gán thì không vào được phân hệ):
 
@@ -302,7 +312,7 @@ Cập nhật phiên bản mới: `git pull && docker compose up -d --build` (kh�
 | Tạo / đặt lại mật khẩu quản trị | `docker compose exec api python -m app.cli create-admin --email ...` |
 | Gửi thử 1 email (kiểm tra Resend/SMTP) | `docker compose exec api python -m app.cli send-test-mail --to ban@gmail.com` |
 | Chẩn đoán DB, Redis, email (Resend/SMTP) | `docker compose exec api python -m app.cli diagnose` |
-| Quét PROFIT500 vào kho doanh nghiệp | `docker compose exec api python -m app.cli crawl-profit500 --chart 12 --year 2026` (thêm `--limit 20` để thử, `--update` để làm mới bản ghi đã có) |
+| Quét PROFIT500 vào phân hệ làm giàu MST | `docker compose exec api python -m app.cli crawl-profit500 --chart 12 --year 2026 --purposes ban_hang_b2b` (thêm `--limit 20` để thử, `--update` để tải lại DN đã có) |
 | Nhập hồ sơ JSON từ bản PHP cũ | copy thư mục `storage/submissions` vào container rồi `python -m app.cli import-legacy <thư mục>` |
 | Xem log | `docker compose logs -f api worker` |
 | Sao lưu DB | `docker compose exec db pg_dump -U leadscan leadscan > backup.sql` |

@@ -7,6 +7,10 @@ const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? "http://localhost:8000"
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  async redirects() {
+    // "Kho doanh nghiệp" đã gộp vào phân hệ làm giàu theo MST
+    return [{ source: "/admin/kho-doanh-nghiep/:path*", destination: "/admin/lam-giau", permanent: false }];
+  },
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${API_INTERNAL_URL}/api/:path*` }];
   },

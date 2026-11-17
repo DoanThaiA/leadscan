@@ -12,6 +12,7 @@ from app.models_enrich import EnrichSource
 
 IMPORT = "nhap_lo"
 EDITOR = "bien_tap"
+PROFIT500 = "profit500"  # bảng xếp hạng profit500.vn — crawler app/services/profit500.py ghi thẳng vào phân hệ
 
 MIN_INTERVAL_S = 2.0  # A08: tối thiểu 1 request mỗi 2 giây cho mỗi tên miền — cấu hình không được thấp hơn
 
@@ -20,6 +21,14 @@ INTERNAL: dict[str, dict] = {
         "name": "Danh sách MST nhập theo lô",
         "trust": 0.5,
         "legal_basis": "Danh sách MST do doanh nghiệp tự thu thập hợp pháp; mục đích sử dụng khai khi nhập từng lô.",
+        "enabled": True,
+        "config": {"kind": "internal"},
+    },
+    PROFIT500: {
+        "name": "Bảng xếp hạng PROFIT500 (Vietnam Report)",
+        "trust": 0.7,
+        # bản nháp — pháp chế cần duyệt như các nguồn khác
+        "legal_basis": "Thông tin doanh nghiệp công bố công khai trên profit500.vn (Vietnam Report), thu thập theo robots.txt của trang vào kho doanh nghiệp; khi dùng lại phải ghi rõ nguồn \"Vietnam Report\". Không lấy thông tin cá nhân (tên CEO không đưa vào phân hệ).",
         "enabled": True,
         "config": {"kind": "internal"},
     },

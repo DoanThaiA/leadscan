@@ -4,7 +4,7 @@
     python -m app.cli diagnose                                          # kiểm tra DB, Redis, SMTP
     python -m app.cli send-test-mail [--to a@b.vn]                      # gửi thử 1 email (mặc định tới NOTIFY_EMAIL)
     python -m app.cli import-legacy DIR                                 # nhập hồ sơ JSON từ bản PHP cũ
-    python -m app.cli crawl-profit500 --chart 12 --year 2026            # quét PROFIT500 vào kho doanh nghiệp
+    python -m app.cli crawl-profit500 --chart 12 --year 2026 --purposes ban_hang_b2b   # quét PROFIT500 vào phân hệ làm giàu MST
     python -m app.cli import-opportunities FILE.json [--publish]        # nhập cơ hội từ file JSON (mặc định: nháp)
     python -m app.cli import-job data/jobs/truong-phong-kinh-doanh.json # đăng / cập nhật bài tuyển dụng từ file JSON
 
@@ -362,21 +362,74 @@ def cmd_rematch(args) -> int:
     return 0
 
 
+def _purposes_arg(raw: str) -> list[str] | None:
+    from app.models_enrich import PURPOSES
+
+    purposes = [p.strip() for p in (raw or "").split(",") if p.strip()]
+    if not purposes or any(p not in PURPOSES for p in purposes):
+        print("Khai --purposes (mục đích sử dụng được phép của lô, phân cách bằng dấu phẩy), chọn trong: " + ", ".join(f"{k} = {v}" for k, v in PURPOSES.items()))
+        return None
+    return purposes
+
+
+def _user_arg(db, email: str):
+    return db.scalar(select(AdminUser).where(AdminUser.email == email.strip().lower())) if email else None
+
+
 def cmd_crawl_profit500(args) -> int:
     from app.services import profit500
 
     if args.chart not in profit500.CHARTS:
         print("Bảng xếp hạng không hợp lệ. Chọn: " + ", ".join(f"{k} = {v}" for k, v in profit500.CHARTS.items()))
         return 1
+    purposes = _purposes_arg(args.purposes)
+    if purposes is None:
+        return 1
     with new_session() as db:
         stats = profit500.crawl(
-            db, chart=args.chart, year=args.year, limit=args.limit, page_size=args.page_size, update=args.update, delay=args.delay
+            db, chart=args.chart, year=args.year, purposes=purposes, user=_user_arg(db, args.by),
+            limit=args.limit, page_size=args.page_size, update=args.update, delay=args.delay,
         )
     print()
-    print(f"Xong: thêm mới {stats.created}, cập nhật {stats.updated}, bỏ qua {stats.skipped}, lỗi {len(stats.errors)}")
+    print(
+        f"Xong: {stats.created} MST mới, {stats.updated} MST đã có được ghi thêm, bỏ qua {stats.skipped}, "
+        f"không có MST {stats.no_mst}, lỗi {len(stats.errors)}" + (f" — lô #{stats.batch_id}" if stats.batch_id else "")
+    )
     for e in stats.errors[:20]:
         print("  - " + e)
     return 1 if stats.errors and not (stats.created or stats.updated or stats.skipped) else 0
+
+
+def cmd_enrich_from_knowledge(args) -> int:
+    from app.enrich import knowledge_sync
+    from app.enrich.importer import ImportError_
+
+    purposes = _purposes_arg(args.purposes)
+    if purposes is None:
+        return 1
+    kinds = [s.strip() for s in args.sources.split(",") if s.strip()]
+    with new_session() as db:
+        try:
+            rep = knowledge_sync.preview(db, kinds)
+            print(
+                f"Kho doanh nghiệp cũ: {rep['total']} DN · chuyển được {rep['valid']} (mới {rep['new']}, đã có {rep['existing']}) · "
+                f"không có MST / MST sai {rep['missing']} · trùng MST {rep['duplicate']}"
+            )
+            if args.dry_run:
+                return 0
+            batches, plan = knowledge_sync.sync(db, _user_arg(db, args.by), kinds=kinds, purposes=purposes, name=args.name)
+        except ImportError_ as e:
+            print(f"Lỗi: {e}")
+            return 1
+    for b in batches:
+        print(f"Đã tạo lô #{b.id} “{b.name}”: {b.mst_count} MST ({b.new_count} mới)")
+    if plan.missing:
+        if args.missing_csv:
+            Path(args.missing_csv).write_text(knowledge_sync.missing_csv(plan), encoding="utf-8")
+            print(f"Đã ghi {len(plan.missing)} doanh nghiệp không có MST vào {args.missing_csv} (bổ sung MST rồi nhập lại bằng Nhập lô).")
+        else:
+            print(f"{len(plan.missing)} doanh nghiệp không có MST không chuyển được — chạy lại với --missing-csv <file> để lưu danh sách.")
+    return 0
 
 
 
@@ -422,14 +475,24 @@ def main(argv: list[str] | None = None) -> int:
     rm = sub.add_parser("rematch", help="Tính lại điểm phù hợp giữa phiếu tìm cơ hội và phiếu cơ hội")
     rm.add_argument("--reembed", action="store_true", help="Gọi lại Cohere nhúng toàn bộ (mặc định chỉ nhúng phiếu mới/đổi)")
     rm.set_defaults(fn=cmd_rematch)
-    c = sub.add_parser("crawl-profit500", help="Quét doanh nghiệp từ bảng xếp hạng PROFIT500 vào kho doanh nghiệp")
+    c = sub.add_parser("crawl-profit500", help="Quét doanh nghiệp từ bảng xếp hạng PROFIT500 vào phân hệ làm giàu MST")
     c.add_argument("--chart", type=int, default=12, help="12 = Top 500 lợi nhuận tốt nhất, 13 = Top 500 tư nhân, 17 = Top 50 xuất sắc")
     c.add_argument("--year", type=int, default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).year)
     c.add_argument("--limit", type=int, default=0, help="Số doanh nghiệp tối đa (0 = tất cả)")
     c.add_argument("--page-size", type=int, default=50)
     c.add_argument("--delay", type=float, default=1.0, help="Số giây nghỉ giữa các lần tải trang (lịch sự với trang nguồn)")
-    c.add_argument("--update", action="store_true", help="Cập nhật cả doanh nghiệp đã có (mặc định chỉ thêm mới)")
+    c.add_argument("--update", action="store_true", help="Tải lại cả doanh nghiệp đã có bằng chứng PROFIT500 (mặc định bỏ qua)")
+    c.add_argument("--purposes", required=True, help="Mục đích sử dụng được phép của lô, vd ban_hang_b2b,nghien_cuu_thi_truong")
+    c.add_argument("--by", default="", help="Email quản trị ghi là người nhập (không bắt buộc)")
     c.set_defaults(fn=cmd_crawl_profit500)
+    ek = sub.add_parser("enrich-from-knowledge", help="Chuyển một lần dữ liệu Kho doanh nghiệp cũ sang phân hệ làm giàu MST")
+    ek.add_argument("--purposes", required=True, help="Mục đích sử dụng được phép, vd ban_hang_b2b,nghien_cuu_thi_truong")
+    ek.add_argument("--sources", default="profit500,manual", help="Nguồn trong kho cũ: profit500, manual (phân cách bằng dấu phẩy)")
+    ek.add_argument("--name", default="Chuyển từ Kho doanh nghiệp", help="Tên lô")
+    ek.add_argument("--missing-csv", default="", help="Ghi doanh nghiệp không có MST ra file CSV này")
+    ek.add_argument("--by", default="", help="Email quản trị ghi là người nhập (không bắt buộc)")
+    ek.add_argument("--dry-run", action="store_true", help="Chỉ đếm, không ghi")
+    ek.set_defaults(fn=cmd_enrich_from_knowledge)
     args = p.parse_args(argv)
     return args.fn(args)
 

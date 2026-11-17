@@ -78,7 +78,7 @@ export interface CompanyProfile {
   changes: { field: string; label: string; old_value: string | null; new_value: string | null; source_code: string; detected_at: string }[];
   signals: Signal[];
   /** điện thoại / email chung của doanh nghiệp */
-  contacts?: { kind: "phone" | "email"; value: string; source_code: string; source_name: string }[];
+  contacts?: { kind: "phone" | "fax" | "email"; value: string; source_code: string; source_name: string }[];
   can: { people: boolean; evidence: boolean };
   created_at: string;
 }
@@ -255,6 +255,8 @@ export interface ImportReport {
   columns?: { header: string; field: string; label: string; filled: number }[];
   ignored_columns?: string[];
   sensitive_columns?: string[];
+  /** lô PROFIT500: số doanh nghiệp không có MST (không vào được phân hệ) */
+  no_tax_code?: number;
   phones?: { ok: number; bad: number; bad_rows: { row: number; value: string; unreadable: string[] }[] };
 }
 

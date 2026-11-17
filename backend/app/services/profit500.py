@@ -1,4 +1,4 @@
-"""Quét danh sách doanh nghiệp từ bảng xếp hạng PROFIT500 (profit500.vn) vào kho knowledge_companies.
+"""Quét danh sách doanh nghiệp từ bảng xếp hạng PROFIT500 (profit500.vn) vào phân hệ làm giàu dữ liệu theo MST.
 
 Nguồn (Vietnam Report):
   • Danh sách: GET /Charts/SearchBusiness?ChartId=&Year=&PageSize=&PageNumber=  → JSON, Result.Data là HTML các dòng
@@ -11,9 +11,14 @@ robots.txt của trang cho phép 2 đường dẫn trên. Script đi chậm (m�
 có User-Agent riêng và ghi nguồn (source_url) cho từng doanh nghiệp — trang yêu cầu ghi rõ nguồn
 "Vietnam Report" khi dùng lại thông tin.
 
-Chạy:  python -m app.cli crawl-profit500 --chart 12 --year 2026 [--limit 20] [--update]
+Mỗi lượt quét = một lô (EnrichBatch) của nguồn "profit500" (tin cậy 0,7), bắt buộc khai mục đích sử dụng được phép.
+Doanh nghiệp không có MST không vào được phân hệ (MST là khoá) → bỏ qua và đếm. Tên CEO, logo không lưu.
+
+Chạy:  python -m app.cli crawl-profit500 --chart 12 --year 2026 --purposes ban_hang_b2b [--limit 20] [--update]
 """
 
+import hashlib
+import json
 import logging
 import re
 import time
@@ -26,9 +31,12 @@ from bs4 import BeautifulSoup, Tag
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import utcnow
-from app.models import KnowledgeCompany
-from app.schemas_knowledge import normalize_tax_code
+from app.enrich import sources
+from app.enrich.connectors.base import SignalFact
+from app.enrich.importer import Row, existing_msts, save_batch, split_emails, split_phones
+from app.enrich.normalize import parse_mst
+from app.models import AdminUser
+from app.models_enrich import CompanyEvidence, EnrichBatch
 
 log = logging.getLogger("leadscan.profit500")
 
@@ -44,7 +52,7 @@ CHARTS = {
 
 PROFILE_RE = re.compile(r"-Chart--(\d+)-(\d{4})\.html", re.I)
 
-# Nhãn trong bảng "Giới thiệu chung" → cột của KnowledgeCompany. Nhãn khác lưu vào `extra`.
+# Nhãn trong bảng "Giới thiệu chung" → khoá dữ liệu (xem enrich_row). Nhãn khác lưu vào `extra`.
 LABEL_MAP = {
     "tên tiếng anh": "name_en",
     "xếp hạng profit500": "rank_label",
@@ -132,7 +140,7 @@ def parse_list_html(html: str) -> list[dict]:
 
 
 def parse_profile_html(html: str) -> dict:
-    """Phần "Giới thiệu chung" của trang hồ sơ → dict theo cột KnowledgeCompany (+ 'extra')."""
+    """Phần "Giới thiệu chung" của trang hồ sơ → dict theo khoá LABEL_MAP (+ 'extra')."""
     soup = BeautifulSoup(html, "html.parser")
     root = soup.select_one("#GeneralIntroduction") or soup
     out: dict = {"extra": {}}
@@ -237,27 +245,17 @@ class Profit500Client:
         self.http.close()
 
 
-# ------------------------------------------------------------------ ghi vào DB
+# ------------------------------------------------------------------ ghi vào phân hệ làm giàu
 
 
 @dataclass
 class CrawlStats:
-    created: int = 0
-    updated: int = 0
-    skipped: int = 0
+    created: int = 0  # MST mới vào phân hệ
+    updated: int = 0  # MST đã có, ghi thêm bằng chứng PROFIT500
+    skipped: int = 0  # đã có bằng chứng PROFIT500 và không --update
+    no_mst: int = 0  # không có MST hợp lệ → không vào được phân hệ
     errors: list[str] = field(default_factory=list)
-
-
-FIELDS = [
-    "name", "name_en", "tax_code", "stock_code", "industry", "address", "province", "phone", "fax", "email",
-    "website", "founded_year", "ceo_name", "description", "logo_url", "rank", "rank_label", "rank_list", "rank_year",
-]  # fmt: skip
-NULLABLE = {"tax_code", "founded_year", "rank", "rank_year"}
-LIMITS = {
-    "name": 300, "name_en": 300, "tax_code": 20, "stock_code": 20, "industry": 200, "address": 500, "province": 80,
-    "phone": 100, "fax": 100, "email": 200, "website": 300, "ceo_name": 150, "logo_url": 500, "rank_label": 100,
-    "rank_list": 200,
-}  # fmt: skip
+    batch_id: int | None = None
 
 
 def _merge(list_item: dict, profile: dict, chart: int) -> dict:
@@ -266,45 +264,93 @@ def _merge(list_item: dict, profile: dict, chart: int) -> dict:
     data["rank"] = list_item.get("rank") or profile.get("rank")
     data["rank_year"] = list_item.get("rank_year")
     data["rank_list"] = f"PROFIT500 – {CHARTS.get(chart, f'chart {chart}')}"
-    data["tax_code"] = normalize_tax_code(data.get("tax_code"))
-    for k, n in LIMITS.items():
-        if isinstance(data.get(k), str):
-            data[k] = data[k][:n]
     return data
 
 
-def upsert(db: Session, data: dict, *, update: bool) -> str:
-    """Thêm/cập nhật 1 doanh nghiệp. Trả về 'created' | 'updated' | 'skipped'.
+def enrich_row(data: dict, *, row_no: int) -> Row | None:
+    """Dữ liệu một doanh nghiệp (khoá LABEL_MAP) → dòng của lô làm giàu. Không có MST hợp lệ → None.
 
-    Tìm bản ghi cũ theo (source, source_id), không có thì theo MST. Khi cập nhật chỉ ghi đè các trường
-    lấy từ nguồn; trạng thái AI và ghi chú nội bộ giữ nguyên.
+    Không lấy: tên CEO (dữ liệu cá nhân), logo. Ngành → "nhóm ngành" (phân loại của bảng xếp hạng, không phải ngành ĐKKD).
     """
-    k = None
-    if data.get("source_id"):
-        k = db.scalar(select(KnowledgeCompany).where(KnowledgeCompany.source == SOURCE, KnowledgeCompany.source_id == data["source_id"]))
-    if k is None and data.get("tax_code"):
-        k = db.scalar(select(KnowledgeCompany).where(KnowledgeCompany.tax_code == data["tax_code"]))
-    if k is not None and not update:
-        return "skipped"
+    mst = parse_mst(data.get("tax_code")).mst if data.get("tax_code") else None
+    if not mst:
+        return None
+    extra: dict[str, object] = {}
+    for src_key, field_ in (
+        ("name_en", "ten_tieng_anh"), ("address", "dia_chi"), ("province", "tinh"), ("website", "website"),
+        ("industry", "nhom_nganh"), ("founded_year", "nam_thanh_lap"), ("description", "mo_ta"),
+    ):  # fmt: skip
+        if data.get(src_key) not in (None, ""):
+            extra[field_] = data[src_key]
+    for src_key, field_ in (("phone", "dien_thoai"), ("fax", "fax")):
+        if data.get(src_key) and (nums := split_phones(data[src_key])[0]):
+            extra[field_] = nums
+    if data.get("email") and (emails := split_emails(data["email"])):
+        extra["email"] = emails
+    if data.get("stock_code"):
+        extra["ma_ck"] = data["stock_code"]
+        extra["niem_yet"] = True
+    signals = []
+    if data.get("rank") or data.get("rank_label"):
+        payload = {"bang": data.get("rank_list") or "PROFIT500", "nam": data.get("rank_year"), "hang": data.get("rank"), "nhan": data.get("rank_label") or ""}
+        signals.append(SignalFact("xep_hang", payload))
+    rank = f" · {data.get('rank_list') or 'PROFIT500'} {data.get('rank_year') or ''} — hạng {data.get('rank_label') or data.get('rank')}" if signals else ""
+    name = " ".join(str(data.get("name") or "").split())[:400]
+    digest = {"name": name, **extra, "rank": [s.payload for s in signals]}
+    return Row(
+        row_no=row_no,
+        mst=mst,
+        name=name,
+        raw="",
+        extra=extra,
+        url=data.get("source_url") or "",
+        excerpt=f"PROFIT500{rank}: {name} — Nguồn: Vietnam Report",
+        content_hash=hashlib.sha256(json.dumps(digest, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest(),
+        signals=signals,
+    )
 
-    created = k is None
-    if created:
-        k = KnowledgeCompany(source=SOURCE, source_id=data.get("source_id"))
-        db.add(k)
-    elif k.source == SOURCE and not k.source_id:
-        k.source_id = data.get("source_id")
-    for f in FIELDS:
-        v = data.get(f)
-        if v in (None, "") and not created:
-            continue  # nguồn không có giá trị → giữ dữ liệu cũ
-        if v is None and f not in NULLABLE:
-            v = ""
-        setattr(k, f, v)
-    k.source_url = data.get("source_url") or k.source_url
-    k.extra = {**(k.extra or {}), **(data.get("extra") or {})}
-    k.crawled_at = utcnow()
-    db.commit()
-    return "created" if created else "updated"
+
+def _profit500_msts(db: Session) -> set[str]:
+    return set(db.scalars(select(CompanyEvidence.mst).where(CompanyEvidence.source_code == sources.PROFIT500).distinct()))
+
+
+def report_for(rows: list[Row], *, skipped: int = 0, no_mst: int = 0, errors: list[str] | None = None) -> dict:
+    """Biên bản lô theo cùng dạng nhập file (trang Lô MST hiện được)."""
+    from app.enrich.importer import EXTRA_LABELS
+
+    filled: dict[str, int] = {}
+    for r in rows:
+        for k in r.extra:
+            if k in EXTRA_LABELS:
+                filled[k] = filled.get(k, 0) + 1
+    phones = sum(len(r.extra.get("dien_thoai") or []) for r in rows)
+    return {
+        "total_rows": len(rows) + skipped + no_mst + len(errors or []),
+        "valid": len(rows),
+        "duplicate_in_file": 0,
+        "invalid": 0,
+        "zero_padded": 0,
+        "has_header": True,
+        "has_name_column": True,
+        "invalid_rows": [],
+        "duplicate_rows": [],
+        "columns": [{"header": EXTRA_LABELS[k], "field": k, "label": EXTRA_LABELS[k], "filled": n} for k, n in filled.items()],
+        "ignored_columns": [],
+        "sensitive_columns": [],
+        "phones": {"ok": phones, "bad": 0, "bad_rows": []},
+        "no_tax_code": no_mst,
+        "skipped_existing": skipped,
+        "errors": (errors or [])[:200],
+    }
+
+
+def save_rows(db: Session, user: AdminUser | None, rows: list[Row], report: dict, *, name: str, list_source: str, purposes: list[str], file_name: str) -> EnrichBatch:
+    return save_batch(
+        db, user, rows, report,
+        name=name, list_source=list_source, purposes=purposes, note="", file_name=file_name,
+        file_sha256=hashlib.sha256(json.dumps(sorted(r.content_hash for r in rows)).encode()).hexdigest(),
+        source_code=sources.PROFIT500, method="cau_truc",
+    )
 
 
 def crawl(
@@ -312,6 +358,8 @@ def crawl(
     *,
     chart: int = 12,
     year: int,
+    purposes: list[str],
+    user: AdminUser | None = None,
     limit: int = 0,
     page_size: int = 50,
     update: bool = False,
@@ -319,10 +367,17 @@ def crawl(
     client: Profit500Client | None = None,
     progress: Callable[[str], None] = print,
 ) -> CrawlStats:
-    """Quét bảng xếp hạng `chart` năm `year`. limit=0 → quét hết."""
+    """Quét bảng xếp hạng `chart` năm `year` vào một lô mới của phân hệ làm giàu. limit=0 → quét hết.
+
+    Không --update: doanh nghiệp đã có bằng chứng PROFIT500 thì không tải lại trang hồ sơ.
+    Lỗi giữa chừng: những doanh nghiệp đã tải vẫn được ghi thành lô.
+    """
     own = client is None
     client = client or Profit500Client(delay=delay)
     stats = CrawlStats()
+    have = _profit500_msts(db)
+    rows: list[Row] = []
+    in_run: set[str] = set()
     done = 0
     try:
         page = 1
@@ -338,19 +393,23 @@ def crawl(
                 done += 1
                 label = f"[{done}] #{item.get('rank') or '?'} {item['name']}"
                 try:
-                    # Đã có và không cập nhật → khỏi tải trang hồ sơ
-                    if not update and item.get("source_id") and db.scalar(
-                        select(KnowledgeCompany.id).where(KnowledgeCompany.source == SOURCE, KnowledgeCompany.source_id == item["source_id"])
-                    ):
+                    listed = parse_mst(item.get("tax_code")).mst if item.get("tax_code") else None
+                    if listed and listed in have and not update:
                         stats.skipped += 1
                         progress(f"{label} — đã có, bỏ qua")
                         continue
-                    profile = client.profile(item["source_url"])
-                    result = upsert(db, _merge(item, profile, chart), update=update)
-                    setattr(stats, result, getattr(stats, result) + 1)
-                    progress(f"{label} — {({'created': 'thêm mới', 'updated': 'cập nhật', 'skipped': 'đã có, bỏ qua'})[result]}")
+                    row = enrich_row(_merge(item, client.profile(item["source_url"]), chart), row_no=done)
+                    if row is None:
+                        stats.no_mst += 1
+                        progress(f"{label} — không có MST, bỏ qua")
+                        continue
+                    if row.mst in in_run:
+                        stats.skipped += 1
+                        continue
+                    in_run.add(row.mst)
+                    rows.append(row)
+                    progress(f"{label} — {row.mst}")
                 except Exception as e:  # 1 doanh nghiệp lỗi không dừng cả lượt quét
-                    db.rollback()
                     stats.errors.append(f"{item.get('name')}: {e}")
                     progress(f"{label} — LỖI: {e}")
             if page * page_size >= total:
@@ -359,4 +418,15 @@ def crawl(
     finally:
         if own:
             client.close()
+        if rows:
+            known = existing_msts(db, [r.mst for r in rows])
+            stats.created = sum(r.mst not in known for r in rows)
+            stats.updated = len(rows) - stats.created
+            title = f"{CHARTS.get(chart, chart)} {year}"
+            batch = save_rows(
+                db, user, rows, report_for(rows, skipped=stats.skipped, no_mst=stats.no_mst, errors=stats.errors),
+                name=f"PROFIT500 – {title}", list_source=f"profit500.vn (Vietnam Report) – {title}",
+                purposes=purposes, file_name=f"profit500:chart={chart}&year={year}",
+            )
+            stats.batch_id = batch.id
     return stats

@@ -23,7 +23,7 @@ from app.models_enrich import COMPANY_FIELDS, CompanyChange, CompanyEvidence, En
 
 LIST_FIELDS = {"nganh_nghe", "nhom_san_pham", "ma_hs"}
 DATE_FIELDS = {"ngay_thanh_lap"}
-INT_FIELDS = {"von"}
+INT_FIELDS = {"von", "nam_thanh_lap"}
 BOOL_FIELDS = {"niem_yet"}
 CHUNK = 500
 

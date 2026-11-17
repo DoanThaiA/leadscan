@@ -91,6 +91,14 @@ def normalize_fact(f: CompanyFact) -> list[CompanyFact]:
         v = [" ".join(str(x).split()) for x in items if str(x).strip()][:20] or None
     elif f.field == "nhom_nganh":
         v = clean_text(v, 200)
+    elif f.field == "ten_tieng_anh":
+        v = clean_text(v, 300)
+    elif f.field == "mo_ta":
+        lines = [" ".join(ln.split()) for ln in str(v).splitlines()]
+        v = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()[:5000] or None
+    elif f.field == "nam_thanh_lap":
+        m = re.search(r"\b(1[89]\d{2}|20\d{2})\b", str(int(v) if isinstance(v, float) and v.is_integer() else v))
+        v = int(m.group(1)) if m else None
     elif f.field == "nhom_san_pham":
         items = v if isinstance(v, list) else str(v).replace("\n", ";").split(";")
         v = list(dict.fromkeys(" ".join(str(x).split()) for x in items if str(x).strip()))[:20] or None

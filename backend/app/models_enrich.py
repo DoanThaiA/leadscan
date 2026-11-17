@@ -130,12 +130,14 @@ SIGNAL_KINDS = {
     "trung_thau": "Trúng thầu",
     "bo_nhiem": "Bổ nhiệm",
     "thay_doi_dang_ky": "Thay đổi đăng ký",
+    "xep_hang": "Xếp hạng (PROFIT500…)",
 }
 
 # Trường hồ sơ doanh nghiệp (kho A) — thứ tự hiển thị trên hồ sơ
 COMPANY_FIELDS = {
     "mst": "Mã số thuế",
     "ten": "Tên doanh nghiệp",
+    "ten_tieng_anh": "Tên tiếng Anh",
     "dia_chi": "Địa chỉ trụ sở",
     "tinh": "Tỉnh/thành",
     "trang_thai": "Tình trạng hoạt động",
@@ -144,11 +146,13 @@ COMPANY_FIELDS = {
     "nhom_san_pham": "Nhóm sản phẩm",
     "ma_hs": "Mã HS",
     "ngay_thanh_lap": "Ngày thành lập",
+    "nam_thanh_lap": "Năm thành lập",
     "von": "Vốn điều lệ (đồng)",
     "website": "Website",
     "domain": "Tên miền",
     "ma_ck": "Mã chứng khoán",
     "niem_yet": "Niêm yết",
+    "mo_ta": "Giới thiệu",
 }
 # Trường bắt buộc để tính độ phủ hồ sơ (mục 1: ≥ 95% MST có đủ)
 REQUIRED_FIELDS = ("ten", "dia_chi", "trang_thai", "nganh_nghe")
@@ -423,6 +427,7 @@ class EnrichCompany(Base):
     mst: Mapped[str] = mapped_column(String(14), primary_key=True)  # 10 số, hoặc 0101234567-001
     ten: Mapped[str | None] = mapped_column(String(400))
     ten_khong_dau: Mapped[str] = mapped_column(String(400), default="", index=True)
+    ten_tieng_anh: Mapped[str | None] = mapped_column(String(300))
     loai_hinh: Mapped[str | None] = mapped_column(String(60))  # tách từ tên (B02): Công ty TNHH, Công ty cổ phần…
     dia_chi: Mapped[str | None] = mapped_column(String(600))
     tinh: Mapped[str | None] = mapped_column(String(80), index=True)
@@ -432,12 +437,14 @@ class EnrichCompany(Base):
     nhom_san_pham: Mapped[list | None] = mapped_column(JSON)
     ma_hs: Mapped[list | None] = mapped_column(JSON)
     ngay_thanh_lap: Mapped[date | None] = mapped_column(Date)
+    nam_thanh_lap: Mapped[int | None] = mapped_column(Integer)  # khi nguồn chỉ có năm (vd PROFIT500)
     von: Mapped[int | None] = mapped_column(BigInteger)
     trang_thai: Mapped[str | None] = mapped_column(String(120), index=True)
     website: Mapped[str | None] = mapped_column(String(300))
     domain: Mapped[str | None] = mapped_column(String(200), index=True)
     ma_ck: Mapped[str | None] = mapped_column(String(20))
     niem_yet: Mapped[bool | None] = mapped_column(Boolean)
+    mo_ta: Mapped[str | None] = mapped_column(Text)  # đoạn giới thiệu doanh nghiệp tại nguồn
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

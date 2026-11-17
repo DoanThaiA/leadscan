@@ -458,3 +458,24 @@ def test_kho_b_schema_has_no_sensitive_columns():
     schema = None if dbmod.get_engine().dialect.name == "sqlite" else KHO_B
     for t in tables:
         assert all(not any(w in c["name"] for w in forbidden) for c in insp.get_columns(t.name, schema=schema))
+
+
+@pytest.mark.parametrize(
+    "header,field",
+    [
+        ("Tên tiếng Anh", "ten_tieng_anh"),
+        ("Fax", "fax"),
+        ("Năm thành lập", "nam_thanh_lap"),
+        ("Giới thiệu", "mo_ta"),
+        ("Ngành nghề kinh doanh chính", "nganh_nghe"),
+        ("Ngành nghề", "nhom_nganh"),
+        ("Tình trạng hoạt động", "trang_thai"),
+        ("Địa chỉ email", "email"),
+        ("Mã HS (4 số)", "ma_hs"),
+        ("Số dòng hàng", None),
+    ],
+)
+def test_extra_header_mapping(header, field):
+    from app.enrich.importer import _extra_field
+
+    assert _extra_field(bo_dau(header)) == field

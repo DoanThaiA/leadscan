@@ -109,12 +109,12 @@ function InfoTab({ p, meta }: { p: CompanyProfile; meta: EnrichMeta }) {
         <>
           <h3 style={{ margin: "22px 0 8px", fontSize: 14 }}>Liên hệ chung của doanh nghiệp</h3>
           <dl className="er-fields">
-            {(["phone", "email"] as const).map((kind) => {
+            {(["phone", "fax", "email"] as const).map((kind) => {
               const items = p.contacts!.filter((c) => c.kind === kind);
               if (!items.length) return null;
               return (
                 <div key={kind}>
-                  <dt>{kind === "phone" ? "Điện thoại" : "Email"}</dt>
+                  <dt>{kind === "phone" ? "Điện thoại" : kind === "fax" ? "Fax" : "Email"}</dt>
                   <dd>
                     {items.map((c) => (
                       <div key={c.value} className="v" style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>

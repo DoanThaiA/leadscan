@@ -13,7 +13,6 @@ const NAV = [
   { href: "/admin", label: "Tổng quan", icon: "home", exact: true },
   { href: "/admin/khach-hang", label: "Khách hàng", icon: "building" },
   { href: "/admin/co-hoi", label: "Cơ hội & phiếu", icon: "grid" },
-  { href: "/admin/kho-doanh-nghiep", label: "Kho doanh nghiệp (AI)", icon: "scan" },
   { href: "/admin/lam-giau", label: "Làm giàu theo MST", icon: "layers", enrich: true },
   { href: "/admin/thanh-toan", label: "Thanh toán", icon: "card" },
   { href: "/admin/hoa-don", label: "Hoá đơn", icon: "receipt" },
