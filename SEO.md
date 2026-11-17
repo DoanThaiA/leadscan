@@ -46,6 +46,28 @@ Kiểm tra nhanh sau khi deploy:
 - https://www.bing.com/webmasters → **Nhập từ Google Search Console** (1 cú bấm). Bing còn cấp dữ liệu cho ChatGPT Search và Copilot.
 - Hoặc dùng thẻ meta: đặt `BING_SITE_VERIFICATION=` trong `.env` rồi build lại web.
 
+### 2.2b. Google Analytics 4 (đo lượng khách)
+
+Code đã sẵn (`web/components/Analytics.tsx`), chỉ cần điền mã đo:
+
+1. Vào https://analytics.google.com → **Quản trị** → **Tạo** → **Tài khoản / Thuộc tính** (tên "LeadScan", múi giờ Việt Nam, đơn vị tiền tệ VND).
+2. Ở bước "Luồng dữ liệu", chọn **Web**, nhập `https://leadscan.net`. Google cấp **Mã đo lường** dạng `G-XXXXXXXXXX`.
+3. Điền vào `.env` trên VPS rồi build lại web:
+   ```
+   GA_MEASUREMENT_ID=G-XXXXXXXXXX
+   ```
+   ```bash
+   docker compose up -d --build web
+   ```
+4. Kiểm tra: mở GA → **Báo cáo → Thời gian thực**, vào `leadscan.net` trên điện thoại / tab ẩn danh, phải thấy 1 người dùng.
+5. Nối GA với Search Console (GA → Quản trị → Liên kết sản phẩm → Search Console) để xem từ khoá trong báo cáo GA.
+
+Lưu ý:
+- **Chỉ đo trang công khai.** Admin, cổng thành viên và các trang con của `/doi-tac/…` (cổng đối tác, điều khoản) không gửi dữ liệu — vì chứa thông tin cá nhân / tài chính.
+- Để trống `GA_MEASUREMENT_ID` = không tải gì.
+- GA đặt cookie đo hành vi → nên có **thông báo cookie** và nêu trong chính sách bảo mật (Nghị định 13/2023 về bảo vệ dữ liệu cá nhân). Hiện web chưa có biểu ngữ cookie.
+- Ngoài ra bạn cũng có thể đặt "Sự kiện chính" (key event) cho việc gửi form đăng ký trong GA để biết bao nhiêu người đăng ký từ trang nào.
+
 ### 2.3. Gom `www` về 1 địa chỉ
 
 Nginx hiện chỉ nhận `leadscan.net`. Nếu `www.leadscan.net` có bản ghi DNS, thêm khối này (rồi `certbot --nginx -d www.leadscan.net`) để Google không thấy 2 bản trùng:

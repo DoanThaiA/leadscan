@@ -84,6 +84,7 @@ services:
         NEXT_PUBLIC_SITE_URL: ${SITE_URL:-https://leadscan.net}
         NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION:-}
         NEXT_PUBLIC_BING_SITE_VERIFICATION: ${BING_SITE_VERIFICATION:-}
+        NEXT_PUBLIC_GA_ID: ${GA_MEASUREMENT_ID:-}
         API_INTERNAL_URL: http://api:8000
     restart: unless-stopped
     ports:

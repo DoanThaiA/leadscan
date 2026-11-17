@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Be_Vietnam_Pro, Inter } from "next/font/google";
 import type { ReactNode } from "react";
 
+import Analytics from "@/components/Analytics";
 import { SITE_URL } from "@/lib/seo";
 
 // Mã xác minh Google Search Console / Bing Webmaster (thẻ meta) — đặt trong .env khi build, để trống thì không in thẻ.
@@ -50,7 +51,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.replace('no-js','js')" }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
