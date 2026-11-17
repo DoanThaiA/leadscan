@@ -50,7 +50,7 @@ export function payDaysText(days: string): string {
 export const vnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
 
 export const SLOGAN =
-  "Nếu bạn nhìn thấy cơ hội nhưng không có khả năng thực thi, hãy giới thiệu cho người phù hợp — ít nhất bạn sẽ nhận được 1 ly cafe cảm ơn.";
+  "Nếu bạn nhìn thấy cơ hội nhưng không có khả năng thực thi, hãy đăng lên sàn để đến tay người phù hợp — ít nhất bạn sẽ nhận được 1 ly cafe cảm ơn.";
 
 /** Câu ngắn về thưởng đối tác cho trang chủ (theo phương án đang áp dụng) */
 export function rewardShort(r: Reward): string {
@@ -83,7 +83,7 @@ export function benefits(r: Reward) {
     { icon: "wallet", title: "Ví minh bạch", text: "Theo dõi trạng thái cơ hội và số dư theo thời gian thực." },
     { icon: "landmark", title: "Rút về ngân hàng", text: `Từ ${vnd(r.minWithdraw)}, chi theo lô ${r.payoutDays}.` },
     { icon: "shield", title: "Miễn phí tham gia", text: "Không thu phí, không đặt cọc, không chỉ tiêu." },
-    { icon: "spark", title: "Không cần bán hàng", text: "Bạn chỉ giới thiệu. LeadScan xác minh, enrich và bán phiếu." },
+    { icon: "spark", title: "Không cần bán hàng", text: "Bạn chỉ đăng cơ hội. LeadScan xác minh, mở bán phiếu và kết nối người mua." },
   ];
 }
 
@@ -108,6 +108,10 @@ export const PROMISES = [
 export function faq(r: Reward) {
   return [
     {
+      q: "Cơ hội tôi đăng đến tay người mua thế nào?",
+      a: "Sau khi đạt xác minh, LeadScan xuất bản cơ hội thành phiếu trên sàn. Người mua xem trước tóm tắt và điểm chất lượng miễn phí, mua phiếu để mở khoá bên có nhu cầu và đầu mối liên hệ. Mỗi phiếu giới hạn số người mua.",
+    },
+    {
       q: "Khi nào tôi nhận được tiền?",
       a: `Ly cafe được ghi vào ví khi cơ hội đạt xác minh và chuyển sang Khả dụng khi phiếu được xuất bản. Hoa hồng mỗi lượt bán giữ ${r.holdDays} ngày rồi chuyển sang Khả dụng. Từ ${vnd(r.minWithdraw)} khả dụng bạn tạo lệnh rút; LeadScan chi theo lô ${r.payoutDays}, tiền về trong 3 ngày làm việc.`,
     },
@@ -118,11 +122,11 @@ export function faq(r: Reward) {
     },
     {
       q: "Cơ hội bị trùng thì sao?",
-      a: "Ai gửi trước được ghi nhận (theo dấu thời gian). Cơ hội LeadScan đã có không được thưởng, trừ khi bạn bổ sung thông tin mới có giá trị như người ra quyết định, ngân sách, thời điểm — khi đó bạn nhận 1 ly cafe.",
+      a: "Ai đăng trước được ghi nhận (theo dấu thời gian). Cơ hội LeadScan đã có không được thưởng, trừ khi bạn bổ sung thông tin mới có giá trị như người ra quyết định, ngân sách, thời điểm — khi đó bạn nhận 1 ly cafe.",
     },
     {
       q: "Tham gia có mất phí không?",
-      a: "Không. Đăng ký và gửi cơ hội hoàn toàn miễn phí. Ví hoa hồng không nạp tiền và không chuyển cho người khác — chỉ rút về tài khoản ngân hàng đứng tên bạn.",
+      a: "Không. Đăng ký và đăng cơ hội hoàn toàn miễn phí. Ví hoa hồng không nạp tiền và không chuyển cho người khác — chỉ rút về tài khoản ngân hàng đứng tên bạn.",
     },
     {
       q: "Tôi đã là thành viên LeadScan, dùng chung tài khoản được không?",

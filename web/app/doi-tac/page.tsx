@@ -9,12 +9,12 @@ import LandingEffects from "@/components/landing/LandingEffects";
 import MobileCta from "@/components/landing/MobileCta";
 import PartnerHeader from "@/components/partner/PartnerHeader";
 import SignupForm from "@/components/partner/SignupForm";
-import { ACCEPTED, benefits, faq, GROUPS, howCombined, PROMISES, REJECTED, type Reward, SLOGAN, vnd } from "@/lib/partner/content";
+import { ACCEPTED, benefits, faq, GROUPS, howCombined, PROMISES, REJECTED, type Reward, vnd } from "@/lib/partner/content";
 import { getReward } from "@/lib/partner/reward-server";
 
-const TITLE = "Đối tác LeadScan – Thấy cơ hội? Giới thiệu đi. Ít nhất 1 ly cafe.";
+const TITLE = "Đối tác LeadScan – Biết cơ hội B2B? Đăng lên sàn. Ít nhất 1 ly cafe.";
 const DESC =
-  "Bạn thấy cơ hội B2B nhưng không tự bán được? Giới thiệu cho LeadScan: nhận 1 ly cafe cho mỗi cơ hội đạt xác minh và 20% doanh thu mỗi lượt bán phiếu trong 12 tháng. Miễn phí, 1 cấp.";
+  "Biết cơ hội B2B nhưng không tự bán được? Đăng lên sàn LeadScan: cơ hội được xác minh rồi kết nối với người mua đang có nhu cầu. Ít nhất 1 ly cafe cho mỗi cơ hội đạt xác minh, thêm hoa hồng khi phiếu được bán. Miễn phí, 1 cấp.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -49,15 +49,15 @@ export default async function PartnerLandingPage() {
         <section className="hero ptl-hero">
           <div className="container ptl-hero-grid">
             <div>
-              <span className="pill ptl-pill"><Ic name="spark" /> Chương trình Đối tác LeadScan</span>
-              <h1 className="h-display">Thấy cơ hội? Giới thiệu đi. <b>Ít nhất 1 ly cafe.</b></h1>
-              <p className="hero-sub">{SLOGAN}</p>
+              <span className="pill ptl-pill"><Ic name="spark" /> Đối tác sàn LeadScan</span>
+              <h1 className="h-display">Biết cơ hội? Đăng lên sàn. <b>Ít nhất 1 ly cafe.</b></h1>
+              <p className="hero-sub">LeadScan là sàn kết nối cơ hội kinh doanh B2B. Bạn đăng cơ hội mình biết, LeadScan xác minh rồi kết nối với người mua đang có nhu cầu. Không cần tự bán hàng.</p>
               <div className="hero-cta">
                 <a href="#dang-ky" className="btn btn-primary">Đăng ký đối tác <Ic name="arrow" /></a>
                 <a href="/doi-tac/dang-nhap" className="btn btn-outline">Đăng nhập đối tác</a>
               </div>
               <div className="hero-chips">
-                <span className="pill"><Ic name="check" />Miễn phí tham gia</span>
+                <span className="pill"><Ic name="check" />Đăng cơ hội miễn phí</span>
                 <span className="pill"><Ic name="check" />1 cấp, không đa cấp</span>
                 <span className="pill"><Ic name="check" />Rút về ngân hàng</span>
               </div>
@@ -67,7 +67,7 @@ export default async function PartnerLandingPage() {
               <ol>
                 <li className="done"><i /><div><b>Đã gửi</b><span>Nhà máy FDI cần 20.000 thùng carton/tháng · Bắc Ninh</span></div></li>
                 <li className="done"><i /><div><b>Đạt xác minh</b><span>Điểm chất lượng 78 · thông tin mới</span></div><em>+{vnd(R.cafe)}</em></li>
-                <li className="done"><i /><div><b>Đã xuất bản phiếu</b><span>Ly cafe chuyển sang Khả dụng</span></div></li>
+                <li className="done"><i /><div><b>Đã xuất bản phiếu</b><span>Lên sàn · ly cafe chuyển sang Khả dụng</span></div></li>
                 <li className="live"><i /><div><b>Đã bán 2 lượt × {vnd(1_000_000)}</b><span>{R.rate}% = {vnd((R.rate * 2_000_000) / 100)}{R.mode === "sum" ? ", cộng thêm ngoài ly cafe" : ", đã gồm ly cafe — ghi thêm phần vượt"}</span></div><em>+{vnd(heroTotal - R.cafe)}</em></li>
               </ol>
               <div className="ptl-signal-ft"><span>Tổng nhận</span><b>{vnd(heroTotal)}</b></div>
@@ -81,7 +81,7 @@ export default async function PartnerLandingPage() {
             <div className="section-head reveal">
               <span className="pill-tag">Bạn là ai?</span>
               <h2 className="h-display h2">Bạn tiếp xúc nhu cầu mua hàng mỗi ngày <b>nhưng không bán đúng mặt hàng đó</b></h2>
-              <p>Người biết sớm thường không phải người bán được hàng. LeadScan tìm người làm được — bạn nhận phần cảm ơn.</p>
+              <p>Người biết sớm thường không phải người bán được hàng. Đăng lên sàn để cơ hội đến đúng người mua làm được — bạn nhận phần cảm ơn.</p>
             </div>
             <div className="ptl-groups">
               {GROUPS.map((g) => (
@@ -104,9 +104,9 @@ export default async function PartnerLandingPage() {
               <h2 className="h-display h2">3 bước, <b>bạn chỉ làm bước đầu tiên</b></h2>
             </div>
             <ol className="ptl-steps">
-              <li className="reveal"><span className="n">1</span><h3>Gửi cơ hội</h3><p>Điền form trong cổng đối tác: doanh nghiệp/MST, nhu cầu cụ thể, khu vực, nguồn biết tin. Khoảng 2 phút.</p></li>
-              <li className="reveal"><span className="n">2</span><h3>LeadScan xác minh & enrich</h3><p>Kiểm tra trùng, AI chấm điểm và người duyệt xác minh trong khoảng 2 ngày làm việc. Bạn theo dõi trạng thái trong cổng.</p></li>
-              <li className="reveal"><span className="n">3</span><h3>Nhận cafe + hoa hồng</h3><p>Đạt xác minh: ít nhất 1 ly cafe. Phiếu được bán: {R.rate}% doanh thu mỗi lượt trong {R.months} tháng.</p></li>
+              <li className="reveal"><span className="n">1</span><h3>Đăng cơ hội</h3><p>Điền form trong cổng đối tác: doanh nghiệp/MST, nhu cầu cụ thể, khu vực, nguồn biết tin. Khoảng 2 phút.</p></li>
+              <li className="reveal"><span className="n">2</span><h3>LeadScan xác minh</h3><p>Kiểm trùng, bổ sung thông tin doanh nghiệp, AI chấm điểm và người duyệt xác minh trong khoảng 2 ngày làm việc. Cơ hội không đạt không lên sàn.</p></li>
+              <li className="reveal"><span className="n">3</span><h3>Lên sàn, nhận thưởng</h3><p>Cơ hội đạt được mở bán dạng phiếu cho người mua. {R.mode === "sum" ? `Bạn nhận 1 ly cafe, cộng ${R.rate}% doanh thu mỗi lượt bán trong ${R.months} tháng.` : `Bạn nhận ít nhất 1 ly cafe; phiếu bán tốt thì hưởng ${R.rate}% doanh thu trong ${R.months} tháng.`}</p></li>
             </ol>
           </div>
         </section>
@@ -180,9 +180,11 @@ export default async function PartnerLandingPage() {
               <ol className="reg-next">
                 <li><b>Đăng ký</b>Điền form đăng ký, khoảng 1 phút.</li>
                 <li><b>Xác thực email</b>Nhập mã OTP gửi tới email để kích hoạt tài khoản.</li>
-                <li><b>Gửi cơ hội đầu tiên</b>Trong cổng đối tác, theo dõi trạng thái và số dư theo thời gian thực.</li>
+                <li><b>Đăng cơ hội đầu tiên</b>Trong cổng đối tác, theo dõi trạng thái xác minh và số dư theo thời gian thực.</li>
               </ol>
               <p className="ptl-login-hint">Đã có tài khoản? <a href="/doi-tac/dang-nhap">Đăng nhập cổng đối tác</a></p>
+              <p className="ptl-login-hint">Đã là thành viên LeadScan? Bấm “Trở thành đối tác” trong cổng thành viên, không cần đăng ký lại.</p>
+              <p className="ptl-login-hint">Bạn cần tìm khách hàng? <a href="/#dang-ky">Đăng ký thành viên</a></p>
             </div>
             <div className="form-card reveal">
               <SignupForm />

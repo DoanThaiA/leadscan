@@ -27,6 +27,7 @@ export default function Join({ reward: R }: { reward: Reward }) {
               <li><Check />Hạng Vàng được mua độc quyền phiếu</li>
             </ul>
             <a href="#dang-ky" className="btn btn-primary">Đăng ký thành viên</a>
+            <a href="/co-hoi" className="join-more">Xem cơ hội đang mở</a>
           </div>
           <div className="plan main reveal" id="doi-tac">
             <span className="badge">Đối tác</span>

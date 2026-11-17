@@ -35,7 +35,7 @@ export default function PartnerHeader() {
     <>
       <a href="#main" className="skip">Bỏ qua tới nội dung chính</a>
       <div className="announce ptl-announce">
-        <a href="/">Bạn là doanh nghiệp đang tìm khách hàng? <b>Xem LeadScan cho thành viên</b>{" "}
+        <a href="/#thanh-vien">Bạn cần tìm khách hàng? <b>Đăng nhu cầu với vai trò người mua</b>{" "}
           <svg className="icon" style={{ width: 14, height: 14 }}><use href="#i-arrow" /></svg>
         </a>
       </div>
