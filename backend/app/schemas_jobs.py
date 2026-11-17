@@ -31,6 +31,18 @@ def _url(v: str) -> str:
     return v
 
 
+def clean_cover(v: str) -> str:
+    """Ảnh bìa: đường dẫn trên website (bắt đầu bằng "/") hoặc URL http(s). Dùng chung tuyển dụng & cẩm nang."""
+    v = v.strip()
+    if not v:
+        return ""
+    if v.startswith("/") and not v.startswith("//"):
+        if re.search(r"\s|\.\.", v):
+            raise ValueError("Đường dẫn ảnh chưa đúng định dạng.")
+        return v
+    return _url(v)
+
+
 # ------------------------------------------------------------------ bài tuyển dụng (admin)
 
 
@@ -59,15 +71,7 @@ class JobIn(BaseModel):
     @field_validator("cover_image")
     @classmethod
     def _cover(cls, v: str) -> str:
-        """Ảnh bìa: đường dẫn trên website (bắt đầu bằng "/") hoặc URL http(s)."""
-        v = v.strip()
-        if not v:
-            return ""
-        if v.startswith("/") and not v.startswith("//"):
-            if re.search(r"\s|\.\.", v):
-                raise ValueError("Đường dẫn ảnh chưa đúng định dạng.")
-            return v
-        return _url(v)
+        return clean_cover(v)
 
     @field_validator("slug")
     @classmethod

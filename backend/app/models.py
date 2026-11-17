@@ -742,6 +742,36 @@ class JobPost(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+
+ARTICLE_STATUSES = {"draft": "Bản nháp", "published": "Đã đăng"}
+# Chủ đề cẩm nang (blog SEO) — đổi tên ở đây thì bài cũ giữ tên cũ cho tới khi sửa bài
+ARTICLE_CATEGORIES = ["Tìm khách hàng B2B", "Đối tác & hoa hồng", "Kiến thức ngành", "Hướng dẫn LeadScan"]
+
+
+class Article(Base):
+    """Bài cẩm nang (blog SEO) ở /cam-nang/<slug>. Chỉ bài "published" có published_at ≤ hiện tại mới hiện công khai
+    (đặt published_at trong tương lai = hẹn giờ đăng). Nội dung `body` là văn bản định dạng nhẹ kiểu Markdown:
+    "## " / "### " tiêu đề, "- " gạch đầu dòng, "1. " đánh số, "> " trích dẫn, **đậm**, [chữ](link), ![mô tả](ảnh).
+    """
+
+    __tablename__ = "articles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(160), unique=True)
+    status: Mapped[str] = mapped_column(String(16), default="draft", index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    seo_title: Mapped[str] = mapped_column(String(200), default="")  # trống = dùng title
+    excerpt: Mapped[str] = mapped_column(String(400), default="")  # mô tả ngắn: thẻ danh sách + meta description
+    category: Mapped[str] = mapped_column(String(80), default="", index=True)
+    cover_image: Mapped[str] = mapped_column(String(500), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    author_name: Mapped[str] = mapped_column(String(120), default="")  # trống = "LeadScan"
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 class JobApplication(Base):
     """Hồ sơ ứng tuyển. Email gửi về hộp thư tuyển dụng (kèm file CV lấy từ R2); DB giữ thông tin để tra cứu / gửi lại."""
 

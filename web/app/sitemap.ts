@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 
 import { fetchJobs } from "@/lib/careers-server";
 import { AREA_PAGES } from "@/lib/areas";
+import { fetchArticles } from "@/lib/blog";
 import { INDUSTRY_PAGES } from "@/lib/industries";
 import { fetchPublicOpps } from "@/lib/public-opps";
 import { SITE_URL } from "@/lib/seo";
@@ -42,6 +43,19 @@ async function topicUrls(): Promise<MetadataRoute.Sitemap> {
     }));
 }
 
+async function articleUrls(): Promise<MetadataRoute.Sitemap> {
+  const out: MetadataRoute.Sitemap = [];
+  for (let page = 1; page <= 20; page++) {
+    const r = await fetchArticles({ page: String(page), page_size: "60" });
+    if (!r) break;
+    for (const a of r.items) {
+      out.push({ url: `${SITE_URL}/cam-nang/${encodeURIComponent(a.slug)}`, lastModified: new Date(a.updated_at || a.published_at || Date.now()), changeFrequency: "monthly", priority: 0.7 });
+    }
+    if (page * r.page_size >= r.total || !r.items.length) break;
+  }
+  return out;
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
   const fixed: MetadataRoute.Sitemap = [
@@ -51,7 +65,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/gioi-thieu`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE_URL}/tuyen-dung`, lastModified: now, changeFrequency: "weekly", priority: 0.5 },
   ];
-  const [inds, opps, jobs] = await Promise.all([topicUrls().catch(() => []), oppUrls().catch(() => []), fetchJobs()]);
+  const [inds, opps, posts, jobs] = await Promise.all([topicUrls().catch(() => []), oppUrls().catch(() => []), articleUrls().catch(() => []), fetchJobs()]);
   const jobUrls: MetadataRoute.Sitemap = (jobs ?? []).map((j) => ({ url: `${SITE_URL}/tuyen-dung/${encodeURIComponent(j.slug)}`, changeFrequency: "weekly", priority: 0.4 }));
-  return [...fixed, ...inds, ...opps, ...jobUrls];
+  const blog: MetadataRoute.Sitemap = posts.length ? [{ url: `${SITE_URL}/cam-nang`, lastModified: posts[0].lastModified, changeFrequency: "weekly", priority: 0.8 }, ...posts] : [];
+  return [...fixed, ...blog, ...inds, ...opps, ...jobUrls];
 }

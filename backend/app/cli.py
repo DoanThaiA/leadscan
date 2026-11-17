@@ -310,6 +310,67 @@ def cmd_import_job(args) -> int:
     return 0
 
 
+def cmd_import_articles(args) -> int:
+    """Đăng / cập nhật bài cẩm nang từ file JSON (1 bài hoặc danh sách; trường như form admin) hoặc thư mục *.json.
+
+    Khớp theo slug: chưa có → tạo mới, đã có → ghi đè nội dung. Trạng thái theo file (mặc định nháp); --status để ép.
+    """
+    from pydantic import ValidationError
+
+    from app.models import Article
+    from app.routes.articles import ArticleIn, apply
+    from app.schemas_jobs import slugify
+
+    path = Path(args.path)
+    files = sorted(path.glob("*.json")) if path.is_dir() else [path]
+    items: list[dict] = []
+    for f in files:
+        try:
+            raw = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            print(f"Không đọc được {f}: {e}")
+            return 1
+        items += raw if isinstance(raw, list) else [raw]
+
+    bodies: list[ArticleIn] = []
+    for i, it in enumerate(items, 1):
+        if not isinstance(it, dict):
+            print(f"#{i}: không phải object")
+            return 1
+        it = {k: v for k, v in it.items() if not k.startswith("_")}
+        if isinstance(it.get("body"), list):  # cho phép viết body thành mảng dòng cho dễ đọc
+            it["body"] = "\n".join(it["body"])
+        if args.status:
+            it["status"] = args.status
+        try:
+            b = ArticleIn.model_validate(it)
+        except ValidationError as e:
+            print(f"#{i} {it.get('title', '')!r} không hợp lệ:")
+            for err in e.errors():
+                print(f"   - {'.'.join(str(x) for x in err['loc'])}: {err['msg']}")
+            return 1
+        b.slug = b.slug or slugify(b.title)
+        bodies.append(b)
+
+    with new_session() as db:
+        admin_id = db.scalar(select(AdminUser.id).where(AdminUser.email == args.by)) if args.by else None
+        for b in bodies:
+            a = db.scalar(select(Article).where(Article.slug == b.slug))
+            action = "cập nhật" if a else "thêm"
+            if not a:
+                a = Article(created_by_id=admin_id)
+            apply(db, a, b)
+            db.add(a)
+            db.flush()
+            print(f"  {action} [{a.status}] /cam-nang/{a.slug} — {a.title}")
+        if args.dry_run:
+            db.rollback()
+            print("Chạy thử: dữ liệu hợp lệ, chưa lưu gì.")
+        else:
+            db.commit()
+    return 0
+
+
 def cmd_embed(args) -> int:
     """Nhúng (embedding Cohere) mọi phiếu cơ hội — kể cả nháp/đã đóng — và phiếu tìm cơ hội, không so khớp.
 
@@ -435,6 +496,12 @@ def main(argv: list[str] | None = None) -> int:
     jb.add_argument("--dry-run", action="store_true", help="Chỉ kiểm tra, không lưu")
     jb.add_argument("--by", default="", help="Email quản trị ghi là người tạo (không bắt buộc)")
     jb.set_defaults(fn=cmd_import_job)
+    ar = sub.add_parser("import-articles", help="Đăng / cập nhật bài cẩm nang từ file JSON hoặc thư mục *.json (khớp theo slug)")
+    ar.add_argument("path")
+    ar.add_argument("--status", choices=["draft", "published"], default="", help="Ép trạng thái (mặc định theo file, không ghi = nháp)")
+    ar.add_argument("--dry-run", action="store_true", help="Chỉ kiểm tra, không lưu")
+    ar.add_argument("--by", default="", help="Email quản trị ghi là người tạo (không bắt buộc)")
+    ar.set_defaults(fn=cmd_import_articles)
     em = sub.add_parser("embed", help="Nhúng embedding Cohere cho mọi phiếu cơ hội (kể cả nháp) và phiếu tìm, không so khớp")
     em.add_argument("--force", action="store_true", help="Nhúng lại tất cả (mặc định chỉ phiếu chưa có vector / đã sửa)")
     em.add_argument("--status", choices=["draft", "published", "closed"], default="", help="Chỉ nhúng phiếu cơ hội ở trạng thái này")

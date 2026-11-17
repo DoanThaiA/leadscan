@@ -1,0 +1,90 @@
+/* Cẩm nang (blog SEO) — dùng biến màu của landing.css */
+
+.blog-hero { padding: 56px 0 28px; background: linear-gradient(180deg, var(--blue-50) 0, #fff 100%); }
+.blog-hero h1 { font-size: clamp(30px, 4.2vw, 46px); max-width: 820px; margin-top: 14px; text-wrap: balance; }
+.blog-hero p { max-width: 680px; margin-top: 14px; font-size: 17px; color: var(--muted); }
+.blog-cats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+.blog-cats a { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 99px; border: 1px solid var(--line); background: #fff; font-size: 14px; color: var(--ink-2); }
+.blog-cats a span { font-size: 12px; color: var(--soft); }
+.blog-cats a:hover { border-color: var(--blue); color: var(--blue); }
+.blog-cats a.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+.blog-cats a.on span { color: var(--blue-100); }
+
+.blog-list { padding: 32px 0 72px; }
+.blog-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+.blog-card { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; background: #fff; transition: box-shadow .15s, transform .15s; }
+.blog-card:hover { box-shadow: 0 10px 28px rgba(0, 53, 95, .1); transform: translateY(-2px); }
+.blog-card .cv { aspect-ratio: 16 / 9; background: var(--blue-50); overflow: hidden; display: grid; place-items: center; }
+.blog-card .cv img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.blog-card .cv .ph { font-family: var(--head); font-weight: 700; font-size: 15px; color: var(--blue); padding: 0 18px; text-align: center; }
+.blog-card .bd { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.blog-card .cat { font-size: 12.5px; font-weight: 600; color: var(--blue); }
+.blog-card h2, .blog-card h3 { font-family: var(--head); font-size: 18px; line-height: 1.35; color: var(--ink); text-wrap: balance; }
+.blog-card p { font-size: 14.5px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.blog-card .meta { margin-top: auto; font-size: 13px; color: var(--soft); }
+.blog-card.lead { grid-column: 1 / -1; flex-direction: row; }
+.blog-card.lead .cv { flex: 0 0 52%; aspect-ratio: auto; min-height: 280px; }
+.blog-card.lead .bd { padding: 28px 30px; justify-content: center; }
+.blog-card.lead h2 { font-size: 26px; }
+.blog-empty { padding: 56px 16px; text-align: center; color: var(--muted); background: var(--bg-soft); border-radius: var(--radius-lg); }
+.blog-pager { display: flex; justify-content: space-between; align-items: center; margin-top: 28px; font-size: 14px; color: var(--muted); }
+
+/* Bài viết */
+.art { padding: 40px 0 72px; }
+.art-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 48px; align-items: start; }
+.art-crumb { display: flex; flex-wrap: wrap; gap: 6px; font-size: 13.5px; color: var(--soft); margin-bottom: 16px; }
+.art-crumb a { color: var(--blue); }
+.art h1 { font-size: clamp(28px, 3.6vw, 40px); line-height: 1.2; text-wrap: balance; }
+.art-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 14px; font-size: 14px; color: var(--soft); }
+.art-meta b { color: var(--blue); font-weight: 600; }
+.art-lead { margin-top: 18px; font-size: 18px; color: var(--muted); }
+.art-cover { margin: 26px 0 8px; border-radius: var(--radius-lg); overflow: hidden; aspect-ratio: 16 / 9; background: var(--blue-50); }
+.art-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.art-body { font-size: 17px; line-height: 1.75; color: var(--ink-2); margin-top: 24px; }
+.art-body > * + * { margin-top: 16px; }
+.art-body h2 { font-family: var(--head); font-size: 25px; line-height: 1.3; color: var(--ink); margin-top: 38px; scroll-margin-top: 110px; }
+.art-body h3 { font-family: var(--head); font-size: 20px; color: var(--ink); margin-top: 28px; }
+.art-body ul, .art-body ol { padding-left: 24px; display: grid; gap: 6px; }
+.art-body a { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; }
+.art-body b { color: var(--ink); }
+.art-body blockquote { border-left: 4px solid var(--yellow); background: var(--yellow-50); padding: 14px 18px; border-radius: 0 8px 8px 0; color: var(--ink-2); }
+.art-body blockquote p + p { margin-top: 6px; }
+.art-body figure img { width: 100%; border-radius: 10px; display: block; }
+.art-body figcaption { font-size: 14px; color: var(--soft); text-align: center; margin-top: 8px; }
+
+.art-side { position: sticky; top: 100px; display: grid; gap: 16px; }
+.art-toc { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 16px 18px; }
+.art-toc h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--soft); margin-bottom: 8px; }
+.art-toc ol { list-style: none; display: grid; gap: 6px; }
+.art-toc a { font-size: 14px; color: var(--ink-2); line-height: 1.4; }
+.art-toc a:hover { color: var(--blue); }
+.art-cta { border-radius: var(--radius-lg); padding: 20px; background: var(--blue); color: #fff; }
+.art-cta b { display: block; font-family: var(--head); font-size: 17px; line-height: 1.35; }
+.art-cta p { font-size: 14px; color: var(--blue-100); margin: 8px 0 14px; }
+.art-cta .btn { width: 100%; }
+.art-cta .btn + .btn { margin-top: 8px; }
+.art-cta .btn-ghost { color: #fff; border-color: rgba(255, 255, 255, .5); }
+
+.art-end { margin-top: 40px; padding: 24px; border-radius: var(--radius-lg); background: var(--bg-soft); display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.art-end b { font-family: var(--head); font-size: 18px; color: var(--ink); }
+.art-end p { font-size: 14.5px; color: var(--muted); margin-top: 4px; }
+.art-end .acts { display: flex; gap: 10px; flex-wrap: wrap; }
+.art-related { margin-top: 56px; }
+.art-related > h2 { font-family: var(--head); font-size: 22px; color: var(--ink); margin-bottom: 16px; }
+
+@media (max-width: 1080px) {
+  .art-wrap { grid-template-columns: 1fr; }
+  .art-side { position: static; }
+  .art-toc { display: none; }
+  .blog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .blog-grid { grid-template-columns: 1fr; }
+  .blog-card.lead { flex-direction: column; }
+  .blog-card.lead .cv { flex: none; aspect-ratio: 16 / 9; min-height: 0; }
+  .blog-card.lead .bd { padding: 16px 18px 18px; }
+  .blog-card.lead h2 { font-size: 20px; }
+  .art-body { font-size: 16px; }
+  .art-body h2 { font-size: 22px; }
+}

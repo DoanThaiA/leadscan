@@ -23,6 +23,7 @@ const NAV = [
   { href: "/admin/xac-minh-doi-tac", label: "Xác minh cơ hội đối tác", icon: "flag" },
   { href: "/admin/rut-tien-doi-tac", label: "Rút tiền đối tác", icon: "card" },
   { href: "/admin/tuyen-dung", label: "Tuyển dụng", icon: "brief" },
+  { href: "/admin/cam-nang", label: "Cẩm nang", icon: "note" },
   { href: "/admin/nhan-vien", label: "Nhân viên", icon: "users", adminOnly: true },
   { href: "/admin/tai-khoan", label: "Tài khoản của tôi", icon: "key" },
 ];

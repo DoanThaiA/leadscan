@@ -6,7 +6,6 @@ import { Logo } from "@/components/brand/Logo";
 const LINKS = [
   ["#cach-hoat-dong", "Cách hoạt động"],
   ["#tham-gia", "Người mua & Đối tác"],
-  ["#faq", "Hỏi đáp"],
 ] as const;
 
 /**
@@ -16,7 +15,7 @@ const LINKS = [
 type NavLink = { href: string; label: string; active?: boolean };
 
 /** Trang riêng luôn có trên menu (không phải link neo trong trang chủ). */
-const PAGES: NavLink[] = [{ href: "/gioi-thieu", label: "Giới thiệu" }, { href: "/co-hoi", label: "Cơ hội" }];
+const PAGES: NavLink[] = [{ href: "/gioi-thieu", label: "Giới thiệu" }, { href: "/co-hoi", label: "Cơ hội" }, { href: "/cam-nang", label: "Cẩm nang" }];
 
 export default function Header({ base = "", extra = [] }: { base?: string; extra?: NavLink[] }) {
   const links: NavLink[] = [...PAGES, ...LINKS.map(([href, label]) => ({ href: base + href, label }))];
