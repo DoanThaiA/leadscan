@@ -129,3 +129,13 @@ export interface WithdrawRules {
   can_request: boolean;
   reason: string;
 }
+
+/** URL kết nối AI (MCP) — URL đầy đủ chỉ trả về 1 lần khi tạo */
+export interface McpStatus {
+  active: boolean;
+  endpoint: string;
+  hint?: string;
+  created_at?: string | null;
+  last_used_at?: string | null;
+  last_client?: string;
+}

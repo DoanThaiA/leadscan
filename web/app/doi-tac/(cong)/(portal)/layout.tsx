@@ -14,6 +14,7 @@ const NAV = [
   { href: "/doi-tac/tong-quan", label: "Tổng quan", icon: "home" },
   { href: "/doi-tac/gui-co-hoi", label: "Gửi cơ hội", icon: "plus" },
   { href: "/doi-tac/co-hoi", label: "Cơ hội của tôi", icon: "grid" },
+  { href: "/doi-tac/ket-noi-ai", label: "Kết nối AI", icon: "spark" },
   { href: "/doi-tac/vi", label: "Ví hoa hồng", icon: "wallet" },
   { href: "/doi-tac/rut-tien", label: "Rút tiền", icon: "card" },
   { href: "/doi-tac/ho-so-thanh-toan", label: "Hồ sơ thanh toán", icon: "lock" },

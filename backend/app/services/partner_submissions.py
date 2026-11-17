@@ -281,7 +281,8 @@ def sla_due(start: datetime, workdays: int) -> datetime:
     return d
 
 
-def create(db: Session, cfg: Settings, p: PartnerUser, d: dict) -> PartnerSubmission:
+def create(db: Session, cfg: Settings, p: PartnerUser, d: dict, via: str = "") -> PartnerSubmission:
+    """`via`: kênh gửi ngoài form cổng (vd "kết nối AI") — ghi vào nhật ký để người duyệt biết."""
     day = db.scalar(
         select(func.count()).select_from(PartnerSubmission)
         .where(PartnerSubmission.partner_id == p.id, PartnerSubmission.created_at > utcnow() - timedelta(hours=24))
@@ -304,7 +305,7 @@ def create(db: Session, cfg: Settings, p: PartnerUser, d: dict) -> PartnerSubmis
         s.embedding_sha = dedup.sha(model, dedup.need_text(d["need"], d["scale"], d["timing"], d.get("title", "")))
     db.add(s)
     db.flush()
-    db.add(PartnerEvent(partner_id=p.id, submission_id=s.id, kind="sub_created", content=f"Gửi cơ hội {s.code}: {s.company_name}"[:500]))
+    db.add(PartnerEvent(partner_id=p.id, submission_id=s.id, kind="sub_created", content=(f"Gửi cơ hội {s.code}: {s.company_name}" + (f" (qua {via})" if via else ""))[:500]))
     db.commit()
     db.refresh(s)
     return s

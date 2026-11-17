@@ -834,6 +834,23 @@ class PartnerSession(Base):
     partner: Mapped[PartnerUser] = relationship(lazy="joined")
 
 
+class PartnerMcpToken(Base):
+    """Khoá kết nối AI (MCP) của đối tác — nằm trong URL kết nối. DB chỉ lưu sha256; mỗi đối tác tối đa 1 khoá còn hiệu lực."""
+
+    __tablename__ = "partner_mcp_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    partner_id: Mapped[int] = mapped_column(ForeignKey("partner_users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    hint: Mapped[str] = mapped_column(String(16), default="")  # 4 ký tự cuối để đối tác nhận ra URL nào
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_client: Mapped[str] = mapped_column(String(200), default="")
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+
+    partner: Mapped[PartnerUser] = relationship(lazy="joined")
+
+
 class PartnerPasswordReset(Base):
     __tablename__ = "partner_password_resets"
 
