@@ -134,7 +134,7 @@ def test_import_creates_companies_with_evidence_and_purposes(admin):
 
     # dòng không có tên → chỉ có MST
     p2 = admin.get("/api/admin/enrich/companies/0309876543").json()
-    assert [f["key"] for f in p2["fields"]] == ["mst"]
+    assert [f["key"] for f in p2["fields"] if f["source"]] == ["mst"]
 
     ev = admin.get("/api/admin/enrich/companies/0101234567/evidence").json()
     assert {e["field"] for e in ev} == {"mst", "ten"}
@@ -223,7 +223,7 @@ def test_import_extra_columns_into_profile(admin):
     assert shown["nhom_san_pham"] == ["Quần áo và phụ kiện may mặc"]
     assert shown["ma_hs"] == ["6104", "6204"]
     assert shown["tinh"] == "Hồ Chí Minh"  # tách tỉnh từ địa chỉ
-    assert "nganh_nghe" not in shown  # "Ngành nghề" trơn là nhóm ngành theo danh sách, không phải ngành ĐKKD
+    assert shown["nganh_nghe"] is None  # "Ngành nghề" trơn là nhóm ngành theo danh sách, không phải ngành ĐKKD
     assert p["contacts"] == [{"kind": "phone", "value": "+84974102195", "source_code": "nhap_lo", "source_name": "Danh sách MST nhập theo lô"}]
 
     p2 = admin.get("/api/admin/enrich/companies/0309876543-001").json()

@@ -116,7 +116,7 @@ def test_quet_ghi_thang_vao_lam_giau(admin):
     assert shown["nhom_nganh"]["value"] == "Sản xuất thức ăn chăn nuôi"
     assert shown["tinh"]["value"] == "Tây Ninh"  # Long An sáp nhập vào Tây Ninh (34 tỉnh/thành từ 1/7/2025)
     assert shown["domain"]["value"] == "greenfeed.com.vn"
-    assert "ma_ck" not in shown  # "Chưa niêm yết"
+    assert shown["ma_ck"]["value"] is None and shown["ma_ck"]["source"] is None  # "Chưa niêm yết"
     assert {(c["kind"], c["value"]) for c in p["contacts"]} == {("phone", "+842723632881"), ("email", "info@greenfeed.vn")}
     assert [s["kind"] for s in p["signals"]] == ["xep_hang"] and p["signals"][0]["payload"]["hang"] == 52
     assert p["purposes"] == PURPOSES and p["batches"][0]["name"].startswith("PROFIT500 – Top 500")
