@@ -7,7 +7,7 @@ import { Logo } from "@/components/brand/Logo";
    Ảnh và logo khách hàng nằm trong web/public/gioi-thieu. Viethome chưa có logo → hiện chữ (thay bằng ảnh khi có). */
 
 const DESC =
-  "LeadScan & MCV Network: đào tạo AI thực chiến cho doanh nghiệp, nền tảng AI tìm kiếm cơ hội kinh doanh B2B LeadScan.net và dịch vụ phát triển phần mềm, chuyển đổi số tích hợp AI theo yêu cầu.";
+  "LeadScan & MCV Network: sàn kết nối cơ hội kinh doanh B2B LeadScan.net, đào tạo AI thực chiến cho doanh nghiệp và dịch vụ phát triển phần mềm, chuyển đổi số tích hợp AI theo yêu cầu.";
 
 export const metadata: Metadata = {
   title: "Giới thiệu – LeadScan B2B",
@@ -88,11 +88,12 @@ const PROGRAMS = [
   "Đào tạo AI cho doanh nghiệp khoáng sản Lào Cai",
 ];
 
+/* Sàn vận hành thế nào — khớp mục "Cách hoạt động" trên trang chủ */
 const SEGMENTS = [
-  { icon: "i-factory", t: "Sản xuất", d: "Nhà máy, dự án cần nguyên vật liệu, linh kiện, bao bì, gia công" },
-  { icon: "i-globe", t: "Xuất nhập khẩu", d: "Nhu cầu đăng mua, đối tác hội chợ, doanh nghiệp FDI mới" },
-  { icon: "i-cart", t: "Thương mại & phân phối", d: "Đại lý, chuỗi bán lẻ, khách sỉ đang mở rộng" },
-  { icon: "i-brief", t: "Dịch vụ B2B & nhà thầu", d: "Gói thầu, dự án, doanh nghiệp mới thành lập" },
+  { icon: "i-search", t: "Người mua đăng nhu cầu", d: "Doanh nghiệp mô tả khách hàng, đơn hàng, dự án cần tìm" },
+  { icon: "i-users", t: "Đối tác đăng cơ hội", d: "Người biết nhu cầu mua B2B giới thiệu lên sàn, miễn phí" },
+  { icon: "i-gauge", t: "LeadScan xác minh", d: "Kiểm trùng, bổ sung thông tin, chấm điểm 0–100" },
+  { icon: "i-ticket", t: "Kết nối hai bên", d: "Người mua xem trước miễn phí, mua phiếu để mở khoá đầu mối" },
 ];
 
 const LEADSCAN_CLIENTS: Brand[] = [
@@ -162,12 +163,12 @@ export default function AboutPage() {
             <span className="sr-only">Giới thiệu LeadScan</span>
             <Logo variant="logo-reverse" height={64} className="ab-hero-logo" />
           </h1>
-          <p className="ab-hero-tag">Scan đúng cơ hội kinh doanh cho doanh nghiệp bạn</p>
+          <p className="ab-hero-tag">Sàn kết nối cơ hội kinh doanh B2B</p>
         </div>
       </section>
       <section className="ab-band">
         <div className="container">
-          <p className="ab-band-title">Nền tảng AI tìm kiếm, làm giàu và chấm điểm <b>cơ hội kinh doanh B2B</b></p>
+          <p className="ab-band-title">Người mua đăng nhu cầu, đối tác đăng cơ hội — <b>LeadScan xác minh và kết nối</b></p>
           <nav className="ab-jump" aria-label="Các mảng hoạt động">
             <a href="#dao-tao-ai"><b>01</b>Đào tạo AI doanh nghiệp</a>
             <a href="#leadscan"><b>02</b>LeadScan.net</a>
@@ -233,20 +234,20 @@ export default function AboutPage() {
               <div>
                 <h2 className="ab-title"><span className="ab-num">02</span>LeadScan.net</h2>
                 <p className="ab-ls-lead">
-                  Hệ thống AI tìm kiếm cơ hội kinh doanh B2B. Bạn mô tả cơ hội cần tìm — AI quét hơn 10 nhóm nguồn dữ liệu, làm giàu thông tin
-                  và chấm điểm từng cơ hội; bạn chọn mua đúng phiếu mình cần.
+                  Sàn kết nối cơ hội kinh doanh B2B. Người mua đăng nhu cầu tìm khách hàng, đối tác đăng cơ hội mình biết; LeadScan là bên
+                  trung gian xác minh, chấm điểm và kết nối hai bên.
                 </p>
                 <div className="ab-ls-cta">
                   <a href="/#dang-ky" className="btn btn-primary">Đăng ký thành viên <Sprite id="i-arrow" size={16} /></a>
-                  <a href="/" className="btn ab-btn-ghost">Khám phá LeadScan</a>
+                  <a href="/doi-tac#dang-ky" className="btn ab-btn-ghost">Đăng ký đối tác</a>
                 </div>
               </div>
               <div className="ab-price">
                 <small>Phiếu cơ hội chỉ từ</small>
                 <strong>29.000đ</strong>
                 <ul>
-                  <li><Ic n="ticket" size={20} />Trả tiền theo chất lượng cơ hội</li>
-                  <li><Ic n="coins" size={20} />Phí thành viên 89.000đ/năm được trừ dần vào phiếu đã mua</li>
+                  <li><Ic n="ticket" size={20} />Người mua: xem trước miễn phí, phí năm 89.000đ được cộng đủ thành điểm mua phiếu</li>
+                  <li><Ic n="coins" size={20} />Đối tác: tham gia miễn phí, ít nhất 1 ly cafe cho mỗi cơ hội đạt xác minh</li>
                 </ul>
               </div>
             </div>
@@ -325,10 +326,11 @@ export default function AboutPage() {
       <section className="cta ab-cta">
         <div className="container">
           <h2>Cùng trao đổi bài toán của doanh nghiệp bạn</h2>
-          <p>Đào tạo AI cho đội ngũ, tìm khách hàng B2B bằng LeadScan hay xây phần mềm riêng — hãy kể cho chúng tôi nghe bạn đang cần gì.</p>
+          <p>Đào tạo AI cho đội ngũ, tìm khách hàng hay đăng cơ hội trên sàn LeadScan, hoặc xây phần mềm riêng — hãy kể cho chúng tôi nghe bạn đang cần gì.</p>
           <div className="ab-cta-btns">
             <a href={`${CONTACT}?subject=${encodeURIComponent("Tư vấn giải pháp cho doanh nghiệp")}`} className="btn btn-primary">Liên hệ tư vấn <Sprite id="i-arrow" size={16} /></a>
-            <a href="/#dang-ky" className="btn btn-light">Đăng ký thành viên LeadScan</a>
+            <a href="/#dang-ky" className="btn btn-light">Đăng ký thành viên</a>
+            <a href="/doi-tac#dang-ky" className="btn btn-light">Đăng ký đối tác</a>
           </div>
         </div>
       </section>

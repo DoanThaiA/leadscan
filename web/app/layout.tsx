@@ -5,17 +5,17 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://leadscan.net";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "LeadScan B2B – Scan cơ hội kinh doanh cho doanh nghiệp bằng AI",
+  title: "LeadScan B2B – Sàn kết nối cơ hội kinh doanh B2B",
   description:
-    "LeadScanB2B.com: chọn tiêu chí cơ hội bạn muốn tìm, AI quét hơn 10 nhóm nguồn dữ liệu, làm giàu và chấm điểm từng cơ hội kinh doanh. Phiếu cơ hội chỉ từ 29.000đ.",
+    "Người mua đăng nhu cầu tìm khách hàng, đối tác đăng cơ hội mình biết. LeadScan kiểm duyệt, chấm điểm và kết nối hai bên. Xem trước miễn phí, phiếu cơ hội từ 29.000đ.",
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     locale: "vi_VN",
     siteName: "LeadScan B2B",
     url: "/",
-    title: "LeadScan B2B – Scan cơ hội kinh doanh cho doanh nghiệp bằng AI",
-    description: "Chọn tiêu chí → AI thu thập đa nguồn → Enrich & Scoring → mua phiếu cơ hội từ 29.000đ.",
+    title: "LeadScan B2B – Sàn kết nối cơ hội kinh doanh B2B",
+    description: "Người mua đăng nhu cầu, đối tác đăng cơ hội, LeadScan kiểm duyệt và kết nối. Đối tác tham gia miễn phí.",
     images: [{ url: "/brand/leadscan-og.jpg", width: 1200, height: 630, type: "image/jpeg", alt: "LeadScan B2B" }],
   },
   twitter: { card: "summary_large_image", images: ["/brand/leadscan-og.jpg"] },

@@ -1,4 +1,3 @@
-// Chuyển từ landing HTML gốc; sửa trực tiếp tại đây.
 import { Logo } from "@/components/brand/Logo";
 
 export default function Hero() {
@@ -7,17 +6,17 @@ export default function Hero() {
       <section className="hero">
         <svg className="hero-rays" id="rays" preserveAspectRatio="none"></svg>
         <div className="container">
-          <span className="pill"><svg className="icon star" style={{ width: "14px", height: "14px" }}><use href="#i-spark" /></svg> AI Crawl · AI Enrich · AI Scoring</span>
-          <h1 className="h-display">Scan đúng <b>cơ hội kinh doanh</b> cho doanh nghiệp bạn</h1>
-          <p className="hero-sub">Bạn chỉ cần mô tả cơ hội mình muốn tìm. Hệ thống AI của LeadScan quét hơn 10 nhóm nguồn dữ liệu, làm giàu thông tin, chấm điểm từng cơ hội — bạn chọn và mua đúng phiếu cơ hội mình cần.</p>
+          <span className="pill"><svg className="icon star" style={{ width: "14px", height: "14px" }}><use href="#i-spark" /></svg> Sàn cơ hội kinh doanh B2B</span>
+          <h1 className="h-display">Sàn kết nối <b>cơ hội kinh doanh B2B</b></h1>
+          <p className="hero-sub">Người mua đăng nhu cầu tìm khách hàng, đối tác đăng cơ hội mình biết. LeadScan là sàn trung gian: xác minh, chấm điểm và kết nối đúng người với nhau.</p>
           <div className="hero-cta">
-            <a href="#dang-ky" className="btn btn-primary">Đăng ký ngay <svg className="icon"><use href="#i-arrow" /></svg></a>
-            <a href="#bang-gia" className="btn btn-outline">Xem bảng giá</a>
+            <a href="#dang-ky" className="btn btn-primary">Đăng ký thành viên <svg className="icon"><use href="#i-arrow" /></svg></a>
+            <a href="/doi-tac#dang-ky" className="btn btn-outline">Đăng ký đối tác</a>
           </div>
           <div className="hero-chips">
-            <span className="pill"><svg className="icon"><use href="#i-check" /></svg> Phiếu cơ hội từ 29.000đ</span>
-            <span className="pill"><svg className="icon"><use href="#i-check" /></svg> Trả tiền theo chất lượng cơ hội</span>
-            <span className="pill"><svg className="icon"><use href="#i-check" /></svg> Phí năm trừ dần vào phiếu đã mua</span>
+            <span className="pill"><svg className="icon"><use href="#i-check" /></svg> Xem trước cơ hội miễn phí</span>
+            <span className="pill"><svg className="icon"><use href="#i-check" /></svg> Phiếu từ 29.000đ, giới hạn người mua</span>
+            <span className="pill"><svg className="icon"><use href="#i-check" /></svg> Đối tác tham gia miễn phí</span>
           </div>
 
           <div className="frame reveal">
@@ -71,8 +70,8 @@ export default function Hero() {
               </div>
             </div>
             <div className="frame-bottom">
-              <div><h3>Mọi thứ bạn cần để tìm cơ hội B2B chất lượng</h3><p>Gửi yêu cầu tìm cơ hội, LeadScan quét nguồn dữ liệu, làm giàu và chấm điểm — bạn chọn mua đúng phiếu mình cần, tất cả trong một nền tảng.</p></div>
-              <a href="#quy-trinh" className="btn btn-primary">Xem cách hoạt động <svg className="icon"><use href="#i-arrow" /></svg></a>
+              <div><h3>Người mua: đăng nhu cầu, nhận cơ hội phù hợp</h3><p>Mô tả khách hàng bạn cần tìm trong cổng thành viên. Cơ hội khớp trên sàn được gửi về, bạn xem trước rồi mới quyết định mua.</p></div>
+              <a href="#cach-hoat-dong" className="btn btn-primary">Xem cách hoạt động <svg className="icon"><use href="#i-arrow" /></svg></a>
             </div>
           </div>
         </div>

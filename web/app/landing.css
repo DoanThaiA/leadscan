@@ -496,3 +496,20 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
 @media (max-width:480px){.pp-body{padding:14px 16px 18px}.pp-nav{width:32px;height:32px}}
 @media (prefers-reduced-motion:reduce){.pp-scrim,.pp{animation:none}.pp-track{transition:none}}
 .pp:focus{outline:none}
+
+/* Trang chủ dạng sàn: 3 bước, 2 vai trò tham gia */
+.steps3-sec{background:var(--bg-soft)}
+.steps3{list-style:none;display:grid;grid-template-columns:repeat(3,1fr);gap:24px;position:relative}
+.steps3::before{content:"";position:absolute;top:28px;left:16%;right:16%;border-top:2px dashed var(--blue-100)}
+.steps3 li{position:relative;margin-top:28px;background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);padding:28px 24px;text-align:center}
+.steps3 .n{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;margin:-54px auto 16px;background:var(--yellow);color:var(--blue);font-family:var(--head);font-weight:700;font-size:20px;border:4px solid var(--bg-soft)}
+.steps3 h3{font-family:var(--head);font-size:18px;color:var(--ink);margin-bottom:8px}
+.steps3 p{color:var(--muted);font-size:14.5px}
+.plans.join{grid-template-columns:1fr 1fr}
+.plans.join .plan{display:flex;flex-direction:column}
+.plans.join .plan ul{margin-bottom:auto;padding-bottom:24px}
+.join-more{display:block;text-align:center;margin-top:12px;font-size:14px;color:var(--blue);font-weight:500}
+.reg-alt{margin-top:18px;font-size:14.5px;color:var(--muted)}
+.reg-alt a{color:var(--blue);font-weight:600;text-decoration:underline}
+@media (max-width:1080px){.plans.join{grid-template-columns:1fr}}
+@media (max-width:760px){.steps3{grid-template-columns:1fr;gap:12px}.steps3::before{display:none}}

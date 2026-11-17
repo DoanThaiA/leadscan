@@ -4,10 +4,8 @@ import { useEffect, useState } from "react";
 import { Logo } from "@/components/brand/Logo";
 
 const LINKS = [
-  ["#doi-tuong", "Giải pháp"],
-  ["#quy-trinh", "Quy trình"],
-  ["#phieu-co-hoi", "Phiếu cơ hội"],
-  ["#bang-gia", "Bảng giá"],
+  ["#cach-hoat-dong", "Cách hoạt động"],
+  ["#tham-gia", "Người mua & Đối tác"],
   ["#faq", "Hỏi đáp"],
 ] as const;
 
@@ -48,8 +46,8 @@ export default function Header({ base = "", extra = [] }: { base?: string; extra
     <>
       <a href="#main" className="skip">Bỏ qua tới nội dung chính</a>
       <div className="announce">
-        <a href={`${base}#bang-gia`}>
-          Bắt đầu ngay chỉ với <b>1 ly trà sữa full topping</b>{" "}
+        <a href="/doi-tac">
+          Biết cơ hội B2B? Đăng lên sàn, <b>nhận ít nhất 1 ly cafe</b>{" "}
           <svg className="icon" style={{ width: 14, height: 14 }}><use href="#i-arrow" /></svg>
         </a>
       </div>
@@ -66,6 +64,7 @@ export default function Header({ base = "", extra = [] }: { base?: string; extra
           </nav>
           <div className="nav-actions">
             <a href="/thanh-vien/dang-nhap" className="login">Đăng nhập</a>
+            <a href="/doi-tac#dang-ky" className="btn btn-outline btn-sm">Đăng ký đối tác</a>
             <a href={`${base}#dang-ky`} className="btn btn-primary btn-sm">Đăng ký thành viên</a>
           </div>
           <button
@@ -85,6 +84,7 @@ export default function Header({ base = "", extra = [] }: { base?: string; extra
           ))}
           <a href="/thanh-vien/dang-nhap" onClick={close}>Đăng nhập</a>
           <a href={`${base}#dang-ky`} className="btn btn-primary" onClick={close}>Đăng ký thành viên</a>
+          <a href="/doi-tac#dang-ky" className="btn btn-outline" onClick={close}>Đăng ký đối tác</a>
         </div>
       </header>
     </>

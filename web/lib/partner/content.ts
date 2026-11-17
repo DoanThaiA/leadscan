@@ -52,6 +52,13 @@ export const vnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
 export const SLOGAN =
   "Nếu bạn nhìn thấy cơ hội nhưng không có khả năng thực thi, hãy giới thiệu cho người phù hợp — ít nhất bạn sẽ nhận được 1 ly cafe cảm ơn.";
 
+/** Câu ngắn về thưởng đối tác cho trang chủ (theo phương án đang áp dụng) */
+export function rewardShort(r: Reward): string {
+  return r.mode === "sum"
+    ? `1 ly cafe (${vnd(r.cafe)}) cho mỗi cơ hội đạt xác minh, cộng ${r.rate}% doanh thu mỗi lượt bán phiếu trong ${r.months} tháng.`
+    : `Mức cao hơn giữa 1 ly cafe (${vnd(r.cafe)}) và ${r.rate}% doanh thu phiếu trong ${r.months} tháng — luôn có ít nhất 1 ly cafe cho mỗi cơ hội đạt xác minh.`;
+}
+
 /** Một câu giải thích cách cộng ly cafe & hoa hồng theo phương án đang áp dụng */
 export function howCombined(r: Reward): string {
   return r.mode === "sum"
@@ -119,7 +126,7 @@ export function faq(r: Reward) {
     },
     {
       q: "Tôi đã là thành viên LeadScan, dùng chung tài khoản được không?",
-      a: "Cổng đối tác dùng tài khoản riêng, tách hẳn cổng thành viên. Bạn có thể đăng ký đối tác bằng chính email đang dùng — hai tài khoản độc lập. Lưu ý: không tính hoa hồng khi tài khoản thành viên mua phiếu có liên quan đến chính bạn.",
+      a: "Được. Trong cổng thành viên bấm “Trở thành đối tác”, không cần đăng ký lại. Ví điểm của doanh nghiệp và ví hoa hồng đối tác là 2 ví riêng. Lưu ý: không tính hoa hồng khi phiếu được mua bởi tài khoản có liên quan đến chính bạn.",
     },
   ];
 }

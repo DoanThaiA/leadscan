@@ -1,19 +1,18 @@
 import "./landing.css";
 
-import Audience from "@/components/landing/Audience";
 import Cta from "@/components/landing/Cta";
 import Faq from "@/components/landing/Faq";
 import Footer from "@/components/landing/Footer";
 import Header from "@/components/landing/Header";
 import Hero from "@/components/landing/Hero";
+import HowItWorks from "@/components/landing/HowItWorks";
 import IconSprite from "@/components/landing/IconSprite";
+import Join from "@/components/landing/Join";
 import LandingEffects from "@/components/landing/LandingEffects";
 import MobileCta from "@/components/landing/MobileCta";
-import Pricing from "@/components/landing/Pricing";
 import PromoPopup from "@/components/landing/PromoPopup";
 import Register from "@/components/landing/Register";
-import Tickets from "@/components/landing/Tickets";
-import Workflow from "@/components/landing/Workflow";
+import { getReward } from "@/lib/partner/reward-server";
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -21,7 +20,8 @@ const jsonLd = {
     { "@type": "Organization", name: "LeadScan B2B", url: "https://leadscan.net/", email: "contact@leadscan.net", telephone: "+84877770788" },
     {
       "@type": "Service",
-      name: "Scan cơ hội kinh doanh B2B",
+      name: "Sàn kết nối cơ hội kinh doanh B2B",
+      description: "Người mua đăng nhu cầu, đối tác đăng cơ hội; LeadScan kiểm duyệt, chấm điểm và kết nối hai bên.",
       provider: { "@type": "Organization", name: "LeadScan B2B" },
       areaServed: "VN",
       offers: [
@@ -36,7 +36,8 @@ const jsonLd = {
   ],
 };
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const reward = await getReward();
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
@@ -44,12 +45,10 @@ export default function LandingPage() {
       <Header />
       <main id="main">
         <Hero />
-        <Audience />
-        <Workflow />
-        <Tickets />
-        <Pricing />
+        <HowItWorks />
+        <Join reward={reward} />
         <Register />
-        <Faq />
+        <Faq reward={reward} />
         <Cta />
       </main>
       <Footer />
