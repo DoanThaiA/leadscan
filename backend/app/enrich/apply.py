@@ -5,6 +5,7 @@ Mọi nguồn — connector tự động, hàng đợi thủ công, file chính 
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
@@ -68,7 +69,7 @@ class Applied:
         self.signals += o.signals
 
 
-def _normalize(f: CompanyFact) -> list[CompanyFact]:
+def normalize_fact(f: CompanyFact) -> list[CompanyFact]:
     """Một fact thô → các fact đã chuẩn hoá (địa chỉ sinh thêm tỉnh/thành, website sinh thêm tên miền)."""
     v = f.value
     if v is None or v == "" or f.field not in COMPANY_FIELDS or f.field == "mst":
@@ -88,6 +89,15 @@ def _normalize(f: CompanyFact) -> list[CompanyFact]:
     elif f.field == "nganh_nghe":
         items = v if isinstance(v, list) else [x for x in str(v).replace("\n", ";").split(";")]
         v = [" ".join(str(x).split()) for x in items if str(x).strip()][:20] or None
+    elif f.field == "nhom_nganh":
+        v = clean_text(v, 200)
+    elif f.field == "nhom_san_pham":
+        items = v if isinstance(v, list) else str(v).replace("\n", ";").split(";")
+        v = list(dict.fromkeys(" ".join(str(x).split()) for x in items if str(x).strip()))[:20] or None
+    elif f.field == "ma_hs":
+        items = v if isinstance(v, list) else re.split(r"[,;/\s]+", str(v))
+        codes = [re.sub(r"\D", "", str(x)) for x in items]
+        v = list(dict.fromkeys(c for c in codes if 2 <= len(c) <= 10))[:50] or None
     elif f.field == "ngay_thanh_lap":
         v = parse_date(v)
     elif f.field == "von":
@@ -162,7 +172,7 @@ def apply_facts(db: Session, mst: str, facts: Facts, origin: Origin, *, recomput
         if raw.field == "mst":
             normalized = [CompanyFact("mst", mst, raw.excerpt)]
         else:
-            normalized = _normalize(raw)
+            normalized = normalize_fact(raw)
         for f in normalized:
             value = merge.encode(f.field, f.value)
             key = (f.field, value, origin.content_hash)

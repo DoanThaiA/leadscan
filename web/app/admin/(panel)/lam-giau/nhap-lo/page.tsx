@@ -112,6 +112,49 @@ function ReportView({ r }: { r: ImportReport }) {
         <div className="adm-alert warn" style={{ marginBottom: 12 }}>{fmtNum(r.zero_padded)} MST chỉ có 9 hoặc 12 chữ số (Excel làm rơi số 0 đầu) — đã tự bù số 0.</div>
       ) : null}
       {!r.has_name_column ? <p className="er-note" style={{ marginBottom: 12 }}><Icon name="note" /><span>File không có cột tên doanh nghiệp — hồ sơ chỉ có MST cho tới khi connector thu thập (giai đoạn 2).</span></p> : null}
+      {r.columns ? (
+        <div style={{ marginBottom: 12 }}>
+          <b style={{ fontSize: 13 }}>Cột được nhập vào hồ sơ</b>
+          {r.columns.length ? (
+            <div className="adm-table-wrap" style={{ marginTop: 6 }}>
+              <table className="adm-table">
+                <thead><tr><th>Cột trong file</th><th>Ghi vào</th><th style={{ textAlign: "right" }}>Dòng có giá trị</th></tr></thead>
+                <tbody>
+                  {r.columns.map((c) => (
+                    <tr key={c.header}><td>{c.header}</td><td>{c.label}</td><td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtNum(c.filled)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="er-note" style={{ marginTop: 6 }}><Icon name="note" /><span>Ngoài MST và tên, không cột nào khớp trường hồ sơ.</span></p>
+          )}
+          <p className="er-note" style={{ marginTop: 6 }}>
+            <Icon name="note" />
+            <span>Dữ liệu từ lô có độ tin cậy 0,5 — khi có dữ liệu ĐKKD / nguồn chính thức, giá trị đó được ưu tiên hiển thị; giá trị từ lô vẫn giữ làm bằng chứng.</span>
+          </p>
+          {r.ignored_columns?.length ? <p className="er-note" style={{ marginTop: 6 }}><Icon name="note" /><span>Không nhận ra (chỉ lưu trong trích đoạn bằng chứng): {r.ignored_columns.join(", ")}.</span></p> : null}
+          {r.sensitive_columns?.length ? <div className="adm-alert warn" style={{ marginTop: 6 }}>Bỏ qua cột dữ liệu cá nhân nhạy cảm: {r.sensitive_columns.join(", ")}.</div> : null}
+        </div>
+      ) : null}
+      {r.phones && (r.phones.ok || r.phones.bad) ? (
+        <details style={{ marginBottom: 10 }} open={false}>
+          <summary style={{ cursor: "pointer", fontWeight: 600 }}>
+            Điện thoại: {fmtNum(r.phones.ok)} số nhận được{r.phones.bad ? ` · ${fmtNum(r.phones.bad)} dòng có số không đọc được` : ""}
+          </summary>
+          {r.phones.bad_rows.length ? (
+            <>
+              <p className="er-note" style={{ marginTop: 8 }}><Icon name="note" /><span>Số dạng “8.40948E+11” là Excel đã đổi sang dạng khoa học và làm mất chữ số — sửa ô thành dạng Văn bản (Text) trong file gốc rồi nhập lại. Số thiếu mã vùng cũng không nhận.</span></p>
+              <div className="adm-table-wrap" style={{ maxHeight: 220, overflow: "auto", marginTop: 8 }}>
+                <table className="adm-table">
+                  <thead><tr><th>Dòng</th><th>Giá trị trong ô</th><th>Phần không đọc được</th></tr></thead>
+                  <tbody>{r.phones.bad_rows.map((x) => <tr key={x.row}><td>{x.row}</td><td className="mono">{x.value}</td><td className="mono">{x.unreadable.join(" · ")}</td></tr>)}</tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+        </details>
+      ) : null}
       {r.invalid_rows.length ? (
         <details open={r.invalid_rows.length <= 10} style={{ marginBottom: 10 }}>
           <summary style={{ cursor: "pointer", fontWeight: 600 }}>Dòng sai định dạng ({fmtNum(r.invalid)}{r.invalid > r.invalid_rows.length ? `, hiện ${r.invalid_rows.length} dòng đầu` : ""})</summary>
@@ -232,7 +275,7 @@ function ImportForm({ purposes, onCreated }: { purposes: Record<string, string>;
           <Field label="Ghi chú (tuỳ chọn)" full htmlFor="b-note">
             <textarea id="b-note" className="adm-input" name="note" rows={2} maxLength={5000} />
           </Field>
-          <Field label={`File CSV hoặc Excel (.xlsx, ≤ ${MAX_FILE_MB} MB) — cột “MST” bắt buộc, cột “Tên doanh nghiệp” tuỳ chọn`} error={errors.file} full htmlFor="b-file">
+          <Field label={`File CSV hoặc Excel (.xlsx, ≤ ${MAX_FILE_MB} MB, sheet đầu tiên) — cột “MST” bắt buộc; tên, địa chỉ, điện thoại, email, website, ngành nghề, nhóm sản phẩm, mã HS… nhận theo tiêu đề cột`} error={errors.file} full htmlFor="b-file">
             <input
               id="b-file"
               className="adm-input"

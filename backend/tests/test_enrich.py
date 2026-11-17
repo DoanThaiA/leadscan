@@ -179,6 +179,101 @@ def test_import_xlsx_restores_leading_zero(admin):
     assert admin.get("/api/admin/enrich/companies/0101234567").json()["ten"] == "Công ty Số"
 
 
+def _xlsx(rows: list[list]) -> bytes:
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    for r in rows:
+        ws.append(r)
+    wb.create_sheet("Ghi chu").append(["Sheet phụ — không được nhập"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+EXTRA_FILE = [
+    ["Ngành nghề", "Tên doanh nghiệp", "MST", "Địa chỉ trụ sở", "Điện thoại", "Phân nhóm sản phẩm", "Mã HS (4 số)", "Số dòng hàng", "Số CCCD"],
+    ["Dệt may", "Công ty CP May Xuất khẩu A", "0101234567", "Số 1 Lê Lợi, Phường Bến Thành, TP Hồ Chí Minh", 974102195, "Quần áo và phụ kiện may mặc", "6104, 6204", 2, "001200000001"],
+    ["Điện tử", "Công ty TNHH Linh kiện B", "0309876543001", "KCN Quế Võ, Tỉnh Bắc Ninh", "8.40948E+11 / 84988062325", "Linh kiện điện tử; Bo mạch", "8542", 1, ""],
+]
+
+
+def test_import_extra_columns_into_profile(admin):
+    data = _xlsx(EXTRA_FILE)
+    pre = admin.post("/api/admin/enrich/batches/preview", json={"file_name": "ds.xlsx", "file_b64": b64(data)}).json()
+    cols = {c["header"]: (c["field"], c["filled"]) for c in pre["columns"]}
+    assert cols == {
+        "Ngành nghề": ("nhom_nganh", 2),
+        "Địa chỉ trụ sở": ("dia_chi", 2),
+        "Điện thoại": ("dien_thoai", 2),
+        "Phân nhóm sản phẩm": ("nhom_san_pham", 2),
+        "Mã HS (4 số)": ("ma_hs", 2),
+    }
+    assert pre["ignored_columns"] == ["Số dòng hàng"] and pre["sensitive_columns"] == ["Số CCCD"]
+    assert pre["phones"]["ok"] == 2 and pre["phones"]["bad"] == 1
+    assert pre["phones"]["bad_rows"][0]["unreadable"] == ["8.40948E+11"]
+
+    r = admin.post("/api/admin/enrich/batches", json={**BATCH, "file_name": "ds.xlsx", "file_b64": b64(data)})
+    assert r.status_code == 201, r.text
+    p = admin.get("/api/admin/enrich/companies/0101234567").json()
+    shown = {f["key"]: f["value"] for f in p["fields"]}
+    assert shown["nhom_nganh"] == "Dệt may"
+    assert shown["nhom_san_pham"] == ["Quần áo và phụ kiện may mặc"]
+    assert shown["ma_hs"] == ["6104", "6204"]
+    assert shown["tinh"] == "Hồ Chí Minh"  # tách tỉnh từ địa chỉ
+    assert "nganh_nghe" not in shown  # "Ngành nghề" trơn là nhóm ngành theo danh sách, không phải ngành ĐKKD
+    assert p["contacts"] == [{"kind": "phone", "value": "+84974102195", "source_code": "nhap_lo", "source_name": "Danh sách MST nhập theo lô"}]
+
+    p2 = admin.get("/api/admin/enrich/companies/0309876543-001").json()
+    assert {f["key"]: f["value"] for f in p2["fields"]}["nhom_san_pham"] == ["Linh kiện điện tử", "Bo mạch"]
+    assert [c["value"] for c in p2["contacts"]] == ["+84988062325"]
+
+    # nhập lại cùng file: không thêm bằng chứng / liên hệ trùng
+    n_ev = len(admin.get("/api/admin/enrich/companies/0101234567/evidence").json())
+    admin.post("/api/admin/enrich/batches", json={**BATCH, "file_name": "ds.xlsx", "file_b64": b64(data)})
+    assert len(admin.get("/api/admin/enrich/companies/0101234567/evidence").json()) == n_ev
+    assert len(admin.get("/api/admin/enrich/companies/0101234567").json()["contacts"]) == 1
+
+    # lọc theo mã HS / nhóm ngành
+    flt = {"op": "and", "conditions": [{"field": "ma_hs", "cmp": "contains", "value": "6204"}]}
+    res = admin.post("/api/admin/enrich/companies/search", json={"definition": flt}).json()
+    assert [c["mst"] for c in res["items"]] == ["0101234567"]
+
+
+def test_official_source_outranks_batch_value(admin):
+    """Giá trị từ lô (tin cậy 0,5) bị dữ liệu ĐKKD (0,95) đè khi hiển thị nhưng vẫn giữ làm bằng chứng."""
+    from app.enrich import sources
+    from app.enrich.apply import Origin, apply_facts
+    from app.enrich.connectors.base import CompanyFact, Facts
+
+    import_csv(admin, ["MST,Tên,Địa chỉ", "0101234567,Công ty A,Số 1 phố Cũ, Hà Nội"])
+    with dbmod.new_session() as db:
+        src = sources.ensure(db, "dkkd_mua")
+        apply_facts(db, "0101234567", Facts(company=[CompanyFact("dia_chi", "Số 9 phố Mới, Hà Nội", "")]), Origin(src, "dkkd.xlsx#dong=2", "h1", "cau_truc"))
+        db.commit()
+    shown = {f["key"]: f for f in admin.get("/api/admin/enrich/companies/0101234567").json()["fields"]}
+    assert shown["dia_chi"]["value"] == "Số 9 phố Mới, Hà Nội" and shown["dia_chi"]["conflict"] is True
+
+
+@pytest.mark.parametrize(
+    "raw,ok,bad",
+    [
+        (974102195, ["+84974102195"], []),
+        ("241.3821603", ["+842413821603"], []),
+        ("066 3534086", ["+84663534086"], []),
+        ("8.40948E+11 / 84988062325", ["+84988062325"], ["8.40948E+11"]),
+        ("38940914", [], ["38940914"]),
+        ("18006809", ["18006809"], []),
+        ("", [], []),
+    ],
+)
+def test_split_phones(raw, ok, bad):
+    from app.enrich.importer import split_phones
+
+    assert split_phones(raw) == (ok, bad)
+
+
 def test_import_without_header_uses_first_column(admin):
     r = import_csv(admin, ["0101234567", "0309876543"])
     assert r.status_code == 201 and r.json()["mst_count"] == 2

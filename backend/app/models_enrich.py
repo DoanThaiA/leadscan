@@ -140,6 +140,9 @@ COMPANY_FIELDS = {
     "tinh": "Tỉnh/thành",
     "trang_thai": "Tình trạng hoạt động",
     "nganh_nghe": "Ngành nghề",
+    "nhom_nganh": "Nhóm ngành (theo danh sách)",
+    "nhom_san_pham": "Nhóm sản phẩm",
+    "ma_hs": "Mã HS",
     "ngay_thanh_lap": "Ngày thành lập",
     "von": "Vốn điều lệ (đồng)",
     "website": "Website",
@@ -424,6 +427,10 @@ class EnrichCompany(Base):
     dia_chi: Mapped[str | None] = mapped_column(String(600))
     tinh: Mapped[str | None] = mapped_column(String(80), index=True)
     nganh_nghe: Mapped[list | None] = mapped_column(JSON)
+    # phân loại do danh sách nhập lô cung cấp (không phải ngành nghề ĐKKD) — vd "Dệt may", nhóm hàng xuất khẩu, mã HS
+    nhom_nganh: Mapped[str | None] = mapped_column(String(200), index=True)
+    nhom_san_pham: Mapped[list | None] = mapped_column(JSON)
+    ma_hs: Mapped[list | None] = mapped_column(JSON)
     ngay_thanh_lap: Mapped[date | None] = mapped_column(Date)
     von: Mapped[int | None] = mapped_column(BigInteger)
     trang_thai: Mapped[str | None] = mapped_column(String(120), index=True)

@@ -1,16 +1,21 @@
 """Nhập danh sách MST từ file CSV hoặc Excel thành một lô (A01, A02).
 
 File: cột MST bắt buộc (nhận tiêu đề "MST", "Mã số thuế", "tax code"…; không có dòng tiêu đề thì lấy cột đầu),
-cột tên doanh nghiệp tuỳ chọn. Mỗi MST hợp lệ:
+cột tên doanh nghiệp tuỳ chọn. Các cột khác được nhận theo tiêu đề (EXTRA_HEADERS): địa chỉ, tỉnh/thành, điện thoại,
+email, website, ngành nghề, nhóm ngành, nhóm sản phẩm, mã HS, tình trạng, ngày thành lập, vốn. Mỗi MST hợp lệ:
   • tạo hồ sơ kho A nếu chưa có (khoá MST — B05),
   • gắn vào lô (mục đích sử dụng được phép đi theo lô),
-  • ghi bằng chứng cho trường mst (và tên, nếu file có) trỏ về file + số dòng.
-MST trùng trong file chỉ lấy lần đầu; MST đã có trong hệ thống vẫn gắn vào lô mới.
+  • ghi bằng chứng cho mọi trường nhận được, trỏ về file + số dòng. Nguồn "nhập lô" có độ tin cậy thấp (0,5)
+    nên dữ liệu ĐKKD / nguồn chính thức nhập sau tự được ưu tiên hiển thị; giá trị từ lô vẫn giữ làm bằng chứng.
+  • điện thoại / email chung của doanh nghiệp → bảng liên hệ (như liên hệ chung lấy từ website).
+Cột dữ liệu cá nhân nhạy cảm (CCCD, ngày sinh…) bị bỏ qua và liệt kê trong biên bản; cột không nhận ra chỉ nằm trong
+trích đoạn của bằng chứng. MST trùng trong file chỉ lấy lần đầu; MST đã có trong hệ thống vẫn gắn vào lô mới.
 """
 
 import csv
 import hashlib
 import io
+import re
 from dataclasses import dataclass, field
 
 from sqlalchemy import insert, select
@@ -18,9 +23,10 @@ from sqlalchemy.orm import Session
 
 from app.db import utcnow
 from app.enrich import merge, sources
-from app.enrich.normalize import bo_dau, parse_mst
+from app.enrich.connectors.base import CompanyFact
+from app.enrich.normalize import bo_dau, normalize_phone, parse_mst
 from app.models import AdminUser
-from app.models_enrich import CompanyEvidence, EnrichBatch, EnrichBatchItem, EnrichCompany
+from app.models_enrich import COMPANY_FIELDS, CompanyEvidence, EnrichBatch, EnrichBatchItem, EnrichCompany, EnrichContact, OptOut
 
 MAX_FILE_BYTES = 10 * 1024 * 1024
 MAX_ROWS = 100_000
@@ -28,6 +34,27 @@ MAX_LISTED = 500  # số dòng lỗi / trùng liệt kê chi tiết trong biên 
 
 MST_HEADERS = {"mst", "ma so thue", "masothue", "ma_so_thue", "tax code", "tax_code", "taxcode", "ma so thue doanh nghiep"}
 NAME_HEADERS = {"ten", "ten doanh nghiep", "ten cong ty", "ten dn", "ten_doanh_nghiep", "company", "company name", "name"}
+
+# Cột phụ: trường → tiêu đề chấp nhận (không dấu, chữ thường). Tiêu đề khớp nguyên văn hoặc bắt đầu bằng một từ khoá
+# (theo ranh giới từ: "mã hs (4 số)" khớp "ma hs"); nhiều từ khoá cùng khớp thì từ khoá dài nhất thắng
+# ("ngành nghề kinh doanh chính" → ngành nghề ĐKKD, "ngành nghề" trơn → nhóm ngành theo danh sách).
+EXTRA_HEADERS: dict[str, list[str]] = {
+    "dia_chi": ["dia chi", "dia chi tru so", "dia chi tru so chinh", "dia chi doanh nghiep", "dia chi cong ty", "address"],
+    "tinh": ["tinh", "tinh/thanh", "tinh thanh", "tinh/thanh pho", "tinh thanh pho", "province"],
+    "dien_thoai": ["dien thoai", "so dien thoai", "sdt", "so dt", "dt", "phone", "tel", "telephone", "hotline"],
+    "email": ["email", "e-mail", "mail", "thu dien tu", "dia chi email", "dia chi thu dien tu"],
+    "website": ["website", "web", "trang web", "trang chu", "dia chi website", "dia chi web"],
+    "nganh_nghe": ["nganh nghe kinh doanh", "nganh nghe kinh doanh chinh", "nganh nghe chinh", "nganh kinh doanh chinh", "nganh nghe dkkd"],
+    "nhom_nganh": ["nganh nghe", "nganh", "nhom nganh", "linh vuc", "phan loai nganh", "industry"],
+    "nhom_san_pham": ["phan nhom san pham", "nhom san pham", "san pham", "mat hang", "nhom hang", "nhom mat hang", "product"],
+    "ma_hs": ["ma hs", "hs code", "hs"],
+    "trang_thai": ["tinh trang", "trang thai", "tinh trang hoat dong"],
+    "ngay_thanh_lap": ["ngay thanh lap", "ngay cap phep", "ngay dang ky"],
+    "von": ["von dieu le", "von"],
+}
+CONTACT_FIELDS = {"dien_thoai": "phone", "email": "email"}
+EXTRA_LABELS = {**COMPANY_FIELDS, "dien_thoai": "Điện thoại doanh nghiệp", "email": "Email chung doanh nghiệp"}
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 
 
 class ImportError_(ValueError):
@@ -40,6 +67,7 @@ class Row:
     mst: str
     name: str
     raw: str
+    extra: dict[str, object] = field(default_factory=dict)  # trường phụ → giá trị thô trong ô
 
 
 @dataclass
@@ -53,9 +81,20 @@ class Analysis:
     padded_count: int = 0
     has_header: bool = False
     has_name: bool = False
+    columns: list[dict] = field(default_factory=list)  # [{header, field, label}] — cột phụ nhận được
+    ignored: list[str] = field(default_factory=list)  # tiêu đề không nhận ra (chỉ nằm trong trích đoạn)
+    sensitive: list[str] = field(default_factory=list)  # cột dữ liệu cá nhân nhạy cảm — bỏ qua
+    filled: dict[str, int] = field(default_factory=dict)  # trường phụ → số dòng có giá trị
+    phone_ok: int = 0
+    phone_bad: list[dict] = field(default_factory=list)
+    phone_bad_count: int = 0
 
     def report(self) -> dict:
         return {
+            "columns": [{**c, "filled": self.filled.get(c["field"], 0)} for c in self.columns],
+            "ignored_columns": self.ignored,
+            "sensitive_columns": self.sensitive,
+            "phones": {"ok": self.phone_ok, "bad": self.phone_bad_count, "bad_rows": self.phone_bad},
             "total_rows": self.total,
             "valid": len(self.rows),
             "duplicate_in_file": self.duplicate_count,
@@ -123,6 +162,78 @@ def _detect(first: list) -> tuple[bool, int, int | None]:
     raise ImportError_("Không thấy cột mã số thuế. Đặt tiêu đề cột là “MST” hoặc “Mã số thuế”, hoặc để MST ở cột đầu.")
 
 
+def _extra_field(head: str) -> str | None:
+    best, best_len = None, 0
+    for target, syns in EXTRA_HEADERS.items():
+        for s in syns:
+            if (head == s or (head.startswith(s) and not head[len(s)].isalnum())) and len(s) > best_len:
+                best, best_len = target, len(s)
+    return best
+
+
+def _detect_extra(first: list, skip: set[int]) -> tuple[dict[int, str], list[dict], list[str], list[str]]:
+    """Cột phụ theo tiêu đề → ({chỉ số cột: trường}, mô tả cột, tiêu đề bỏ qua, tiêu đề nhạy cảm)."""
+    from app.enrich.official import SENSITIVE  # trễ: official import từ module này
+
+    cols: dict[int, str] = {}
+    described: list[dict] = []
+    ignored: list[str] = []
+    sensitive: list[str] = []
+    for i, c in enumerate(first):
+        if i in skip or not _cell(c):
+            continue
+        head = bo_dau(_cell(c))
+        if any(w in head for w in SENSITIVE):
+            sensitive.append(_cell(c))
+            continue
+        target = _extra_field(head)
+        if target is None or target in cols.values():  # trùng trường: lấy cột đầu tiên
+            ignored.append(_cell(c))
+            continue
+        cols[i] = target
+        described.append({"header": _cell(c), "field": target, "label": EXTRA_LABELS[target]})
+    return cols, described, ignored, sensitive
+
+
+def split_phones(raw) -> tuple[list[str], list[str]]:
+    """Ô điện thoại → (số chuẩn +84…, phần không nhận được).
+
+    Sửa lỗi Excel hay gặp: số lưu dạng số mất 0 đầu (974102195 → 0974102195; 241.3821603 → 02413821603).
+    Số đã bị Excel đổi sang dạng khoa học (8.40948E+11) mất chữ số thật → không đoán, báo lại.
+    """
+    if raw is None or raw == "":
+        return [], []
+    if isinstance(raw, float) and raw.is_integer():
+        raw = int(raw)
+    ok: list[str] = []
+    bad: list[str] = []
+    for part in re.split(r"\s*[/;,\n|]\s*|\s+-\s+", str(raw)):
+        part = part.strip()
+        if not part:
+            continue
+        if re.search(r"\d[eE]\+\d", part):
+            bad.append(part)
+            continue
+        d = re.sub(r"[^\d+]", "", part)
+        if re.fullmatch(r"1[89]00\d{4,6}", d):  # tổng đài 1800 / 1900 — không có dạng +84
+            if d not in ok:
+                ok.append(d)
+            continue
+        if d and not d.startswith(("0", "+", "84")) and len(d) in (9, 10):
+            d = "0" + d
+        p = normalize_phone(d)
+        if p:
+            if p not in ok:
+                ok.append(p)
+        else:
+            bad.append(part)
+    return ok, bad
+
+
+def split_emails(raw) -> list[str]:
+    return list(dict.fromkeys(m.lower() for m in _EMAIL.findall(_cell(raw))))
+
+
 def analyze(file_name: str, data: bytes) -> Analysis:
     table = read_table(file_name, data)
     while table and not any(_cell(c) for c in table[-1]):
@@ -132,6 +243,9 @@ def analyze(file_name: str, data: bytes) -> Analysis:
     an = Analysis()
     an.has_header, mst_col, name_col = _detect(table[0])
     an.has_name = name_col is not None
+    extra_cols: dict[int, str] = {}
+    if an.has_header:
+        extra_cols, an.columns, an.ignored, an.sensitive = _detect_extra(table[0], {mst_col, *([name_col] if name_col is not None else [])})
     start = 1 if an.has_header else 0
     if len(table) - start > MAX_ROWS:
         raise ImportError_(f"File có hơn {MAX_ROWS:,} dòng — chia thành nhiều lô.".replace(",", "."))
@@ -158,8 +272,31 @@ def analyze(file_name: str, data: bytes) -> Analysis:
         if res.padded:
             an.padded_count += 1
         name = _cell(row[name_col]) if name_col is not None and name_col < len(row) else ""
+        extra: dict[str, object] = {}
+        for ci, target in extra_cols.items():
+            v = row[ci] if ci < len(row) else None
+            if v is None or _cell(v) == "":
+                continue
+            if target == "dien_thoai":
+                phones, bad = split_phones(v)
+                an.phone_ok += len(phones)
+                if bad:
+                    an.phone_bad_count += 1
+                    if len(an.phone_bad) < MAX_LISTED:
+                        an.phone_bad.append({"row": row_no, "value": _cell(v)[:80], "unreadable": bad[:5]})
+                if not phones:
+                    continue
+                v = phones
+            elif target == "email":
+                v = split_emails(v)
+                if not v:
+                    continue
+            extra[target] = v
+            an.filled[target] = an.filled.get(target, 0) + 1
         an.rows.append(
-            Row(row_no=row_no, mst=res.mst, name=" ".join(name.split())[:400], raw=" | ".join(_cell(c) for c in row)[:500])
+            Row(
+                row_no=row_no, mst=res.mst, name=" ".join(name.split())[:400], raw=" | ".join(_cell(c) for c in row)[:500], extra=extra
+            )
         )
     return an
 
@@ -176,8 +313,24 @@ def preview(db: Session, file_name: str, data: bytes) -> dict:
     rep = an.report()
     rep["existing"] = len(existing_msts(db, [r.mst for r in an.rows]))
     rep["new"] = rep["valid"] - rep["existing"]
-    rep["sample"] = [{"row": r.row_no, "mst": r.mst, "name": r.name} for r in an.rows[:10]]
+    rep["sample"] = [{"row": r.row_no, "mst": r.mst, "name": r.name, "extra": _sample_extra(r)} for r in an.rows[:10]]
     return rep
+
+
+def _sample_extra(r: Row) -> dict[str, str]:
+    return {k: "; ".join(map(str, v)) if isinstance(v, list) else _cell(v)[:200] for k, v in r.extra.items()}
+
+
+def _company_facts(r: Row) -> list[CompanyFact]:
+    """Trường phụ của một dòng → fact đã chuẩn hoá (địa chỉ sinh thêm tỉnh, website sinh thêm tên miền)."""
+    from app.enrich.apply import normalize_fact  # trễ: apply → merge → … tránh vòng import
+
+    out: list[CompanyFact] = []
+    for k, v in r.extra.items():
+        if k in CONTACT_FIELDS:
+            continue
+        out.extend(normalize_fact(CompanyFact(k, v, "")))
+    return out
 
 
 def create_batch(
@@ -253,12 +406,46 @@ def create_batch(
             "batch_id": batch.id,
             "fetched_at": now,
         }
-        for field_, value in (("mst", r.mst), ("ten", r.name)):
+        pairs = [("mst", r.mst), ("ten", r.name)]
+        pairs += [(f.field, merge.encode(f.field, f.value)) for f in _company_facts(r)]
+        for field_, value in pairs:
             if value and (r.mst, field_, value) not in seen:
+                seen.add((r.mst, field_, value))
                 evidence.append({**common, "field": field_, "value": value})
     for i in range(0, len(evidence), 5000):
         db.execute(insert(CompanyEvidence), evidence[i : i + 5000])
+    _add_company_contacts(db, an.rows, src.code)
     merge.recompute_companies(db, msts)
     db.commit()
     db.refresh(batch)
     return batch
+
+
+def _add_company_contacts(db: Session, rows: list[Row], source_code: str) -> int:
+    """Điện thoại / email chung của doanh nghiệp → enrich_contacts (owner_type company). Bỏ giá trị đã có hoặc trong
+    danh sách từ chối (C10)."""
+    wanted = [(r.mst, CONTACT_FIELDS[k], v) for r in rows for k in CONTACT_FIELDS for v in r.extra.get(k, [])]
+    if not wanted:
+        return 0
+    blocked = {v.strip().lower() for (v,) in db.execute(select(OptOut.value).where(OptOut.kind.in_(("email", "phone"))))}
+    msts = list({m for m, _, _ in wanted})
+    have: set[tuple[str, str]] = set()
+    for i in range(0, len(msts), 1000):
+        have.update(
+            db.execute(
+                select(EnrichContact.owner_id, EnrichContact.value).where(
+                    EnrichContact.owner_type == "company", EnrichContact.owner_id.in_(msts[i : i + 1000])
+                )
+            ).all()
+        )
+    new = []
+    for mst, kind, value in wanted:
+        if (mst, value) in have or value.lower() in blocked:
+            continue
+        have.add((mst, value))
+        new.append(
+            {"owner_type": "company", "owner_id": mst, "kind": kind, "value": value[:200], "is_inferred": False, "verify_status": "unverified", "source_code": source_code}
+        )
+    for i in range(0, len(new), 5000):
+        db.execute(insert(EnrichContact), new[i : i + 5000])
+    return len(new)

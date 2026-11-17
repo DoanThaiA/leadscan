@@ -15,7 +15,7 @@ from app.db import utcnow
 from app.enrich.normalize import bo_dau, parse_date
 from app.models_enrich import EnrichBatch, EnrichBatchItem, EnrichCompany, EnrichSignal, PersonRole
 
-TEXT = {"mst", "ten", "dia_chi", "tinh", "trang_thai", "website", "domain", "ma_ck", "loai_hinh"}
+TEXT = {"mst", "ten", "dia_chi", "tinh", "trang_thai", "website", "domain", "ma_ck", "loai_hinh", "nhom_nganh"}
 FIELDS = {
     "mst": ("Mã số thuế", "text"),
     "ten": ("Tên doanh nghiệp", "text"),
@@ -24,6 +24,9 @@ FIELDS = {
     "tinh": ("Tỉnh/thành", "text"),
     "trang_thai": ("Tình trạng hoạt động", "text"),
     "nganh_nghe": ("Ngành nghề", "list"),
+    "nhom_nganh": ("Nhóm ngành (theo danh sách)", "text"),
+    "nhom_san_pham": ("Nhóm sản phẩm", "list"),
+    "ma_hs": ("Mã HS", "list"),
     "ngay_thanh_lap": ("Ngày thành lập", "date"),
     "von": ("Vốn điều lệ (đồng)", "number"),
     "website": ("Website", "text"),

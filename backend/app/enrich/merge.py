@@ -21,7 +21,7 @@ from app.enrich.normalize import bo_dau, company_type
 from app.enrich.sources import all_sources
 from app.models_enrich import COMPANY_FIELDS, CompanyChange, CompanyEvidence, EnrichCompany
 
-LIST_FIELDS = {"nganh_nghe"}
+LIST_FIELDS = {"nganh_nghe", "nhom_san_pham", "ma_hs"}
 DATE_FIELDS = {"ngay_thanh_lap"}
 INT_FIELDS = {"von"}
 BOOL_FIELDS = {"niem_yet"}

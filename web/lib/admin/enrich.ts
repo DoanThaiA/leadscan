@@ -77,6 +77,8 @@ export interface CompanyProfile {
   batches: { id: number; name: string; purposes: string[]; created_at: string; row_no: number }[];
   changes: { field: string; label: string; old_value: string | null; new_value: string | null; source_code: string; detected_at: string }[];
   signals: Signal[];
+  /** điện thoại / email chung của doanh nghiệp */
+  contacts?: { kind: "phone" | "email"; value: string; source_code: string; source_name: string }[];
   can: { people: boolean; evidence: boolean };
   created_at: string;
 }
@@ -248,7 +250,12 @@ export interface ImportReport {
   duplicate_rows: { row: number; mst: string; first_row: number }[];
   existing: number;
   new: number;
-  sample?: { row: number; mst: string; name: string }[];
+  sample?: { row: number; mst: string; name: string; extra?: Record<string, string> }[];
+  /** cột phụ nhận được theo tiêu đề (địa chỉ, điện thoại, nhóm sản phẩm, mã HS…) — lô cũ không có */
+  columns?: { header: string; field: string; label: string; filled: number }[];
+  ignored_columns?: string[];
+  sensitive_columns?: string[];
+  phones?: { ok: number; bad: number; bad_rows: { row: number; value: string; unreadable: string[] }[] };
 }
 
 export interface Batch {

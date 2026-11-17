@@ -33,7 +33,9 @@ from app.models_enrich import (
     EnrichBatch,
     EnrichBatchItem,
     EnrichCompany,
+    EnrichContact,
     EnrichSignal,
+    OptOut,
 )
 from app.schemas import Line
 
@@ -201,7 +203,17 @@ def get_company(mst: str, user: AdminUser = Depends(perm.require("a.read")), db:
     purposes = sorted({p for b in batches for p in (b.purposes or [])}, key=list(PURPOSES).index)
     changes = db.scalars(select(CompanyChange).where(CompanyChange.mst == c.mst).order_by(CompanyChange.detected_at.desc()).limit(200)).all()
     signals = db.scalars(select(EnrichSignal).where(EnrichSignal.mst == c.mst).order_by(EnrichSignal.created_at.desc()).limit(200)).all()
+    # liên hệ chung của doanh nghiệp (tổng đài, info@) — cùng mức với cột "email / điện thoại doanh nghiệp" khi xuất kho A
+    blocked = {v.strip().lower() for (v,) in db.execute(select(OptOut.value).where(OptOut.kind.in_(("email", "phone"))))}
+    contacts = [
+        {"kind": ct.kind, "value": ct.value, "source_code": ct.source_code, "source_name": srcs[ct.source_code].name if ct.source_code in srcs else ct.source_code}
+        for ct in db.scalars(
+            select(EnrichContact).where(EnrichContact.owner_type == "company", EnrichContact.owner_id == c.mst).order_by(EnrichContact.kind, EnrichContact.id)
+        )
+        if ct.value.strip().lower() not in blocked
+    ]
     return {
+        "contacts": contacts,
         "mst": c.mst,
         "ten": c.ten,
         "loai_hinh": c.loai_hinh,
