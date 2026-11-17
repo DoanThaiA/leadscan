@@ -4,7 +4,7 @@
 .job-slug .adm-input { border: 0; padding-left: 0; }
 .job-slug:focus-within { outline: 2px solid var(--brand); outline-offset: 1px; }
 .job-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; padding: 2px; background: var(--line-2); }
-.job-seg button { border: 0; background: none; font: 500 13px Inter, sans-serif; padding: 4px 10px; border-radius: 4px; color: var(--muted); cursor: pointer; }
+.job-seg button { border: 0; background: none; font: 500 13px var(--font-inter), sans-serif; padding: 4px 10px; border-radius: 4px; color: var(--muted); cursor: pointer; }
 .job-seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08); }
 .job-hint { font-size: 12.5px; color: var(--muted); background: var(--line-2); border-radius: 6px; padding: 8px 10px; line-height: 1.7; }
 .job-hint code, .adm code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }

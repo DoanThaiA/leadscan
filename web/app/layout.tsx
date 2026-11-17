@@ -1,9 +1,17 @@
 import type { Metadata, Viewport } from "next";
+import { Be_Vietnam_Pro, Inter } from "next/font/google";
 import type { ReactNode } from "react";
 
 import { SITE_URL } from "@/lib/seo";
 
 // Mã xác minh Google Search Console / Bing Webmaster (thẻ meta) — đặt trong .env khi build, để trống thì không in thẻ.
+// Font tự host qua next/font: tải lúc build, phục vụ từ chính tên miền (không còn gọi fonts.googleapis.com),
+// tự preload và có font dự phòng cùng kích thước nên chữ không nhảy khi font tải xong.
+// CSS dùng var(--font-inter) / var(--font-head). Inter là font biến thiên (mọi độ đậm trong 1 tệp); Be Vietnam Pro chỉ làm
+// tiêu đề nên chỉ cần độ đậm 600 và 700 (thêm độ đậm khác = thêm tệp font được preload).
+const inter = Inter({ subsets: ["latin", "vietnamese"], display: "swap", variable: "--font-inter" });
+const beVietnam = Be_Vietnam_Pro({ subsets: ["latin", "vietnamese"], weight: ["600", "700"], display: "swap", variable: "--font-head" });
+
 const GOOGLE_VERIFY = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION;
 const BING_VERIFY = process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION;
 
@@ -38,16 +46,9 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     // Script trong <head> đổi "no-js" → "js" trước khi vẽ trang (hiệu ứng hiện dần chỉ bật khi có JS)
-    <html lang="vi" className="no-js" suppressHydrationWarning>
+    <html lang="vi" className={`no-js ${inter.variable} ${beVietnam.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.replace('no-js','js')" }} />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link
-          href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
       </head>
       <body>{children}</body>
     </html>

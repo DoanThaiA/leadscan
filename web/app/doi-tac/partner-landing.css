@@ -18,7 +18,7 @@
 .ptl-signal{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 30px 60px -30px rgba(0,40,80,.35);overflow:hidden;position:relative}
 .ptl-signal::before{content:"";position:absolute;inset:0 0 auto 0;height:6px;background:var(--yellow)}
 .ptl-signal-hd{display:flex;justify-content:space-between;align-items:baseline;padding:20px 22px 8px;font-family:var(--head);font-weight:600;color:var(--ink)}
-.ptl-signal-hd small{font-family:Inter,sans-serif;font-weight:400;color:var(--soft);font-size:12px}
+.ptl-signal-hd small{font-family:var(--font-inter),sans-serif;font-weight:400;color:var(--soft);font-size:12px}
 .ptl-signal ol{list-style:none;padding:6px 22px 8px}
 .ptl-signal li{display:grid;grid-template-columns:18px 1fr auto;gap:12px;align-items:start;padding:12px 0;position:relative}
 .ptl-signal li+li{border-top:1px dashed var(--line)}

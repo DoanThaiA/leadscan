@@ -24,8 +24,8 @@
 .adm-badge.sr-live::before { animation: sr-pulse 1.8s ease-in-out infinite; }
 @keyframes sr-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.7); } }
 @media (prefers-reduced-motion: reduce) { .adm-badge.sr-live::before { animation: none; } }
-.sr-new { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 99px; background: var(--accent); color: var(--brand); font: 600 11.5px/1.6 Inter, sans-serif; white-space: nowrap; }
-.mt-new { display: inline-block; vertical-align: 1px; margin-right: 6px; padding: 0 6px; border-radius: 4px; background: var(--accent); color: var(--brand); font: 700 10.5px/1.6 Inter, sans-serif; text-transform: uppercase; letter-spacing: 0.02em; }
+.sr-new { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 99px; background: var(--accent); color: var(--brand); font: 600 11.5px/1.6 var(--font-inter), sans-serif; white-space: nowrap; }
+.mt-new { display: inline-block; vertical-align: 1px; margin-right: 6px; padding: 0 6px; border-radius: 4px; background: var(--accent); color: var(--brand); font: 700 10.5px/1.6 var(--font-inter), sans-serif; text-transform: uppercase; letter-spacing: 0.02em; }
 
 .sr-stats { display: flex; gap: 10px; }
 .sr-stats > div { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 14px; min-width: 120px; display: grid; }
@@ -143,13 +143,13 @@
 .nt-bell { position: relative; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink-2); cursor: pointer; transition: background 0.15s, border-color 0.15s; }
 .nt-bell:hover, .nt-bell[aria-expanded="true"] { background: var(--brand-50); border-color: var(--brand-100); color: var(--brand-600); }
 .nt-bell:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
-.nt-count { position: absolute; top: -6px; right: -7px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: var(--brand); color: #fff; font: 700 10.5px/18px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+.nt-count { position: absolute; top: -6px; right: -7px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: var(--brand); color: #fff; font: 700 10.5px/18px var(--font-inter), sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
 .nt-panel { position: absolute; z-index: 60; top: calc(100% + 8px); width: 370px; max-width: calc(100vw - 24px); background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 16px 40px rgba(16, 24, 40, 0.16); overflow: hidden; }
 .nt-side .nt-panel { left: -150px; }
 .nt-top .nt-panel { right: -60px; }
 .nt-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
 .nt-head b { color: var(--ink); font-family: var(--head); }
-.nt-link { border: 0; background: none; color: var(--brand-600); font: 500 12.5px Inter, sans-serif; cursor: pointer; padding: 2px 0; }
+.nt-link { border: 0; background: none; color: var(--brand-600); font: 500 12.5px var(--font-inter), sans-serif; cursor: pointer; padding: 2px 0; }
 .nt-link:hover { text-decoration: underline; }
 .nt-list { list-style: none; margin: 0; padding: 0; max-height: min(420px, 70vh); overflow-y: auto; }
 .nt-item { display: flex; gap: 10px; align-items: flex-start; width: 100%; text-align: left; font: inherit; color: inherit; background: #fff; border: 0; border-bottom: 1px solid var(--line-2); padding: 11px 14px; cursor: pointer; }
@@ -164,7 +164,7 @@
 .nt-dot { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--brand); }
 .nt-empty { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 28px 18px; color: var(--muted); font-size: 13px; }
 .nt-empty .icon { color: var(--brand); }
-.nt-nav-count { margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: 99px; background: var(--brand); color: #fff; font: 700 11px/19px Inter, sans-serif; text-align: center; }
+.nt-nav-count { margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: 99px; background: var(--brand); color: #fff; font: 700 11px/19px var(--font-inter), sans-serif; text-align: center; }
 @media (max-width: 860px) {
   .nt-side { display: none; }
   .nt-top .nt-panel { position: fixed; top: 58px; left: 12px; right: 12px; width: auto; max-width: none; }
