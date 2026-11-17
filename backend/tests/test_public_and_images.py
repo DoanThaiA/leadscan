@@ -37,6 +37,22 @@ def test_public_shows_preview_only(admin):
     assert [r["id"] for r in rel] == [other] and "buyer_name" not in rel[0]
 
 
+
+def test_public_filter_by_places(admin):
+    """Trang theo tỉnh / miền: khớp miền, hoặc tên tỉnh nằm trong địa chỉ nhập tự do."""
+    a = make_opp(admin, province="KCN Quế Võ, Bắc Ninh", region="")
+    b = make_opp(admin, title="Cần 10.000 pallet gỗ", province="", region="Miền Bắc", buyer_name="Công ty B")
+    c = make_opp(admin, title="Cần 5 tấn hạt nhựa PP", province="Bình Dương", region="Miền Nam", buyer_name="Công ty C")
+    make_opp(admin, title="Cần dịch vụ vận tải 100%_test", province="Đồng Nai", region="Miền Nam", buyer_name="Công ty D")
+    anon = new_client()
+    ids = lambda qs: sorted(i["id"] for i in anon.get(f"/api/public/opportunities?{qs}").json()["items"])
+    assert ids("places=B%E1%BA%AFc%20Ninh") == [a]  # Bắc Ninh
+    assert ids("places=Mi%E1%BB%81n%20B%E1%BA%AFc|B%E1%BA%AFc%20Ninh") == sorted([a, b])  # Miền Bắc|Bắc Ninh
+    assert ids("places=B%C3%ACnh%20D%C6%B0%C6%A1ng") == [c]
+    assert ids("places=%25") == []  # ký tự đại diện bị vô hiệu
+    assert ids("places=%20|%20") == sorted([a, b, c, ids("")[-1]])  # chỉ khoảng trắng = không lọc
+
+
 def test_public_hides_drafts(admin):
     oid = make_opp(admin, status="draft")
     code = admin.get(f"/api/admin/opportunities/{oid}").json()["opportunity"]["code"]

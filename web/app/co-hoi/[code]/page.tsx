@@ -5,6 +5,7 @@ import { cache } from "react";
 
 import BuyButton, { ShareButton } from "@/components/public-opp/BuyButton";
 import PublicOppCard, { OppBadges, SlotBar } from "@/components/public-opp/OppCard";
+import { areaForProvince } from "@/lib/areas";
 import { industryHref } from "@/lib/industries";
 import { fetchPublicOpp, fmtDay, vnd } from "@/lib/public-opps";
 import { breadcrumbLd, ldJson } from "@/lib/seo";
@@ -48,8 +49,10 @@ export default async function PublicOppPage({ params }: Props) {
   const left = o.days_left;
   const imgs = o.attachment_counts?.images ?? 0, files = o.attachment_counts?.files ?? 0;
 
+  const place = o.province ? `${o.province}${o.region && o.region !== o.province ? ` · ${o.region}` : ""}` : o.region;
+  const area = areaForProvince(o.province, o.region);
   const facts: [string, string, ReactNode][] = [
-    ["map", "Khu vực", o.province ? `${o.province}${o.region && o.region !== o.province ? ` · ${o.region}` : ""}` : ""],
+    ["map", "Khu vực", place && area ? <a href={`/co-hoi/khu-vuc/${area.slug}`}>{place}</a> : place],
     ["layers", "Quy mô / số lượng", o.scale],
     ["wallet", "Giá trị ước tính", o.estimated_value],
     ["gauge", "Hạn chót", o.deadline ? <>{fmtDay(o.deadline)}{left !== null ? <em className={left >= 0 && left <= 7 ? "hot" : undefined}>{left < 0 ? " · đã quá hạn" : left === 0 ? " · hôm nay" : ` · còn ${left} ngày`}</em> : null}</> : ""],

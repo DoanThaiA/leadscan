@@ -89,6 +89,7 @@ Google xếp hạng **trang trả lời đúng điều người ta gõ**. Gợi 
 | Trang chủ `/` | sàn cơ hội kinh doanh B2B, tìm khách hàng B2B | tìm khách hàng doanh nghiệp, khách hàng đang cần mua |
 | `/co-hoi` | cơ hội kinh doanh B2B, nhu cầu mua hàng doanh nghiệp | đơn hàng B2B, tìm nhà cung cấp, gói thầu |
 | `/co-hoi/nganh/…` | nhu cầu mua + *tên ngành* (vd “nhu cầu mua bao bì, in ấn”) | doanh nghiệp đang cần mua …, tìm khách hàng ngành … |
+| `/co-hoi/khu-vuc/…` | doanh nghiệp *[tỉnh]* đang cần mua, cơ hội kinh doanh *[tỉnh]* | KCN *[tỉnh]* cần nhà cung cấp, nhà máy mới *[tỉnh]* |
 | `/co-hoi/CH-…` | *“[mặt hàng] + [số lượng] + [tỉnh]”* (đã có sẵn trong tiêu đề cơ hội) | nhà máy cần mua …, doanh nghiệp tìm nhà cung cấp … |
 | `/doi-tac` | kiếm tiền giới thiệu khách hàng, cộng tác viên giới thiệu khách hàng B2B | hoa hồng giới thiệu, chương trình đối tác |
 | `/tuyen-dung` | tuyển dụng LeadScan, việc làm sales B2B | |
@@ -96,9 +97,10 @@ Google xếp hạng **trang trả lời đúng điều người ta gõ**. Gợi 
 Việc nên làm:
 
 1. **Tiêu đề cơ hội viết như người ta tìm**: “Nhà máy FDI Bắc Ninh cần 20.000 thùng carton 5 lớp/tháng” tốt hơn “Cơ hội bao bì #12”. Mỗi cơ hội là 1 trang có thể lên Google — đây là lợi thế lớn nhất của LeadScan.
-2. **Trang cơ hội theo ngành** ✅ đã có: 15 trang `/co-hoi/nganh/<slug>` (nội dung riêng mỗi ngành: giới thiệu, nhu cầu thường gặp, ai nên theo dõi + danh sách cơ hội của ngành). Link cũ `/co-hoi?nganh=…` chuyển hẳn (308) sang trang ngành. Ngành chưa có cơ hội: `noindex` và không vào sitemap, có cơ hội là tự lên. Sửa nội dung từng ngành ở `web/lib/industries.ts`. **Bước tiếp:** trang theo tỉnh (`/co-hoi/tinh/bac-ninh`) để bắt từ khoá “doanh nghiệp Bắc Ninh cần mua…”.
-3. **Bài viết / cẩm nang** (blog): “Cách tìm khách hàng B2B”, “Cách tìm nhà máy FDI mới”, “Hoa hồng giới thiệu khách hàng tính thế nào”… mỗi tuần 1 bài, liên kết về `/co-hoi` và `/doi-tac`.
-4. Viết cho người đọc, không nhồi từ khoá; mỗi trang 1 chủ đề, 1 thẻ H1.
+2. **Trang cơ hội theo ngành** ✅ đã có: 15 trang `/co-hoi/nganh/<slug>` (nội dung riêng mỗi ngành: giới thiệu, nhu cầu thường gặp, ai nên theo dõi + danh sách cơ hội của ngành). Link cũ `/co-hoi?nganh=…` chuyển hẳn (308) sang trang ngành. Ngành chưa có cơ hội: `noindex` và không vào sitemap, có cơ hội là tự lên. Sửa nội dung từng ngành ở `web/lib/industries.ts`. 
+3. **Trang cơ hội theo khu vực** ✅ đã có: 18 trang `/co-hoi/khu-vuc/<slug>` — 3 miền + 15 tỉnh/thành công nghiệp (Hà Nội, TP.HCM, Hải Phòng, Bắc Ninh, Bắc Giang, Bình Dương, Đồng Nai…), nội dung riêng: giới thiệu, khu công nghiệp tiêu biểu, ngành nổi bật. Lọc theo tên tỉnh nằm trong địa chỉ (dữ liệu nhập tự do “KCN Quế Võ, Bắc Ninh” vẫn khớp); trang miền gồm cả cơ hội ghi tỉnh thuộc miền đó. `?khu_vuc=Miền …` chuyển 308 sang trang miền. Sửa nội dung / thêm tỉnh ở `web/lib/areas.ts`.
+4. **Bài viết / cẩm nang** (blog): “Cách tìm khách hàng B2B”, “Cách tìm nhà máy FDI mới”, “Hoa hồng giới thiệu khách hàng tính thế nào”… mỗi tuần 1 bài, liên kết về `/co-hoi` và `/doi-tac`.
+5. Viết cho người đọc, không nhồi từ khoá; mỗi trang 1 chủ đề, 1 thẻ H1.
 
 ---
 

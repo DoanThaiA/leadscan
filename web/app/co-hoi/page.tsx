@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { permanentRedirect } from "next/navigation";
 
 import PublicOppCard from "@/components/public-opp/OppCard";
+import { AREA_PAGES, areaByName } from "@/lib/areas";
 import { INDUSTRY_PAGES, industryByName, industryHref } from "@/lib/industries";
 import { fetchPublicOpps } from "@/lib/public-opps";
 
@@ -33,6 +34,8 @@ export default async function PublicOppsPage({ searchParams }: Props) {
   // Chỉ lọc theo ngành → chuyển hẳn sang trang ngành (1 URL duy nhất cho Google, link cũ ?nganh= vẫn dùng được)
   const ind = industry && !q && !region ? industryByName(industry) : undefined;
   if (ind) permanentRedirect(`/co-hoi/nganh/${ind.slug}${page > 1 ? `?trang=${page}` : ""}`);
+  const area = region && !q && !industry ? areaByName(region) : undefined;
+  if (area) permanentRedirect(`/co-hoi/khu-vuc/${area.slug}${page > 1 ? `?trang=${page}` : ""}`);
   const data = await fetchPublicOpps({ q, industry, region, page: String(page) });
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
   const href = (o: Record<string, string>) =>
@@ -113,6 +116,12 @@ export default async function PublicOppsPage({ searchParams }: Props) {
             <h2>Cơ hội theo ngành</h2>
             <div className="pub-chips wrap">
               {INDUSTRY_PAGES.map((x) => <a key={x.slug} href={`/co-hoi/nganh/${x.slug}`}>{x.name}</a>)}
+            </div>
+          </nav>
+          <nav className="ind-others" aria-label="Cơ hội theo khu vực">
+            <h2>Cơ hội theo khu vực</h2>
+            <div className="pub-chips wrap">
+              {AREA_PAGES.map((x) => <a key={x.slug} href={`/co-hoi/khu-vuc/${x.slug}`}>{x.name}</a>)}
             </div>
           </nav>
 

@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 
 import { fetchJobs } from "@/lib/careers-server";
+import { AREA_PAGES } from "@/lib/areas";
 import { INDUSTRY_PAGES } from "@/lib/industries";
 import { fetchPublicOpps } from "@/lib/public-opps";
 import { SITE_URL } from "@/lib/seo";
@@ -24,13 +25,17 @@ async function oppUrls(): Promise<MetadataRoute.Sitemap> {
   return out;
 }
 
-/** Trang ngành: chỉ đưa ngành đang có cơ hội (ngành trống để noindex, không đưa vào sitemap). */
-async function industryUrls(): Promise<MetadataRoute.Sitemap> {
-  const rows = await Promise.all(INDUSTRY_PAGES.map(async (x) => ({ x, r: await fetchPublicOpps({ industry: x.name, page_size: "1" }) })));
+/** Trang ngành / khu vực: chỉ đưa trang đang có cơ hội (trang trống để noindex, không đưa vào sitemap). */
+async function topicUrls(): Promise<MetadataRoute.Sitemap> {
+  const topics = [
+    ...INDUSTRY_PAGES.map((x) => ({ path: `/co-hoi/nganh/${x.slug}`, q: { industry: x.name } })),
+    ...AREA_PAGES.map((x) => ({ path: `/co-hoi/khu-vuc/${x.slug}`, q: { places: x.terms.join("|") } })),
+  ];
+  const rows = await Promise.all(topics.map(async (x) => ({ x, r: await fetchPublicOpps({ ...x.q, page_size: "1" }) })));
   return rows
     .filter(({ r }) => r && r.total > 0)
     .map(({ x, r }) => ({
-      url: `${SITE_URL}/co-hoi/nganh/${x.slug}`,
+      url: `${SITE_URL}${x.path}`,
       lastModified: r!.items[0]?.published_at ? new Date(r!.items[0].published_at) : undefined,
       changeFrequency: "daily" as const,
       priority: 0.8,
@@ -46,7 +51,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/gioi-thieu`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE_URL}/tuyen-dung`, lastModified: now, changeFrequency: "weekly", priority: 0.5 },
   ];
-  const [inds, opps, jobs] = await Promise.all([industryUrls().catch(() => []), oppUrls().catch(() => []), fetchJobs()]);
+  const [inds, opps, jobs] = await Promise.all([topicUrls().catch(() => []), oppUrls().catch(() => []), fetchJobs()]);
   const jobUrls: MetadataRoute.Sitemap = (jobs ?? []).map((j) => ({ url: `${SITE_URL}/tuyen-dung/${encodeURIComponent(j.slug)}`, changeFrequency: "weekly", priority: 0.4 }));
   return [...fixed, ...inds, ...opps, ...jobUrls];
 }

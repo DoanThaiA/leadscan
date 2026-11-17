@@ -48,6 +48,7 @@ def list_public(
     q: str = Query("", max_length=100),
     industry: str = "",
     region: str = "",
+    places: str = Query("", max_length=1500),
     page: int = Query(1, ge=1),
     page_size: int = Query(24, ge=1, le=60),
     db: Session = Depends(get_db),
@@ -60,6 +61,12 @@ def list_public(
         stmt = stmt.where(Opportunity.industry == industry)
     if region:
         stmt = stmt.where(or_(Opportunity.region == region, Opportunity.province == region))
+    terms = [t.strip() for t in places.split("|") if t.strip()][:60]
+    if terms:
+        # Trang cơ hội theo tỉnh / miền (web /co-hoi/khu-vuc/…): "Miền Bắc|Bắc Ninh|Hà Nội" — khớp đúng miền, hoặc tên tỉnh nằm trong
+        # địa chỉ tỉnh (dữ liệu nhập tự do: "KCN Quế Võ, Bắc Ninh")
+        esc = lambda t: t.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
+        stmt = stmt.where(or_(Opportunity.region.in_(terms), *[Opportunity.province.ilike(f"%{esc(t)}%", escape="\\") for t in terms]))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.options(selectinload(Opportunity.contacts)).order_by(Opportunity.published_at.desc().nullslast(), Opportunity.id.desc())
                       .offset((page - 1) * page_size).limit(page_size)).unique().all()
