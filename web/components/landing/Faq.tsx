@@ -9,6 +9,9 @@ const items = (R: Reward): [string, string][] => [
   ["Thanh toán và hoá đơn ra sao?", "Chuyển khoản VietQR qua cổng thanh toán MCV, điểm được cộng tự động khi nhận tiền. Bạn nhập thông tin xuất hoá đơn trong cổng thành viên, hoá đơn điện tử được xuất sau khi thanh toán."],
 ];
 
+/** Dùng chung cho JSON-LD FAQPage ở trang chủ */
+export const faqItems = (R: Reward) => items(R).map(([q, a]) => ({ q, a }));
+
 export default function Faq({ reward }: { reward: Reward }) {
   return (
     <section className="section" id="faq">

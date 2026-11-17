@@ -8,6 +8,7 @@ import { DeadlineTag, JobCardItem } from "@/components/careers/JobCardItem";
 import { RichText } from "@/components/careers/RichText";
 import { daysLeft, fmtDay, JOB_SECTIONS, JOB_TYPES, type JobPublic } from "@/lib/careers";
 import { fetchJob, fetchJobs } from "@/lib/careers-server";
+import { breadcrumbLd, ldJson } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +103,7 @@ export default async function JobDetailPage({ params }: Props) {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jobPostingLd(job)).replace(/</g, "\\u003c") }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson([breadcrumbLd([["Trang chủ", "/"], ["Tuyển dụng", "/tuyen-dung"], [job.title, `/tuyen-dung/${job.slug}`]])]) }} />
 
       <section className="cr-dhero">
         <div className="container">

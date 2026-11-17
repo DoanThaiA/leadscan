@@ -187,3 +187,19 @@
   .pub-band .btn { width: 100%; }
   .pub-detail h1 { font-size: 26px; }
 }
+
+/* Trang cơ hội theo ngành (/co-hoi/nganh/…) */
+.ind-meta { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-top: 26px; max-width: 980px; }
+.ind-meta > div { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+.ind-meta h2 { font-family: var(--head); font-size: 16px; color: var(--ink); margin-bottom: 10px; }
+.ind-meta ul { list-style: none; display: grid; gap: 6px; }
+.ind-meta li { display: flex; gap: 8px; font-size: 14.5px; color: var(--ink-2); }
+.ind-meta li .icon { width: 16px; height: 16px; margin-top: 4px; color: var(--green); flex: none; }
+.ind-meta p { font-size: 14.5px; color: var(--ink-2); }
+.ind-meta .ind-note { margin-top: 10px; font-size: 13.5px; color: var(--muted); }
+.ind-h2 { font-size: 15px; font-weight: 500; color: var(--muted); margin-bottom: 14px; }
+.ind-h2 b { color: var(--ink); }
+.ind-others { margin-top: 40px; }
+.ind-others h2 { font-family: var(--head); font-size: 18px; color: var(--ink); margin-bottom: 12px; }
+.pub-chips.wrap { flex-wrap: wrap; overflow: visible; }
+@media (max-width: 760px) { .ind-meta { grid-template-columns: 1fr; } }

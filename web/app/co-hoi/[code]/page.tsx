@@ -5,7 +5,9 @@ import { cache } from "react";
 
 import BuyButton, { ShareButton } from "@/components/public-opp/BuyButton";
 import PublicOppCard, { OppBadges, SlotBar } from "@/components/public-opp/OppCard";
+import { industryHref } from "@/lib/industries";
 import { fetchPublicOpp, fmtDay, vnd } from "@/lib/public-opps";
+import { breadcrumbLd, ldJson } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -64,11 +66,15 @@ export default async function PublicOppPage({ params }: Props) {
   ].filter(Boolean);
   const blurRows = Math.max(1, Math.min(o.contact_count, 3));
 
+  const crumbs: [string, string][] = [["Trang chủ", "/"], ["Cơ hội", "/co-hoi"]];
+  if (o.industry) crumbs.push([o.industry, industryHref(o.industry)]);
+  crumbs.push([o.title, `/co-hoi/${o.code}`]);
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson([breadcrumbLd(crumbs)]) }} />
       <section className="pub-detail">
         <div className="container">
-          <nav className="pub-crumb" aria-label="Đường dẫn"><a href="/co-hoi">Cơ hội</a><span>/</span>{o.industry ? <><a href={`/co-hoi?nganh=${encodeURIComponent(o.industry)}`}>{o.industry}</a><span>/</span></> : null}<b className="mono">{o.code}</b></nav>
+          <nav className="pub-crumb" aria-label="Đường dẫn"><a href="/co-hoi">Cơ hội</a><span>/</span>{o.industry ? <><a href={industryHref(o.industry)}>{o.industry}</a><span>/</span></> : null}<b className="mono">{o.code}</b></nav>
           <div className="pub-detail-grid">
             <article>
               <div className="pub-badges"><span className="pub-ind">{o.industry || "Cơ hội B2B"}</span><OppBadges o={o} /></div>

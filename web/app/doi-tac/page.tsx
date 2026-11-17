@@ -11,6 +11,7 @@ import PartnerHeader from "@/components/partner/PartnerHeader";
 import SignupForm from "@/components/partner/SignupForm";
 import { ACCEPTED, benefits, faq, GROUPS, howCombined, PROMISES, REJECTED, type Reward, vnd } from "@/lib/partner/content";
 import { getReward } from "@/lib/partner/reward-server";
+import { breadcrumbLd, faqLd, ldJson, orgRef, SITE_URL } from "@/lib/seo";
 
 const TITLE = "Đối tác LeadScan – Biết cơ hội B2B? Đăng lên sàn. Ít nhất 1 ly cafe.";
 const DESC =
@@ -42,6 +43,14 @@ export default async function PartnerLandingPage() {
   const heroTotal = earn(R, 2_000_000);
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: ldJson([
+          { "@type": "WebPage", name: TITLE, description: DESC, url: `${SITE_URL}/doi-tac`, inLanguage: "vi-VN", publisher: orgRef },
+          breadcrumbLd([["Trang chủ", "/"], ["Đối tác", "/doi-tac"]]),
+          faqLd(faq(R)),
+        ]) }}
+      />
       <IconSprite />
       <PartnerHeader />
       <main id="main">

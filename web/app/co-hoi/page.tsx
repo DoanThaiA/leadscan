@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { permanentRedirect } from "next/navigation";
 
 import PublicOppCard from "@/components/public-opp/OppCard";
+import { INDUSTRY_PAGES, industryByName, industryHref } from "@/lib/industries";
 import { fetchPublicOpps } from "@/lib/public-opps";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +30,9 @@ export default async function PublicOppsPage({ searchParams }: Props) {
   const sp = await searchParams;
   const q = sp.q ?? "", industry = sp.nganh ?? "", region = sp.khu_vuc ?? "";
   const page = Math.max(1, Number(sp.trang) || 1);
+  // Chỉ lọc theo ngành → chuyển hẳn sang trang ngành (1 URL duy nhất cho Google, link cũ ?nganh= vẫn dùng được)
+  const ind = industry && !q && !region ? industryByName(industry) : undefined;
+  if (ind) permanentRedirect(`/co-hoi/nganh/${ind.slug}${page > 1 ? `?trang=${page}` : ""}`);
   const data = await fetchPublicOpps({ q, industry, region, page: String(page) });
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
   const href = (o: Record<string, string>) =>
@@ -75,7 +80,7 @@ export default async function PublicOppsPage({ searchParams }: Props) {
             <nav className="pub-chips" aria-label="Lọc nhanh theo ngành">
               <a className={!industry ? "on" : undefined} href={href({ nganh: "", trang: "" })}>Tất cả</a>
               {data.chips.map(([name, n]) => (
-                <a key={name} className={industry === name ? "on" : undefined} href={href({ nganh: name, trang: "" })}>{name}<span>{n}</span></a>
+                <a key={name} className={industry === name ? "on" : undefined} href={industryHref(name)}>{name}<span>{n}</span></a>
               ))}
             </nav>
           ) : null}
@@ -103,6 +108,13 @@ export default async function PublicOppsPage({ searchParams }: Props) {
               ) : null}
             </>
           )}
+
+          <nav className="ind-others" aria-label="Cơ hội theo ngành">
+            <h2>Cơ hội theo ngành</h2>
+            <div className="pub-chips wrap">
+              {INDUSTRY_PAGES.map((x) => <a key={x.slug} href={`/co-hoi/nganh/${x.slug}`}>{x.name}</a>)}
+            </div>
+          </nav>
 
           <div className="pub-how">
             <h2 className="h-display">Từ xem trước tới <b>chốt khách hàng</b> trong 3 bước</h2>
