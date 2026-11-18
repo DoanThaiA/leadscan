@@ -15,6 +15,8 @@ import { useEffect } from "react";
 const RAW = process.env.NEXT_PUBLIC_GA_ID ?? "";
 const GA_ID = /^G-[A-Z0-9]{4,20}$/.test(RAW) ? RAW : "";
 
+const GTM_ID = "GTM-WCPQ9TCT";
+
 const PRIVATE_PREFIXES = ["/admin", "/thanh-vien"];
 /** /doi-tac (trang giới thiệu chương trình) công khai; mọi trang con /doi-tac/… là cổng đối tác hoặc điều khoản → không đo */
 const isPrivate = (p: string) => PRIVATE_PREFIXES.some((x) => p === x || p.startsWith(`${x}/`)) || p.startsWith("/doi-tac/");
@@ -27,13 +29,21 @@ export default function Analytics() {
     if (GA_ID) (window as unknown as Record<string, unknown>)[`ga-disable-${GA_ID}`] = off;
   }, [off]);
 
-  if (!GA_ID || off) return null;
+  if (off) return null;
   return (
     <>
+      {/* Google Tag Manager — khởi tạo chuẩn (gtm.start) rồi tải container; GA4 cấu hình trong GTM */}
+      <Script id="gtm-init" strategy="afterInteractive">
+        {`window.dataLayer=window.dataLayer||[];window.dataLayer.push({'gtm.start':new Date().getTime(),event:'gtm.js'});var s=document.createElement('script');s.async=true;s.src='https://www.googletagmanager.com/gtm.js?id=${GTM_ID}';document.head.appendChild(s);`}
+      </Script>
+      {GA_ID && (
+        <>
       <Script src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`} strategy="afterInteractive" />
       <Script id="ga-init" strategy="afterInteractive">
         {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}');`}
       </Script>
+        </>
+      )}
     </>
   );
 }
