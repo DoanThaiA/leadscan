@@ -1,7 +1,7 @@
 """Cơ hội đối tác gửi: chuẩn hoá form, kiểm tra trùng, điểm chất lượng tự động, quyết định xác minh, tạo phiếu nháp.
 
 Điểm chất lượng hiện là điểm THEO QUY TẮC (độ đủ thông tin, độ chắc chắn, nguồn, bằng chứng, nghi trùng) — gợi ý cho
-người duyệt, người duyệt chốt điểm cuối (final_score). Ngưỡng "Đạt xác minh": cfg.partner_min_score (mặc định 60).
+người duyệt, người duyệt chốt điểm cuối (final_score). Ngưỡng "Đạt xác minh": cfg.partner_min_score (mặc định 40).
 """
 
 import re

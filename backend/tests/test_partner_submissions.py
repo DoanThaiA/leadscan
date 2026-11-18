@@ -259,8 +259,8 @@ def test_queue_assign_and_verify(partner, staff, monkeypatch):
     assert partner.get(f"/api/partner/submissions/{j['id']}").json()["status_label"] == "Đang xác minh"
 
     # dưới ngưỡng không được Đạt
-    r = staff.post(f"/api/admin/partner-submissions/{j['id']}/decide", json={"decision": "verified", "final_score": 55})
-    assert r.status_code == 422 and "ngưỡng 60" in r.json()["detail"]
+    r = staff.post(f"/api/admin/partner-submissions/{j['id']}/decide", json={"decision": "verified", "final_score": 39})
+    assert r.status_code == 422 and "ngưỡng 40" in r.json()["detail"]
     r = staff.post(f"/api/admin/partner-submissions/{j['id']}/decide", json={"decision": "verified", "is_large": True, "partner_note": "Cơ hội tốt, cảm ơn bạn!", "internal_note": "Đã gọi xác nhận"})
     assert r.status_code == 200, r.text
     d = r.json()

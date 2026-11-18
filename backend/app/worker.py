@@ -404,8 +404,7 @@ def send_match_digest_task() -> None:
                 )
                 .where(
                     MemberNotification.id.in_(ids),
-                    MemberNotification.emailed_at == now,
-                    MemberNotification.read_at.is_(None),  # khách đã xem trong cổng thì thôi báo qua email
+                    MemberNotification.emailed_at == now,  # kể cả cơ hội khách đã xem trong cổng: luôn báo qua email
                     SearchRequest.status == "open",
                     Opportunity.status == "published",
                 )
@@ -480,13 +479,13 @@ def match_request_now(req_id: int) -> None:
         refine = False
         try:
             try:
-                n = matching.match_request(db, r, semantic=True)
+                n = matching.match_request(db, r, semantic=True, notify=True)
                 note = ""
             except EmbeddingError as e:
                 db.rollback()
                 log.warning("Phiếu tìm #%s: không lấy được embedding (%s) → so khớp bằng tiêu chí + từ khoá", req_id, e)
                 refine = e.retryable
-                n = matching.match_request(db, r, semantic=False)
+                n = matching.match_request(db, r, semantic=False, notify=True)
                 note = f"So khớp không dùng ngữ nghĩa: {e}"
             _finish_request(r, note)
             db.commit()
@@ -499,6 +498,8 @@ def match_request_now(req_id: int) -> None:
                 match_request_task.apply(args=[req_id])
             return
         log.info("Phiếu tìm #%s: %s cơ hội phù hợp%s", req_id, n, " (dự phòng)" if note else "")
+    if n:
+        schedule_match_digest()  # email cho khách danh sách cơ hội phù hợp vừa tìm được
     if refine:
         enqueue(match_request_task, req_id, True)
 
@@ -526,7 +527,7 @@ def match_request_task(self, req_id: int, refine: bool = False) -> None:
 
         def run(semantic: bool) -> int:
             try:
-                n = matching.match_request(db, r, semantic=semantic)
+                n = matching.match_request(db, r, semantic=semantic, notify=True)
                 db.commit()
                 return n
             except Exception:
@@ -549,6 +550,8 @@ def match_request_task(self, req_id: int, refine: bool = False) -> None:
         _finish_request(r, note)
         db.commit()
         log.info("Phiếu tìm #%s: %s cơ hội phù hợp%s", req_id, n, " (dự phòng)" if note else "")
+    if n:
+        schedule_match_digest()
 
 
 @celery_app.task(name="leadscan.match_opportunity", bind=True, max_retries=MATCH_RETRIES)
@@ -583,10 +586,15 @@ def match_opportunity_task(self, opp_id: int) -> None:
             return
         log.info("Cơ hội %s: khớp %s phiếu tìm%s", o.code, n, " (dự phòng)" if note else "")
     if n:
-        try:  # có phiếu tìm khớp → email gộp sau ít phút (khách có thể đã xem thông báo trong cổng)
-            send_match_digest_task.apply_async(countdown=MATCH_DIGEST_DELAY, retry=False)
-        except Exception as e:  # noqa: BLE001 — Redis lỗi: lượt quét định kỳ sẽ gửi sau
-            log.warning("Không xếp được email báo cơ hội mới: %s", e)
+        schedule_match_digest()
+
+
+def schedule_match_digest() -> None:
+    """Có cơ hội khớp phiếu tìm → email gộp sau MATCH_DIGEST_DELAY (gom nhiều cơ hội vào 1 email)."""
+    try:
+        send_match_digest_task.apply_async(countdown=MATCH_DIGEST_DELAY, retry=False)
+    except Exception as e:  # noqa: BLE001 — Redis lỗi: lượt quét định kỳ 15 phút sẽ gửi sau
+        log.warning("Không xếp được email báo cơ hội mới: %s", e)
 
 
 def deliver_job_application(app_id: int) -> bool:

@@ -195,9 +195,13 @@ def test_tim_kiem_lien_tuc_bao_co_hoi_moi(admin, member, client, monkeypatch):
     assert member.get("/api/member/notifications").json()["unread"] == 0
     assert member.get("/api/member/search-requests").json()["items"][0]["new_count"] == 0
 
-    # phiếu tìm mới gửi: kết quả có ngay, không tạo thông báo (khách đang xem kết quả rồi)
-    ask(member, "Tìm khách mua thùng carton tại Bắc Ninh")
-    assert member.get("/api/member/notifications").json()["unread"] == 0
+    # phiếu tìm mới gửi: cơ hội đang bán khớp ngay → kết quả có liền + thông báo + email cho khách
+    r2 = ask(member, "Tìm khách mua thùng carton tại Bắc Ninh")
+    assert r2["match_count"] >= 1
+    assert member.get("/api/member/notifications").json()["unread"] == r2["match_count"]
+    mails = [m for m in sent if "cơ hội mới phù hợp" in m[0]]
+    assert len(mails) == 2 and mails[-1][2] == "a@minhan.vn" and f"phu-hop?yeu-cau={r2['id']}" in mails[-1][1]
+    assert member.post("/api/member/notifications/read-all").status_code == 204
 
     # doanh nghiệp khác không thấy thông báo của mình; không đánh dấu được thông báo của người khác
     nid = member.get("/api/member/notifications").json()["items"][0]["id"]
@@ -211,6 +215,45 @@ def test_tim_kiem_lien_tuc_bao_co_hoi_moi(admin, member, client, monkeypatch):
         admin.patch(f"/api/admin/search-requests/{x['id']}", json={"status": "rejected", "reply": "Dừng"})
     make_opp(admin, title="Cần 50.000 hộp carton 3 lớp cho nhà máy Bắc Ninh")
     assert member.get("/api/member/notifications").json()["unread"] == 0
+
+
+def test_email_ca_khi_khach_da_xem_trong_cong(admin, member, monkeypatch):
+    """Khách đã mở xem cơ hội mới trong cổng trước khi email gộp chạy → vẫn nhận email."""
+    from app import worker
+    from app.services import notify
+
+    sent = []
+    monkeypatch.setattr(notify, "send_mail", lambda cfg, subject, body, to=None: sent.append((subject, body, to)) or True)
+    monkeypatch.setattr(worker, "schedule_match_digest", lambda: None)  # giữ email lại, như đang chờ 2 phút
+    r = ask(member)
+    make_opp(admin)
+    assert member.post(f"/api/member/search-requests/{r['id']}/seen").status_code == 204
+    assert member.get("/api/member/notifications").json()["unread"] == 0
+    worker.send_match_digest_task()
+    mails = [m for m in sent if "cơ hội mới phù hợp" in m[0]]
+    assert len(mails) == 1 and "Cần 200.000 hộp carton" in mails[0][1]
+    worker.send_match_digest_task()  # chạy lại không gửi trùng
+    assert len([m for m in sent if "cơ hội mới phù hợp" in m[0]]) == 1
+
+
+def test_tinh_lai_toan_bo_khong_gui_email_hang_loat(admin, member, monkeypatch):
+    """Admin tính lại toàn bộ (đổi thuật toán): cặp khớp được ghi lại nhưng không tạo thông báo / email mới."""
+    from sqlalchemy import delete
+
+    from app.models import MemberNotification, SearchRequestMatch
+    from app.services import matching
+
+    r = ask(member)
+    make_opp(admin)
+    with new_session() as db:
+        db.execute(delete(MemberNotification))
+        db.execute(delete(SearchRequestMatch))
+        db.commit()
+        matching.rematch_all(db)
+        db.commit()
+        assert db.scalar(select(func.count(SearchRequestMatch.id))) == 1
+        assert db.scalar(select(func.count(MemberNotification.id))) == 0
+    assert r["id"]
 
 
 def test_doc_het_thong_bao(admin, member):

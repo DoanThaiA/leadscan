@@ -77,7 +77,7 @@ function Detail() {
               <p>{SUB_MEANING[s.status]}</p>
               {s.reject_label ? <p><b>Lý do:</b> {s.reject_label}</p> : null}
               {s.partner_note ? <div className="adm-alert warn" style={{ whiteSpace: "pre-wrap" }}><b>LeadScan:</b> {s.partner_note}</div> : null}
-              {s.score !== null ? <p className="muted" style={{ fontSize: 13 }}>Điểm chất lượng: <b style={{ color: "var(--ink)" }}>{s.score}</b>/100 (ngưỡng đạt 60)</p> : null}
+              {s.score !== null ? <p className="muted" style={{ fontSize: 13 }}>Điểm chất lượng: <b style={{ color: "var(--ink)" }}>{s.score}</b>/100 (ngưỡng đạt 40)</p> : null}
               {s.status === "submitted" || s.status === "verifying" ? <p className="muted" style={{ fontSize: 13 }}>Hạn xác minh dự kiến: {fmtDate(s.sla_due_at)}</p> : null}
               {s.status === "published" ? (
                 <div className="ptn-reward" style={{ border: "1px solid var(--line)", borderRadius: 8, gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>

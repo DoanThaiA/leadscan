@@ -89,7 +89,7 @@ export const SUB_MEANING: Record<SubStatus, string> = {
   verifying: "Đang kiểm tra trùng, xác minh và chấm điểm (khoảng 2 ngày làm việc).",
   duplicate: "Cơ hội đã có trong CSDL hoặc đối tác khác gửi trước — không được thưởng.",
   rejected: "Chưa đạt: thông tin sai, không xác minh được hoặc điểm chất lượng dưới 60.",
-  verified: "Đạt xác minh — thông tin đúng, mới, điểm ≥ 60. LeadScan đang hoàn thiện phiếu để mở bán.",
+  verified: "Đạt xác minh — thông tin đúng, mới, điểm ≥ 40. LeadScan đang hoàn thiện phiếu để mở bán.",
   supplement: "Cơ hội đã có, nhưng thông tin bạn bổ sung có giá trị — được ghi nhận Đóng góp bổ sung.",
   published: "Phiếu đang bán trên LeadScan. Mỗi lượt bán được chia hoa hồng.",
 };

@@ -593,10 +593,12 @@ def refresh_company(
     return new
 
 
-def match_request(db: Session, req: SearchRequest, cfg: Settings | None = None, semantic: bool = True) -> int:
+def match_request(db: Session, req: SearchRequest, cfg: Settings | None = None, semantic: bool = True, notify: bool = False) -> int:
     """So phiếu tìm cơ hội với các phiếu cơ hội đang bán gần nhất; ghi kết quả. Trả về số cơ hội phù hợp.
 
     semantic=False: không gọi Cohere, so với mọi phiếu đang bán bằng tiêu chí + từ khoá (dự phòng).
+    notify=True (khách gửi / sửa phiếu): cơ hội khớp LẦN ĐẦU → thông báo + email cho khách (mỗi cặp 1 lần).
+    Tính lại toàn bộ (rematch_all) để False: không gửi hàng loạt email khi đổi thuật toán.
     """
     cfg = cfg or get_settings()
     today = date.today()
@@ -611,7 +613,10 @@ def match_request(db: Session, req: SearchRequest, cfg: Settings | None = None, 
         for o, cos in (_nearest_opps(db, cfg, req, today) if semantic else _all_opps(db, today)):
             s = score_pair(q, o, cos, cfg, today, idf)
             if is_match(q, s, cfg):
-                _upsert_request_match(db, req.id, o.id, s, prev.pop(o.id, None))
+                existing = prev.pop(o.id, None)
+                _upsert_request_match(db, req.id, o.id, s, existing)
+                if notify and existing is None:
+                    _notify_new_match(db, req, o, s.score)
                 touched.add(o.id)
                 matched += 1
     for stale in prev.values():  # trước khớp, nay không còn

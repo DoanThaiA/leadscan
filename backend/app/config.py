@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     otp_max_per_hour: int = 5  # số mã tối đa mỗi tài khoản / giờ
     otp_max_attempts: int = 5  # số lần nhập sai tối đa mỗi mã
     # Xác minh cơ hội đối tác gửi
-    partner_min_score: int = 60  # điểm chất lượng tối thiểu để "Đạt xác minh"
+    partner_min_score: int = 40  # điểm chất lượng tối thiểu để "Đạt xác minh"
     partner_dup_days: int = 90  # kiểm tra trùng (MST / tên + nhóm nhu cầu) trong N ngày gần nhất
     partner_sla_workdays: int = 2  # hạn xác minh, tính theo ngày làm việc (T2–T6)
     partner_submit_per_day: int = 20  # số cơ hội tối đa mỗi đối tác gửi trong 24 giờ
