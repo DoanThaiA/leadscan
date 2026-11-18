@@ -81,6 +81,7 @@
 .adm-nav .adm-nav-sub a.manage { justify-content: flex-start; gap: 6px; color: var(--muted); font-size: 12.5px; }
 .adm-nav .adm-nav-sub a.manage.on { color: var(--brand-600); }
 .adm-nav-note { padding: 6px 8px; font-size: 12.5px; color: var(--muted); }
+.adm-nav-sub-hd { margin-top: 8px; padding: 8px 8px 2px; border-top: 1px solid var(--line); font: 600 10.5px var(--font-inter), sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 /* minmax(0, 1fr): cột không giãn theo nội dung → tên dài (doanh nghiệp) xuống dòng / cắt "…" trong khung sidebar, không tràn ra ngoài */
 .adm-side-foot { margin-top: auto; border-top: 1px solid var(--line); padding: 12px 10px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .adm-me { display: flex; align-items: center; gap: 10px; min-width: 0; }

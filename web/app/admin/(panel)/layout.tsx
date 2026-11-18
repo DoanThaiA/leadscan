@@ -11,7 +11,8 @@ import { api } from "@/lib/admin/api";
 import { Logo } from "@/components/brand/Logo";
 
 // tree: "articles" = mục cha xổ xuống các danh mục bài viết (tải từ API)
-type NavItem = { href: string; label: string; icon: string; exact?: boolean; adminOnly?: boolean; enrich?: boolean; tree?: "articles" };
+// also: các trang khác cũng tính là thuộc mục này (vd tuyển dụng nằm trong menu xổ "Bài viết")
+type NavItem = { href: string; label: string; icon: string; exact?: boolean; adminOnly?: boolean; enrich?: boolean; tree?: "articles"; also?: string[] };
 type NavGroup = { id: string; label: string; items: NavItem[] };
 
 // Menu chia theo nhóm nghiệp vụ. Nhóm không có label (Tổng quan) luôn hiện, không thu gọn.
@@ -43,8 +44,7 @@ const NAV: NavGroup[] = [
   },
   {
     id: "content", label: "Nội dung", items: [
-      { href: "/admin/bai-viet", label: "Bài viết", icon: "note", tree: "articles" },
-      { href: "/admin/tuyen-dung", label: "Tin tuyển dụng", icon: "brief" },
+      { href: "/admin/bai-viet", label: "Bài viết", icon: "note", tree: "articles", also: ["/admin/tuyen-dung"] },
     ],
   },
   { id: "me", label: "Cá nhân", items: [{ href: "/admin/tai-khoan", label: "Tài khoản của tôi", icon: "key" }] },
@@ -54,8 +54,10 @@ const NAV: NavGroup[] = [
 function activeHref(path: string, items: NavItem[]): string {
   let best = "";
   for (const n of items) {
-    const hit = n.exact ? path === n.href : path === n.href || path.startsWith(n.href + "/");
-    if (hit && n.href.length > best.length) best = n.href;
+    for (const h of [n.href, ...(n.also ?? [])]) {
+      const hit = n.exact ? path === h : path === h || path.startsWith(h + "/");
+      if (hit && h.length > best.length) best = n.href;
+    }
   }
   return best;
 }
@@ -89,6 +91,8 @@ function ArticlesTree({ item, active }: { item: NavItem; active: boolean }) {
   const listing = path === item.href || path === `${item.href}/moi`;
   const cur = listing ? params.get("danh_muc") ?? "" : null;
   const manage = path === `${item.href}/danh-muc`;
+  const jobs = path === "/admin/tuyen-dung" || (path.startsWith("/admin/tuyen-dung/") && !path.startsWith("/admin/tuyen-dung/ho-so"));
+  const applicants = path.startsWith("/admin/tuyen-dung/ho-so");
 
   return (
     <div className="adm-nav-tree">
@@ -97,7 +101,7 @@ function ArticlesTree({ item, active }: { item: NavItem; active: boolean }) {
           <Icon name={item.icon} />
           {item.label}
         </Link>
-        <button type="button" className="adm-nav-caret" aria-expanded={open} aria-label={open ? "Thu gọn danh mục bài viết" : "Xem danh mục bài viết"} onClick={() => setOpen((o) => !o)}>
+        <button type="button" className="adm-nav-caret" aria-expanded={open} aria-label={open ? "Thu gọn mục bài viết" : "Xem danh mục bài viết và tuyển dụng"} onClick={() => setOpen((o) => !o)}>
           <span className={open ? "chev open" : "chev"} aria-hidden="true">›</span>
         </button>
       </div>
@@ -116,6 +120,14 @@ function ArticlesTree({ item, active }: { item: NavItem; active: boolean }) {
           })}
           <Link href={`${item.href}/danh-muc`} className={manage ? "on manage" : "manage"} aria-current={manage ? "page" : undefined}>
             <Icon name="edit" size={13} /> Quản lý danh mục
+          </Link>
+          {/* Tuyển dụng: bài đăng vị trí + hồ sơ ứng viên (hệ thống riêng, có nhận CV) */}
+          <span className="adm-nav-sub-hd">Tuyển dụng</span>
+          <Link href="/admin/tuyen-dung" className={jobs ? "on" : undefined} aria-current={jobs ? "page" : undefined}>
+            <span>Tin tuyển dụng</span>
+          </Link>
+          <Link href="/admin/tuyen-dung/ho-so" className={applicants ? "on" : undefined} aria-current={applicants ? "page" : undefined}>
+            <span>Hồ sơ ứng tuyển</span>
           </Link>
         </div>
       ) : null}
