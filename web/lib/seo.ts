@@ -16,6 +16,7 @@ export const organizationLd = {
   logo: { "@type": "ImageObject", url: `${SITE_URL}/brand/leadscan-logo-1200.png` },
   email: "contact@leadscan.net",
   telephone: "+84877770788",
+  address: { "@type": "PostalAddress", streetAddress: "169 Nguyễn Ngọc Vũ", addressLocality: "Phường Yên Hòa", addressRegion: "Hà Nội", addressCountry: "VN" },
   contactPoint: [{ "@type": "ContactPoint", contactType: "customer support", telephone: "+84877770788", email: "contact@leadscan.net", areaServed: "VN", availableLanguage: ["vi"] }],
   parentOrganization: { "@type": "Organization", name: "MCV Network", url: "https://mcv.network/" },
 };
