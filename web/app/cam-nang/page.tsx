@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import ArticleCardItem from "@/components/cam-nang/ArticleCardItem";
 import { AREA_PAGES, articleAreasFor } from "@/lib/areas";
-import { fetchArticles, slugify } from "@/lib/blog";
+import { DEFAULT_SECTION, fetchArticles, slugify } from "@/lib/blog";
 import { breadcrumbLd, ldJson, orgRef, SITE_URL } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ type Props = { searchParams: Promise<Record<string, string | undefined>> };
 
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const sp = await searchParams;
-  const data = await fetchArticles({ page_size: "1" });
+  const data = await fetchArticles({ section: DEFAULT_SECTION, page_size: "1" });
   const filtered = Boolean(sp.chu_de || (Number(sp.trang) || 1) > 1);
   return {
     title: TITLE,
@@ -31,10 +31,10 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 export default async function BlogPage({ searchParams }: Props) {
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.trang) || 1);
-  const all = await fetchArticles({ page_size: "1" }); // lấy danh sách chủ đề + số bài
+  const all = await fetchArticles({ section: DEFAULT_SECTION, page_size: "1" }); // lấy danh sách chủ đề + số bài
   const cats = (all?.categories ?? []).filter(([, n]) => n > 0);
   const cat = cats.find(([c]) => slugify(c) === sp.chu_de)?.[0] ?? "";
-  const data = await fetchArticles({ category: cat, page: String(page), page_size: String(PAGE_SIZE) });
+  const data = await fetchArticles({ section: DEFAULT_SECTION, category: cat, page: String(page), page_size: String(PAGE_SIZE) });
   const areaCounts = all?.area_counts ?? {};
   const areasWithPosts = AREA_PAGES.filter((x) => articleAreasFor(x.slug).some((s) => (areaCounts[s] ?? 0) > 0));
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;

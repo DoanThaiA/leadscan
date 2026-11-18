@@ -97,3 +97,43 @@ def test_area_filter_counts_and_related(admin):
     bad = admin.post("/api/admin/articles", json=body(title="Bài sai khu vực thử", area="Bắc Ninh!"))
     assert bad.status_code == 422 and "area" in bad.json()["fields"]
 
+
+
+def test_sections_crud_and_public_scope(admin, staff):
+    secs = admin.get("/api/admin/article-sections").json()["items"]
+    cam = next(x for x in secs if x["slug"] == "cam-nang")
+    assert cam["is_default"]
+    r = admin.post("/api/admin/article-sections", json={"name": "Tuyển dụng", "description": "Câu chuyện đội ngũ"})
+    assert r.status_code == 201, r.text
+    job = r.json()
+    assert job["slug"] == "tuyen-dung" and job["total"] == 0
+    assert admin.post("/api/admin/article-sections", json={"name": "Tuyển dụng"}).status_code == 409  # trùng đường dẫn
+
+    a = admin.post("/api/admin/articles", json=body(title="Một ngày làm việc ở LeadScan", category="Văn hoá", section_id=job["id"])).json()
+    assert a["section_id"] == job["id"] and a["section"] == "tuyen-dung"
+    admin.post("/api/admin/articles", json=body())  # không chọn danh mục → Cẩm nang
+    assert admin.post("/api/admin/articles", json=body(title="Bài vào danh mục không tồn tại", section_id=9999)).status_code == 422
+
+    anon = new_client()
+    assert anon.get("/api/articles").json()["total"] == 2
+    t = anon.get("/api/articles?section=tuyen-dung").json()
+    assert t["total"] == 1 and t["categories"] == [["Văn hoá", 1]]
+    assert anon.get("/api/articles?section=cam-nang").json()["total"] == 1
+    assert {x["slug"]: x["count"] for x in anon.get("/api/articles/sections").json()["items"]} == {"cam-nang": 1, "tuyen-dung": 1}
+    assert anon.get(f"/api/articles/{a['slug']}").json()["related"] == []  # liên quan chỉ trong cùng danh mục
+    assert admin.get(f"/api/admin/articles?section_id={job['id']}").json()["counts"] == {"published": 1}
+    meta = admin.get("/api/admin/articles/meta").json()
+    assert meta["topics"][str(job["id"])] == ["Văn hoá"] and "Tìm khách hàng B2B" in meta["topics"][str(cam["id"])]
+
+    # ẩn danh mục → bài trong đó không còn công khai; slug không đổi khi sửa
+    upd = admin.put(f"/api/admin/article-sections/{job['id']}", json={"name": "Tuyển dụng LeadScan", "slug": "khac", "is_active": False}).json()
+    assert upd["slug"] == "tuyen-dung" and upd["name"] == "Tuyển dụng LeadScan" and upd["live"] == 0
+    assert anon.get(f"/api/articles/{a['slug']}").status_code == 404 and anon.get("/api/articles").json()["total"] == 1
+    assert admin.put(f"/api/admin/article-sections/{cam['id']}", json={"name": "Cẩm nang", "is_active": False}).status_code == 409
+
+    # xoá: chỉ quản trị viên, chỉ khi trống, không xoá Cẩm nang
+    assert staff.delete(f"/api/admin/article-sections/{job['id']}").status_code == 403
+    assert admin.delete(f"/api/admin/article-sections/{job['id']}").status_code == 409
+    admin.delete(f"/api/admin/articles/{a['id']}")
+    assert admin.delete(f"/api/admin/article-sections/{job['id']}").status_code == 204
+    assert admin.delete(f"/api/admin/article-sections/{cam['id']}").status_code == 409

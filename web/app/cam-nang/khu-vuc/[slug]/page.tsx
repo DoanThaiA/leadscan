@@ -7,7 +7,7 @@ import { cache } from "react";
 import ArticleCardItem from "@/components/cam-nang/ArticleCardItem";
 import PublicOppCard from "@/components/public-opp/OppCard";
 import { AREA_PAGES, areaBySlug, articleAreasFor } from "@/lib/areas";
-import { fetchArticles } from "@/lib/blog";
+import { DEFAULT_SECTION, fetchArticles } from "@/lib/blog";
 import { fetchPublicOpps } from "@/lib/public-opps";
 import { breadcrumbLd, ldJson, orgRef, SITE_URL } from "@/lib/seo";
 
@@ -19,7 +19,7 @@ type Props = { params: Promise<{ slug: string }>; searchParams: Promise<Record<s
 const PAGE_SIZE = 12;
 /** "Miền Nam" → "miền Nam" khi đứng giữa câu; tên tỉnh giữ nguyên */
 const inSentence = (a: { kind: string; name: string }) => (a.kind === "region" ? a.name.replace(/^Miền/, "miền") : a.name);
-const getList = cache((areas: string, page: number) => fetchArticles({ areas, page: String(page), page_size: String(PAGE_SIZE) }));
+const getList = cache((areas: string, page: number) => fetchArticles({ section: DEFAULT_SECTION, areas, page: String(page), page_size: String(PAGE_SIZE) }));
 const pageOf = (sp: Record<string, string | undefined>) => Math.max(1, Number(sp.trang) || 1);
 
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
@@ -48,7 +48,7 @@ export default async function AreaGuidePage({ params, searchParams }: Props) {
   const [data, opps, all] = await Promise.all([
     getList(areas, page),
     fetchPublicOpps({ places: a.terms.join("|"), page_size: "3" }),
-    fetchArticles({ page_size: "1" }),
+    fetchArticles({ section: DEFAULT_SECTION, page_size: "1" }),
   ]);
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
   const where = inSentence(a);

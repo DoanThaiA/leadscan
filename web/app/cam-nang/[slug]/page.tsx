@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { cache } from "react";
 
 import ArticleBody from "@/components/cam-nang/ArticleBody";
 import ArticleCardItem from "@/components/cam-nang/ArticleCardItem";
 import { areaBySlug } from "@/lib/areas";
-import { articleToc, fetchArticle, fmtDate, slugify } from "@/lib/blog";
+import { articleHref, articleToc, DEFAULT_SECTION, fetchArticle, fmtDate, slugify } from "@/lib/blog";
 import { breadcrumbLd, ldJson, orgRef, SITE_URL } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +37,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ArticlePage({ params }: Props) {
   const a = await getArticle((await params).slug);
   if (!a) notFound();
+  if (a.section !== DEFAULT_SECTION) permanentRedirect(articleHref(a)); // bài thuộc danh mục khác → /bai-viet/<danh-mục>/<slug>
   const toc = articleToc(a.body);
   const url = `${SITE_URL}/cam-nang/${a.slug}`;
   const abs = (u: string) => (u.startsWith("/") ? `${SITE_URL}${u}` : u);

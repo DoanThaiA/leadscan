@@ -744,8 +744,29 @@ class JobPost(Base):
 
 
 ARTICLE_STATUSES = {"draft": "Bản nháp", "published": "Đã đăng"}
-# Chủ đề cẩm nang (blog SEO) — đổi tên ở đây thì bài cũ giữ tên cũ cho tới khi sửa bài
+# Chủ đề gợi ý cho danh mục Cẩm nang (blog SEO) — đổi tên ở đây thì bài cũ giữ tên cũ cho tới khi sửa bài
 ARTICLE_CATEGORIES = ["Tìm khách hàng B2B", "Đối tác & hoa hồng", "Kiến thức ngành", "Hướng dẫn LeadScan"]
+# Danh mục mặc định: bài cũ / bài không chọn danh mục rơi vào đây; trang công khai riêng là /cam-nang
+DEFAULT_SECTION_SLUG = "cam-nang"
+
+
+class ArticleSection(Base):
+    """Danh mục bài viết (Cẩm nang, Tuyển dụng, Tin tức…) do người biên tập tự tạo. Mỗi bài thuộc đúng 1 danh mục.
+
+    Trang công khai: danh mục "cam-nang" ở /cam-nang (giữ link cũ), các danh mục khác ở /bai-viet/<slug>.
+    slug cố định sau khi tạo (đổi slug = gãy link đã chia sẻ). Ẩn danh mục (is_active = False) = ẩn mọi bài trong đó.
+    """
+
+    __tablename__ = "article_sections"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(80), unique=True)
+    name: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str] = mapped_column(String(400), default="")  # hiện đầu trang danh mục + meta description
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class Article(Base):
@@ -762,7 +783,8 @@ class Article(Base):
     title: Mapped[str] = mapped_column(String(200))
     seo_title: Mapped[str] = mapped_column(String(200), default="")  # trống = dùng title
     excerpt: Mapped[str] = mapped_column(String(400), default="")  # mô tả ngắn: thẻ danh sách + meta description
-    category: Mapped[str] = mapped_column(String(80), default="", index=True)
+    section_id: Mapped[int | None] = mapped_column(ForeignKey("article_sections.id", ondelete="RESTRICT"), index=True)  # danh mục
+    category: Mapped[str] = mapped_column(String(80), default="", index=True)  # chủ đề trong danh mục (chữ tự do)
     area: Mapped[str] = mapped_column(String(60), default="", index=True)  # slug khu vực (web/lib/areas.ts): "bac-ninh", "mien-nam"… trống = bài chung
     cover_image: Mapped[str] = mapped_column(String(500), default="")
     body: Mapped[str] = mapped_column(Text, default="")
@@ -771,6 +793,8 @@ class Article(Base):
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    section: Mapped[ArticleSection | None] = relationship(lazy="joined")
 
 
 class JobApplication(Base):

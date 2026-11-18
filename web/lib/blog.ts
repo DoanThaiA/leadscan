@@ -1,4 +1,4 @@
-/** Cẩm nang (blog SEO) — kiểu dữ liệu, gọi API phía máy chủ, tiện ích chung cho trang công khai và trình soạn admin. */
+/** Bài viết theo danh mục (Cẩm nang, Tuyển dụng, Tin tức…) — kiểu dữ liệu, gọi API phía máy chủ, tiện ích chung cho trang công khai và trình soạn admin. */
 
 export interface ArticleCard {
   slug: string;
@@ -7,6 +7,8 @@ export interface ArticleCard {
   category: string;
   area: string;
   cover_image: string;
+  section: string; // slug danh mục
+  section_name: string;
   published_at: string | null;
   updated_at: string | null;
   reading_minutes: number;
@@ -30,10 +32,35 @@ export interface ArticleList {
 
 export interface ArticleAdmin extends Omit<Article, "related"> {
   id: number;
+  section_id: number | null;
   status: string;
   created_at: string;
   is_live: boolean;
 }
+
+/** Danh mục bài viết (bảng article_sections) */
+export interface ArticleSection {
+  id: number;
+  slug: string;
+  name: string;
+  description: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface ArticleSectionPublic {
+  slug: string;
+  name: string;
+  description: string;
+  count: number;
+}
+
+/** Danh mục Cẩm nang giữ trang riêng /cam-nang (link cũ, SEO); danh mục khác ở /bai-viet/<slug> */
+export const DEFAULT_SECTION = "cam-nang";
+
+export const sectionHref = (section: string) => (section === DEFAULT_SECTION ? "/cam-nang" : `/bai-viet/${section}`);
+
+export const articleHref = (a: { section?: string; slug: string }) => `${sectionHref(a.section || DEFAULT_SECTION)}/${a.slug}`;
 
 export const ARTICLE_STATUS: Record<string, string> = { draft: "Bản nháp", published: "Đã đăng" };
 
@@ -53,6 +80,16 @@ export async function fetchArticles(params: Record<string, string>): Promise<Art
     return await get<ArticleList>(`/api/articles${qs ? `?${qs}` : ""}`);
   } catch (e) {
     console.error("Không tải được cẩm nang:", e);
+    return null;
+  }
+}
+
+/** Danh mục đang bật kèm số bài đang hiện; null nếu API lỗi */
+export async function fetchSections(): Promise<ArticleSectionPublic[] | null> {
+  try {
+    return (await get<{ items: ArticleSectionPublic[] }>("/api/articles/sections"))?.items ?? [];
+  } catch (e) {
+    console.error("Không tải được danh mục bài viết:", e);
     return null;
   }
 }

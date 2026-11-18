@@ -53,6 +53,16 @@
 .adm-nav a { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 6px; color: var(--ink-2); font-weight: 500; }
 .adm-nav a:hover { background: var(--line-2); }
 .adm-nav a.on { background: var(--brand-50); color: var(--brand-600); }
+/* Menu chia nhóm: nhãn nhóm nhỏ in hoa, bấm để thu gọn; menu tự cuộn khi dài hơn màn hình */
+.adm-nav.grouped { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0 -4px; padding: 0 4px; scrollbar-width: thin; }
+.adm-nav-group { display: grid; gap: 2px; }
+.adm-nav-group + .adm-nav-group { margin-top: 10px; }
+.adm-nav-hd { display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: 0; padding: 6px 10px 4px; font: 600 11px var(--font-inter), sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); cursor: pointer; border-radius: 4px; text-align: left; }
+.adm-nav-hd:hover:not(:disabled) { color: var(--ink-2); }
+.adm-nav-hd:disabled { cursor: default; }
+.adm-nav-hd:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.adm-nav-hd .chev { font-size: 15px; line-height: 1; transition: transform 0.15s; }
+.adm-nav-hd .chev.open { transform: rotate(90deg); }
 /* minmax(0, 1fr): cột không giãn theo nội dung → tên dài (doanh nghiệp) xuống dòng / cắt "…" trong khung sidebar, không tràn ra ngoài */
 .adm-side-foot { margin-top: auto; border-top: 1px solid var(--line); padding: 12px 10px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .adm-me { display: flex; align-items: center; gap: 10px; min-width: 0; }
