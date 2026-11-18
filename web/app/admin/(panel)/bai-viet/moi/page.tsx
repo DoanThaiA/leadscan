@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
 
-import { ArticleForm, useArticleMeta } from "@/components/admin/ArticleForm";
+import { ArticleForm, notifySectionsChanged, useArticleMeta } from "@/components/admin/ArticleForm";
 import { Icon, Skeleton } from "@/components/admin/ui";
 import { api } from "@/lib/admin/api";
 import type { ArticleAdmin } from "@/lib/blog";
@@ -31,6 +31,7 @@ function NewArticle() {
         submitLabel="Lưu bài viết"
         onSubmit={async (body) => {
           const a = await api.post<ArticleAdmin>("/articles", body);
+          notifySectionsChanged();
           router.replace(`/admin/bai-viet/${a.id}?saved=1`);
         }}
       />

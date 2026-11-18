@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { useAdmin } from "@/components/admin/AdminContext";
+import { notifySectionsChanged } from "@/components/admin/ArticleForm";
 import { Dialog, Field, Icon, Skeleton } from "@/components/admin/ui";
 import { api, errMsg } from "@/lib/admin/api";
 import { fmtNum } from "@/lib/admin/format";
@@ -53,6 +54,7 @@ export default function SectionsPage() {
       else await api.put(`/article-sections/${editing.id}`, body);
       setEditing(null);
       await load();
+      notifySectionsChanged();
     } catch (err) {
       setFormErr(errMsg(err));
     } finally {
@@ -65,6 +67,7 @@ export default function SectionsPage() {
     try {
       await api.del(`/article-sections/${row.id}`);
       await load();
+      notifySectionsChanged();
     } catch (err) {
       alert(errMsg(err));
     }

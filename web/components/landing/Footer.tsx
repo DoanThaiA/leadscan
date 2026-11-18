@@ -13,7 +13,7 @@ export default function Footer({ base = "" }: { base?: string }) {
               <a href={`${base}#dang-ky`} className="btn btn-primary btn-sm">Đăng ký thành viên</a>
             </div>
             <div><h4>Sàn LeadScan</h4><ul><li><a href={`${base}#cach-hoat-dong`}>Cách hoạt động</a></li><li><a href="/co-hoi">Cơ hội đang mở</a></li><li><a href={`${base}#dang-ky`}>Đăng ký thành viên</a></li><li><a href="/doi-tac">Đăng ký đối tác</a></li></ul></div>
-            <div><h4>Hỗ trợ</h4><ul><li><a href={`${base}#faq`}>Câu hỏi thường gặp</a></li><li><a href="/gioi-thieu">Giới thiệu</a></li><li><a href="/tuyen-dung">Tuyển dụng</a></li><li><a href="/cam-nang">Cẩm nang</a></li><li><a href="#">Chính sách bảo mật</a></li><li><a href="#">Điều khoản sử dụng</a></li></ul></div>
+            <div><h4>Hỗ trợ</h4><ul><li><a href={`${base}#faq`}>Câu hỏi thường gặp</a></li><li><a href="/gioi-thieu">Giới thiệu</a></li><li><a href="/tuyen-dung">Tuyển dụng</a></li><li><a href="/bai-viet">Bài viết</a></li><li><a href="/cam-nang">Cẩm nang</a></li><li><a href="#">Chính sách bảo mật</a></li><li><a href="#">Điều khoản sử dụng</a></li></ul></div>
             <div><h4>Liên hệ</h4><ul className="foot-contact">
               <li><svg className="icon"><use href="#i-globe" /></svg><a href="https://leadscan.net">leadscan.net</a></li>
               <li><svg className="icon"><use href="#i-mail" /></svg><a href="mailto:contact@leadscan.net">contact@leadscan.net</a></li>

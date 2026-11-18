@@ -12,7 +12,7 @@ export default function BlogLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <IconSprite />
-      <Header base="/" extra={[{ href: "/cam-nang", label: "Cẩm nang", active: true }]} />
+      <Header base="/" extra={[{ href: "/bai-viet", label: "Bài viết", active: true }]} />
       <main id="main">{children}</main>
       <Footer base="/" />
     </>

@@ -61,6 +61,21 @@ header.scrolled{border-color:var(--line)}
 .mobile-menu a{display:block;padding:10px 0;color:var(--ink-2);border-bottom:1px solid var(--line)}
 .mobile-menu .btn{margin-top:14px;width:100%;display:flex;color:var(--blue);border-bottom:0}
 .mobile-menu.open{display:block}
+/* Menu "Bài viết" xổ xuống danh mục (rê chuột trên máy tính, bấm mũi tên trên cảm ứng / bàn phím) */
+.nav-drop{position:relative;display:flex;align-items:center;gap:2px}
+.nav-drop-btn{display:grid;place-items:center;width:22px;height:22px;border:0;background:none;color:inherit;border-radius:4px;cursor:pointer;padding:0}
+.nav-drop-btn svg{transition:transform .15s}
+.nav-drop.open .nav-drop-btn svg{transform:rotate(180deg)}
+.nav-drop-btn:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.nav-drop-menu{position:absolute;top:100%;left:-14px;min-width:220px;padding:8px;margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(16,24,40,.12);display:none;z-index:60}
+.nav-drop-menu::before{content:"";position:absolute;left:0;right:0;top:-12px;height:12px}
+.nav-drop.open .nav-drop-menu{display:grid;gap:2px}
+.nav-drop-menu a{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 10px;border-radius:6px;color:var(--ink-2);font-size:14.5px}
+.nav-drop-menu a:hover,.nav-drop-menu a:focus-visible{background:var(--blue-50);color:var(--blue)}
+.nav-drop-menu a span{font-size:12px;color:var(--soft);background:var(--blue-50);border-radius:9px;padding:0 7px;line-height:18px}
+.nav-drop-menu a.all{border-top:1px solid var(--line);border-radius:0 0 6px 6px;margin-top:4px;padding-top:11px;color:var(--blue);font-weight:500}
+.mobile-sub{padding-left:16px}
+.mobile-sub a{font-size:14.5px;color:var(--muted)}
 
 /* Hero */
 .hero{position:relative;overflow:hidden;padding:72px 0 0;text-align:center;background:linear-gradient(180deg,var(--blue-50) 0,#fff 520px)}

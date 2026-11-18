@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { type ReactNode, Suspense, useEffect, useState } from "react";
 
 import { AdminProvider, useAdmin } from "@/components/admin/AdminContext";
+import { SECTIONS_CHANGED } from "@/components/admin/ArticleForm";
 import { Icon, initials } from "@/components/admin/ui";
 import { api } from "@/lib/admin/api";
 import { Logo } from "@/components/brand/Logo";
 
-type NavItem = { href: string; label: string; icon: string; exact?: boolean; adminOnly?: boolean; enrich?: boolean };
+// tree: "articles" = mục cha xổ xuống các danh mục bài viết (tải từ API)
+type NavItem = { href: string; label: string; icon: string; exact?: boolean; adminOnly?: boolean; enrich?: boolean; tree?: "articles" };
 type NavGroup = { id: string; label: string; items: NavItem[] };
 
 // Menu chia theo nhóm nghiệp vụ. Nhóm không có label (Tổng quan) luôn hiện, không thu gọn.
@@ -40,25 +42,85 @@ const NAV: NavGroup[] = [
     ],
   },
   {
-    id: "content", label: "Biên tập nội dung", items: [
-      { href: "/admin/bai-viet", label: "Bài viết", icon: "note", exact: true },
-      { href: "/admin/bai-viet/danh-muc", label: "Danh mục bài viết", icon: "bookmark" },
+    id: "content", label: "Nội dung", items: [
+      { href: "/admin/bai-viet", label: "Bài viết", icon: "note", tree: "articles" },
       { href: "/admin/tuyen-dung", label: "Tin tuyển dụng", icon: "brief" },
     ],
   },
   { id: "me", label: "Cá nhân", items: [{ href: "/admin/tai-khoan", label: "Tài khoản của tôi", icon: "key" }] },
 ];
 
-/** Trang đang mở thuộc mục nào: khớp đường dẫn dài nhất (để /admin/bai-viet/danh-muc không sáng cả "Bài viết") */
+/** Trang đang mở thuộc mục nào: khớp đường dẫn dài nhất */
 function activeHref(path: string, items: NavItem[]): string {
   let best = "";
   for (const n of items) {
     const hit = n.exact ? path === n.href : path === n.href || path.startsWith(n.href + "/");
     if (hit && n.href.length > best.length) best = n.href;
   }
-  // "Bài viết" đánh dấu exact để không nuốt trang danh mục, nhưng trang soạn / sửa bài vẫn thuộc "Bài viết"
-  if (!best && path.startsWith("/admin/bai-viet/")) best = "/admin/bai-viet";
   return best;
+}
+
+interface NavSection {
+  id: number;
+  name: string;
+  is_active: boolean;
+  total: number;
+}
+
+/** Mục "Bài viết": bấm để xổ xuống Tất cả bài viết · từng danh mục (kèm số bài) · Quản lý danh mục */
+function ArticlesTree({ item, active }: { item: NavItem; active: boolean }) {
+  const path = usePathname();
+  const params = useSearchParams();
+  const [sections, setSections] = useState<NavSection[] | null>(null);
+  const [open, setOpen] = useState(active);
+
+  useEffect(() => {
+    if (active) setOpen(true);
+  }, [active]);
+
+  useEffect(() => {
+    const load = () => api.get<{ items: NavSection[] }>("/article-sections").then((r) => setSections(r.items), () => {});
+    load();
+    window.addEventListener(SECTIONS_CHANGED, load); // thêm / sửa / xoá danh mục hoặc bài → cập nhật menu
+    return () => window.removeEventListener(SECTIONS_CHANGED, load);
+  }, []);
+
+  // Danh mục đang xem: ?danh_muc= ở danh sách bài và trang viết bài mới
+  const listing = path === item.href || path === `${item.href}/moi`;
+  const cur = listing ? params.get("danh_muc") ?? "" : null;
+  const manage = path === `${item.href}/danh-muc`;
+
+  return (
+    <div className="adm-nav-tree">
+      <div className={active ? "adm-nav-parent in" : "adm-nav-parent"}>
+        <Link href={item.href} onClick={() => setOpen(true)} aria-current={path === item.href && !cur ? "page" : undefined}>
+          <Icon name={item.icon} />
+          {item.label}
+        </Link>
+        <button type="button" className="adm-nav-caret" aria-expanded={open} aria-label={open ? "Thu gọn danh mục bài viết" : "Xem danh mục bài viết"} onClick={() => setOpen((o) => !o)}>
+          <span className={open ? "chev open" : "chev"} aria-hidden="true">›</span>
+        </button>
+      </div>
+      {open ? (
+        <div className="adm-nav-sub">
+          <Link href={item.href} className={cur === "" ? "on" : undefined} aria-current={cur === "" ? "page" : undefined}>Tất cả bài viết</Link>
+          {sections === null ? <span className="adm-nav-note">Đang tải…</span> : null}
+          {(sections ?? []).map((s) => {
+            const on = cur === String(s.id);
+            return (
+              <Link key={s.id} href={`${item.href}?danh_muc=${s.id}`} className={on ? "on" : undefined} aria-current={on ? "page" : undefined} title={s.is_active ? undefined : "Danh mục đang ẩn trên trang web"}>
+                <span className={s.is_active ? undefined : "off"}>{s.name}</span>
+                <small>{s.total}</small>
+              </Link>
+            );
+          })}
+          <Link href={`${item.href}/danh-muc`} className={manage ? "on manage" : "manage"} aria-current={manage ? "page" : undefined}>
+            <Icon name="edit" size={13} /> Quản lý danh mục
+          </Link>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 const COLLAPSE_KEY = "ls_adm_nav_closed";
@@ -139,6 +201,11 @@ function Shell({ children }: { children: ReactNode }) {
                 {isOpen
                   ? g.items.map((n) => {
                     const on = n.href === active;
+                    if (n.tree === "articles") {
+                      // useSearchParams cần Suspense; trong lúc chờ hiện link thường
+                      const plain = <Link href={n.href} className={on ? "on" : undefined}><Icon name={n.icon} />{n.label}</Link>;
+                      return <Suspense key={n.href} fallback={plain}><ArticlesTree item={n} active={on} /></Suspense>;
+                    }
                     return (
                       <Link key={n.href} href={n.href} className={on ? "on" : undefined} aria-current={on ? "page" : undefined}>
                         <Icon name={n.icon} />

@@ -63,6 +63,24 @@
 .adm-nav-hd:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
 .adm-nav-hd .chev { font-size: 15px; line-height: 1; transition: transform 0.15s; }
 .adm-nav-hd .chev.open { transform: rotate(90deg); }
+/* Mục cha "Bài viết" xổ xuống danh mục */
+.adm-nav-parent { display: flex; align-items: center; border-radius: 6px; }
+.adm-nav-parent > a { flex: 1; min-width: 0; }
+.adm-nav-parent.in > a { color: var(--brand-600); font-weight: 600; }
+.adm-nav-caret { width: 30px; height: 30px; flex: none; display: grid; place-items: center; background: none; border: 0; border-radius: 6px; color: var(--muted); cursor: pointer; }
+.adm-nav-caret:hover { background: var(--line-2); color: var(--ink-2); }
+.adm-nav-caret:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.adm-nav-caret .chev { font-size: 16px; line-height: 1; transition: transform 0.15s; }
+.adm-nav-caret .chev.open { transform: rotate(90deg); }
+.adm-nav-sub { display: grid; gap: 1px; margin: 2px 0 4px 19px; padding-left: 10px; border-left: 1px solid var(--line); }
+.adm-nav .adm-nav-sub a { padding: 6px 8px; font-size: 13.5px; font-weight: 500; justify-content: space-between; gap: 8px; }
+.adm-nav-sub a > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-nav-sub a > span.off { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
+.adm-nav-sub a small { font-size: 11.5px; color: var(--muted); background: var(--line-2); border-radius: 9px; padding: 0 7px; line-height: 18px; flex: none; }
+.adm-nav-sub a.on small { background: #fff; color: var(--brand-600); }
+.adm-nav .adm-nav-sub a.manage { justify-content: flex-start; gap: 6px; color: var(--muted); font-size: 12.5px; }
+.adm-nav .adm-nav-sub a.manage.on { color: var(--brand-600); }
+.adm-nav-note { padding: 6px 8px; font-size: 12.5px; color: var(--muted); }
 /* minmax(0, 1fr): cột không giãn theo nội dung → tên dài (doanh nghiệp) xuống dòng / cắt "…" trong khung sidebar, không tràn ra ngoài */
 .adm-side-foot { margin-top: auto; border-top: 1px solid var(--line); padding: 12px 10px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .adm-me { display: flex; align-items: center; gap: 10px; min-width: 0; }

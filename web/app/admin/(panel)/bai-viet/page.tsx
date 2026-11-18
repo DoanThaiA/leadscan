@@ -59,6 +59,7 @@ function ArticlesAdmin() {
           </p>
         </div>
         <div className="adm-actions">
+          <Link className="adm-btn" href="/admin/bai-viet/danh-muc"><Icon name="edit" size={14} /> Quản lý danh mục</Link>
           <Link className="adm-btn primary" href={newHref}><Icon name="plus" size={16} /> Viết bài mới</Link>
         </div>
       </div>

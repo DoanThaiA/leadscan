@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useAdmin } from "@/components/admin/AdminContext";
-import { ArticleForm, liveBadge, useArticleMeta } from "@/components/admin/ArticleForm";
+import { ArticleForm, liveBadge, notifySectionsChanged, useArticleMeta } from "@/components/admin/ArticleForm";
 import { Icon, Skeleton } from "@/components/admin/ui";
 import { api, errMsg } from "@/lib/admin/api";
 import { fmtDateTime } from "@/lib/admin/format";
@@ -37,6 +37,7 @@ export default function EditArticlePage() {
     if (!a || !confirm(`Xoá bài “${a.title}”? Link bài sẽ không mở được nữa.\n\nMuốn ẩn bài nhưng giữ nội dung, hãy chuyển về “Bản nháp”.`)) return;
     try {
       await api.del(`/articles/${id}`);
+      notifySectionsChanged();
       router.replace(`/admin/bai-viet${a.section_id ? `?danh_muc=${a.section_id}` : ""}`);
     } catch (e) {
       alert(errMsg(e));
@@ -73,6 +74,7 @@ export default function EditArticlePage() {
         onSubmit={async (body) => {
           const saved = await api.put<ArticleAdmin>(`/articles/${id}`, body);
           setA(saved);
+          notifySectionsChanged(); // có thể đã đổi danh mục
           setVer((x) => x + 1);
           setFlash("Đã lưu");
           setTimeout(() => setFlash(""), 2500);

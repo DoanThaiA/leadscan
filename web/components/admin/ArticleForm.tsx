@@ -35,6 +35,10 @@ const TEMPLATE = [
   "Tóm tắt 2–3 ý, mời người đọc [xem cơ hội đang mở](/co-hoi) hoặc [đăng ký đối tác](/doi-tac).",
 ].join("\n");
 
+/** Phát sự kiện này sau khi thêm / sửa / xoá danh mục hoặc bài → menu "Bài viết" tải lại danh mục và số bài */
+export const SECTIONS_CHANGED = "ls:article-sections-changed";
+export const notifySectionsChanged = () => window.dispatchEvent(new Event(SECTIONS_CHANGED));
+
 export interface ArticleMeta {
   sections: ArticleSection[];
   topics: Record<string, string[]>;
