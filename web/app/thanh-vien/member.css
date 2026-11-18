@@ -19,6 +19,63 @@
 .mt-ex.locked { background: var(--line-2); border-color: var(--line); }
 @media (max-width: 480px) { .mt-ex { flex-direction: column; align-items: stretch; } }
 
+/* ---------- Banner hạng Vàng (trang Tổng quan) — nền xanh, vàng chỉ để nhấn (Brand Kit) ---------- */
+.mt-gold { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; margin-bottom: 16px; padding: 22px 24px; border-radius: 12px; color: #fff; overflow: hidden;
+  background: radial-gradient(120% 140% at 100% 0%, rgba(255, 205, 0, 0.22), transparent 55%), linear-gradient(135deg, var(--brand) 0%, var(--brand-800) 100%); box-shadow: 0 6px 20px rgba(0, 53, 95, 0.18); }
+.mt-gold::after { content: "★"; position: absolute; right: -18px; bottom: -64px; font-size: 220px; line-height: 1; color: rgba(255, 205, 0, 0.08); pointer-events: none; }
+.mt-gold-close { position: absolute; top: 8px; right: 10px; z-index: 1; width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: rgba(255, 255, 255, 0.7); font-size: 20px; line-height: 1; cursor: pointer; }
+.mt-gold-close:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.mt-gold-main { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.mt-gold-kicker { justify-self: start; display: inline-flex; align-items: center; gap: 5px; padding: 2px 10px; border-radius: 99px; background: var(--accent); color: var(--brand-800); font: 700 12px/1.7 var(--font-inter), sans-serif; text-transform: uppercase; letter-spacing: 0.04em; }
+.adm .mt-gold h2 { color: #fff; font-size: 21px; line-height: 1.25; }
+.mt-gold-main > p { margin: 0; color: rgba(255, 255, 255, 0.85); font-size: 14px; max-width: 620px; }
+.mt-gold-perks { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.mt-gold-perks li { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.12); }
+.mt-gold-perks .ic { flex: none; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--accent); color: var(--brand-800); }
+.mt-gold-perks div { display: grid; gap: 2px; min-width: 0; }
+.mt-gold-perks b { color: #fff; font-size: 13.5px; }
+.mt-gold-perks span { color: rgba(255, 255, 255, 0.78); font-size: 12.5px; line-height: 1.45; }
+.mt-gold-side { position: relative; z-index: 1; display: grid; gap: 10px; align-content: center; padding: 16px; border-radius: 10px; background: rgba(0, 0, 0, 0.18); border: 1px solid rgba(255, 255, 255, 0.12); }
+.mt-gold-progress { display: grid; gap: 6px; }
+.mt-gold-progress .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; color: rgba(255, 255, 255, 0.8); font-size: 13px; }
+.mt-gold-progress .row b { color: #fff; font: 700 17px/1.2 var(--head); font-variant-numeric: tabular-nums; }
+.mt-gold-progress .row.small { font-size: 12px; color: rgba(255, 255, 255, 0.65); }
+.mt-gold-progress .bar { height: 8px; border-radius: 99px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
+.mt-gold-progress .bar i { display: block; height: 100%; min-width: 6px; border-radius: 99px; background: var(--accent); }
+.mt-gold-need { margin: 2px 0 0; color: rgba(255, 255, 255, 0.85); font-size: 13.5px; }
+.mt-gold-need b { color: var(--accent); font-size: 15px; }
+.adm .mt-gold-cta { height: 42px; width: 100%; font-size: 14.5px; }
+.mt-gold-later { justify-self: center; border: 0; background: none; color: rgba(255, 255, 255, 0.7); font: 13px var(--font-inter), sans-serif; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.mt-gold-later:hover { color: #fff; }
+.mt-gold :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mt-gold-strip { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px 16px; border-radius: 10px; border: 1px solid var(--accent-100); background: linear-gradient(90deg, var(--accent-50), #fff 70%); flex-wrap: wrap; }
+.mt-gold-star { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--brand-800); font-size: 17px; }
+.mt-gold-strip-text { display: grid; gap: 1px; flex: 1 1 220px; min-width: 0; }
+.mt-gold-strip-text b { color: var(--ink); font-size: 14px; }
+.mt-gold-strip-text span { color: var(--muted); font-size: 13px; }
+.mt-gold-strip-links { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 1100px) { .mt-gold-perks { grid-template-columns: minmax(0, 1fr); gap: 8px; } }
+@media (max-width: 860px) {
+  .mt-gold { grid-template-columns: minmax(0, 1fr); padding: 20px 16px; gap: 16px; }
+  .adm .mt-gold h2 { font-size: 18px; padding-right: 24px; }
+}
+@media (max-width: 640px) { /* điện thoại: giữ tên quyền lợi, bỏ dòng mô tả để banner không chiếm hết màn hình */
+  .mt-gold-main > p { font-size: 13px; }
+  .mt-gold-perks { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .mt-gold-perks li { flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 10px 6px; }
+  .mt-gold-perks span { display: none; }
+  .mt-gold-perks b { font-size: 12px; line-height: 1.3; }
+  .mt-gold-side { padding: 12px; }
+}
+
+/* ---------- Nạp tiền: gói đưa khách lên hạng Vàng ---------- */
+.adm-pack { position: relative; }
+.adm-pack.gold-reach { border-color: var(--accent-600); }
+.adm-pack .mt-pack-gold { position: absolute; top: -9px; right: 10px; padding: 0 8px; border-radius: 99px; background: var(--accent); color: var(--brand-800); font: 700 11px/1.7 var(--font-inter), sans-serif; white-space: nowrap; }
+.mt-topup-gold { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 8px; background: var(--accent-50); border: 1px solid var(--accent-100); font-size: 13.5px; color: var(--ink-2); }
+.mt-topup-gold .mt-gold-star { width: 30px; height: 30px; font-size: 15px; }
+.mt-topup-gold b { color: var(--ink); }
+
 /* ---------- Tìm cơ hội phù hợp: form 2 cột cân đối + danh sách phiếu | chi tiết phiếu ---------- */
 .adm-badge.sr-live { background: #e6f6ec; color: #157f3b; }
 .adm-badge.sr-live::before { animation: sr-pulse 1.8s ease-in-out infinite; }

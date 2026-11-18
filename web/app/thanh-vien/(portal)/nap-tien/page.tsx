@@ -34,7 +34,9 @@ export default function TopupPage() {
   const [custom, setCustom] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const { setMe } = useMember();
+  const { me, setMe } = useMember();
+  const tier = me.company.tier;
+  const toGold = tier.key === "gold" ? 0 : tier.to_gold; // còn thiếu bao nhiêu để lên hạng Vàng (0 = đã Vàng)
   // mã khuyến mãi: kiểm tra trước để hiện số tiền giảm; đổi loại đơn / số tiền thì kiểm tra lại
   const [promoInput, setPromoInput] = useState("");
   const [promo, setPromo] = useState<PromoCheck | null>(null);
@@ -48,6 +50,9 @@ export default function TopupPage() {
       const loai = new URLSearchParams(location.search).get("loai"); // từ popup khuyến mãi: mã chỉ áp cho 1 loại đơn
       setKind(loai === "membership" ? "membership" : loai === "topup" && r.membership_active ? "topup" : r.membership_active ? "topup" : "membership");
       setAmount(r.topup.packs[0] ?? r.topup.min);
+      // từ banner hạng Vàng (?so-tien=<số còn thiếu>) → điền sẵn đúng số tiền để lên Vàng
+      const want = Number(new URLSearchParams(location.search).get("so-tien") || 0);
+      if (r.membership_active && want > 0) setCustom(String(Math.min(r.topup.max, Math.max(r.topup.min, Math.round(want)))));
     }, (e) => setError(errMsg(e)));
   }, []);
 
@@ -146,13 +151,26 @@ export default function TopupPage() {
             <section className="adm-card">
               <div className="hd"><h2>Số tiền nạp</h2></div>
               <div className="bd" style={{ display: "grid", gap: 14 }}>
+                {toGold > 0 ? (
+                  <div className="mt-topup-gold">
+                    <span className="mt-gold-star" aria-hidden="true">★</span>
+                    <span>
+                      Nạp từ <b>{fmtVnd(toGold)}</b> để lên <b>hạng Vàng</b>: mua độc quyền phiếu chưa ai mua, CRM theo dõi cơ hội và trợ lý AI.{" "}
+                      <button type="button" className="adm-btn sm" style={{ marginLeft: 4 }} onClick={() => setCustom(String(Math.min(p.topup.max, Math.max(p.topup.min, toGold))))}>Chọn {fmtVnd(toGold)}</button>
+                    </span>
+                  </div>
+                ) : null}
                 <div className="adm-packs">
-                  {p.topup.packs.map((v) => (
-                    <button type="button" key={v} className={!custom && amount === v ? "adm-pack on" : "adm-pack"} onClick={() => { setAmount(v); setCustom(""); }}>
-                      <b>{fmtVnd(v)}</b>
-                      <span>+{fmtPts(v)}</span>
-                    </button>
-                  ))}
+                  {p.topup.packs.map((v) => {
+                    const reach = toGold > 0 && v >= toGold;
+                    return (
+                      <button type="button" key={v} className={`adm-pack${!custom && amount === v ? " on" : ""}${reach ? " gold-reach" : ""}`} onClick={() => { setAmount(v); setCustom(""); }}>
+                        {reach ? <span className="mt-pack-gold">★ Lên hạng Vàng</span> : null}
+                        <b>{fmtVnd(v)}</b>
+                        <span>+{fmtPts(v)}</span>
+                      </button>
+                    );
+                  })}
                 </div>
                 <div className="adm-field">
                   <label htmlFor="custom">Hoặc nhập số khác ({fmtVnd(p.topup.min)} – {fmtVnd(p.topup.max)})</label>
@@ -176,6 +194,12 @@ export default function TopupPage() {
                 </>
               ) : null}
               <dt>Điểm nhận được</dt><dd className="adm-pos">+{fmtPts(kind === "membership" ? p.membership.points : value)}</dd>
+              {toGold > 0 ? (
+                <>
+                  <dt>Hạng sau khi nạp</dt>
+                  <dd>{value >= toGold ? <span className="mt-tier gold sm">★ Hạng Vàng</span> : <span className="muted">Thường · còn thiếu {fmtVnd(toGold - value)}</span>}</dd>
+                </>
+              ) : null}
             </dl>
             <div className="adm-field">
               <label htmlFor="promo">Mã khuyến mãi</label>

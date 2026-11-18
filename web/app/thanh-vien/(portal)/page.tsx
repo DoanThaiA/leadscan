@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Icon, Skeleton } from "@/components/admin/ui";
 import { useMember } from "@/components/member/MemberContext";
+import { GoldBanner } from "@/components/member/GoldBanner";
 import { TierBadge } from "@/components/member/Tier";
 import { SearchReqList } from "@/components/member/SearchReqList";
 import { fmtDate, fromNow } from "@/lib/admin/format";
@@ -47,6 +48,8 @@ export default function MemberHome() {
         </div>
       </div>
       {error ? <div className="adm-alert" style={{ marginBottom: 16 }}>{error}</div> : null}
+
+      <GoldBanner t={c.tier} membershipActive={c.membership_active} />
 
       <div className="adm-grid cols-4" style={{ marginBottom: 16 }}>
         <div className="adm-card adm-stat">
