@@ -13,6 +13,8 @@ export const organizationLd = {
   name: "LeadScan B2B",
   alternateName: ["LeadScan", "LeadScan.net"],
   url: `${SITE_URL}/`,
+  description: "LeadScan là sàn kết nối cơ hội kinh doanh B2B, hỗ trợ xúc tiến thương mại giữa các doanh nghiệp. Đối tác đăng cơ hội mình biết; doanh nghiệp tìm khách hàng đăng nhu cầu. LeadScan kiểm duyệt, xác minh, chấm điểm và kết nối hai bên.",
+  sameAs: ["https://www.facebook.com/leadscan.net"],
   logo: { "@type": "ImageObject", url: `${SITE_URL}/brand/leadscan-logo-1200.png` },
   email: "contact@leadscan.net",
   telephone: "+84877770788",

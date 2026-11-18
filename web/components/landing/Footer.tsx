@@ -19,6 +19,7 @@ export default function Footer({ base = "" }: { base?: string }) {
               <li><svg className="icon"><use href="#i-mail" /></svg><a href="mailto:contact@leadscan.net">contact@leadscan.net</a></li>
               <li><svg className="icon"><use href="#i-phone" /></svg><a href="tel:+84877770788">Hotline: +848 7777 0788</a></li>
               <li><svg className="icon"><use href="#i-map" /></svg>Địa chỉ: 169 Nguyễn Ngọc Vũ, Phường Yên Hòa, thành phố Hà Nội</li>
+              <li><svg className="icon"><use href="#i-globe" /></svg><a href="https://www.facebook.com/leadscan.net" rel="me noopener noreferrer" target="_blank">Facebook LeadScan</a></li>
             </ul></div>
           </div>
           <div className="foot-bottom"><span>© 2026 leadscan.net. Bảo lưu mọi quyền.</span><span><a href="#">Bảo mật</a><a href="#">Điều khoản</a></span></div>
