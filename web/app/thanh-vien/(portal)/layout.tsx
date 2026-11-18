@@ -19,6 +19,7 @@ const NAV = [
   { href: "/thanh-vien/phu-hop", label: "Cơ hội phù hợp", icon: "scan" },
   { href: "/thanh-vien/kho", label: "Kho của tôi", icon: "bookmark" },
   { href: "/thanh-vien/phieu", label: "Phiếu đã mua", icon: "ticket" },
+  { href: "/thanh-vien/crm", label: "CRM", icon: "layers", gold: true },
   { href: "/thanh-vien/co-hoi", label: "Tất cả cơ hội", icon: "grid" },
   { href: "/thanh-vien/vi", label: "Số dư tài khoản", icon: "wallet" },
   { href: "/thanh-vien/tai-khoan", label: "Tài khoản", icon: "user" },
@@ -68,6 +69,7 @@ function Shell({ children }: { children: ReactNode }) {
               <Link key={n.href} href={n.href} className={on ? "on" : undefined} aria-current={on ? "page" : undefined}>
                 <Icon name={n.icon} />
                 {n.label}
+                {"gold" in n && !me.company.crm?.access ? <span className="crm-nav-lock" title="Dành cho hạng Vàng"><Icon name="lock" size={12} /></span> : null}
                 {n.href === "/thanh-vien/phu-hop" && unread ? <span className="nt-nav-count" aria-label={`${unread} cơ hội mới`}>{unread > 99 ? "99+" : unread}</span> : null}
               </Link>
             );

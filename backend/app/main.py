@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.routes import admin, articles, admin_commerce, admin_enrich, admin_enrich_docs, admin_enrich_ops, admin_enrich_ops5, admin_enrich_people, admin_jobs, admin_partner_payouts, admin_partner_reports, admin_partner_submissions, admin_partners, admin_pricing, admin_promos, careers, mcv, member, partner, partner_mcp, payments, public, public_opportunities, public_promos, registration_webhook
+from app.routes import admin, articles, admin_commerce, admin_enrich, admin_enrich_docs, admin_enrich_ops, admin_enrich_ops5, admin_enrich_people, admin_jobs, admin_partner_payouts, admin_partner_reports, admin_partner_submissions, admin_partners, admin_pricing, admin_promos, careers, mcv, member, member_crm, partner, partner_mcp, payments, public, public_opportunities, public_promos, registration_webhook
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -32,6 +32,7 @@ app.include_router(careers.router)
 app.include_router(articles.public)
 app.include_router(articles.admin)
 app.include_router(member.router)
+app.include_router(member_crm.router)
 app.include_router(partner.router)
 app.include_router(partner_mcp.portal)
 app.include_router(partner_mcp.router)

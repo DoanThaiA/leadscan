@@ -1267,3 +1267,4 @@ class PartnerAttachment(Base):
 
 # Phân hệ làm giàu dữ liệu theo MST — kho A / kho B / thu thập (đăng ký bảng vào Base.metadata)
 from app import models_enrich  # noqa: E402, F401
+from app import models_crm  # noqa: E402, F401  — CRM Lite cho hạng Vàng

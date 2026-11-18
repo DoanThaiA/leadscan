@@ -42,7 +42,7 @@ from app.registration_form import _valid_url as valid_url
 from app.schemas import LoginIn, PasswordChangeIn
 from app.schemas_commerce import EnrichIn, EnrichOut, InvoiceIn, OrderCreateIn, OrderOut, TxOut
 from app.security import add_hit, client_ip, hash_password, origin_allowed, rate_limited, sha256, verify_password
-from app.services import attachments, catalog, mcv_payments, payments, promos, tiers
+from app.services import attachments, catalog, crm, mcv_payments, payments, promos, tiers
 from app.services import products as prod
 from app.services.mcv import McvClient, McvError
 from app.worker import enqueue, issue_einvoice_task, match_request_now, send_invoice_request_task, send_password_reset_task, send_search_request_task
@@ -67,6 +67,7 @@ def _me(user: MemberUser) -> dict:
             "membership_expires_at": _iso(c.membership_expires_at),
             "membership_active": catalog.membership_active(c),
             "tier": tiers.tier_out(c),
+            "crm": dict(zip(("access", "reason"), crm.access(c))),  # CRM Lite: hạng Vàng (+ danh sách chạy thử nếu có)
         },
         "portals": accounts.portals_of(user),  # cùng email dùng được cổng nào (hiện nút chuyển cổng)
     }

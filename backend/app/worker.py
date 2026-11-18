@@ -9,6 +9,7 @@ import logging
 from datetime import timedelta
 
 from celery import Celery
+from celery.schedules import crontab
 from sqlalchemy import delete
 
 from app.config import get_settings
@@ -38,6 +39,9 @@ celery_app.conf.update(
         "enrich-alerts": {"task": "leadscan.enrich_alerts", "schedule": 600.0},  # C06 cảnh báo thay đổi
         "enrich-digest": {"task": "leadscan.enrich_digest", "schedule": 3600.0},  # email tổng hợp cảnh báo
         "enrich-raw-purge": {"task": "leadscan.enrich_raw_purge", "schedule": 86400.0},  # N07 dọn bản gốc quá hạn
+        # CRM Lite hạng Vàng (giờ Việt Nam theo timezone ở trên): nhắc việc 8:00 hằng ngày, báo cáo tuần 8:00 thứ Hai
+        "crm-daily": {"task": "leadscan.crm_daily_reminders", "schedule": crontab(hour=8, minute=0)},
+        "crm-weekly": {"task": "leadscan.crm_weekly_report", "schedule": crontab(hour=8, minute=5, day_of_week="mon")},
     },
 )
 
@@ -338,6 +342,30 @@ def send_search_request_task(req_id: int) -> None:
 
 
 MATCH_DIGEST_DELAY = 120  # chờ 2 phút để gộp nhiều cơ hội mới (vd. admin mở bán liên tiếp) vào 1 email
+
+
+@celery_app.task(name="leadscan.crm_daily_reminders")
+def crm_daily_reminders_task() -> None:
+    from app.db import new_session
+    from app.services import crm_reminders
+
+    cfg = get_settings()
+    if not cfg.crm_reminders_enabled:
+        return
+    with new_session() as db:
+        log.info("CRM: gửi %s email nhắc việc", crm_reminders.send_daily(db, cfg))
+
+
+@celery_app.task(name="leadscan.crm_weekly_report")
+def crm_weekly_report_task() -> None:
+    from app.db import new_session
+    from app.services import crm_reminders
+
+    cfg = get_settings()
+    if not cfg.crm_reminders_enabled:
+        return
+    with new_session() as db:
+        log.info("CRM: gửi %s email báo cáo tuần", crm_reminders.send_weekly(db, cfg))
 
 
 @celery_app.task(name="leadscan.send_match_digest")

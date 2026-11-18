@@ -172,6 +172,17 @@ class Settings(BaseSettings):
     enrich_llm_enabled: bool = False
     enrich_llm_model: str = "claude-opus-5-5"
     enrich_llm_effort: str = "low"  # low | medium | high — bóc tách danh sách là việc đơn giản
+    # CRM Lite hạng Vàng — nút AI "Tóm tắt công ty" / "Soạn tin mời". TẮT mặc định như tầng 3 ở trên: chỉ gửi dữ liệu
+    # doanh nghiệp (không gửi tên/SĐT/email đầu mối) ra API Claude. Khoá: ANTHROPIC_API_KEY.
+    crm_ai_enabled: bool = False
+    crm_ai_model: str = "claude-opus-5-5"
+    crm_ai_budget_usd: float = 22.0  # trần chi phí AI mỗi doanh nghiệp / tháng (giá API thực)
+    # Giá USD / 1 triệu token (vào, ra) để tính chi phí từng lượt — cập nhật khi đổi model hoặc Anthropic đổi giá
+    crm_ai_price_in: float = 4.0
+    crm_ai_price_out: float = 20.0
+    crm_reminders_enabled: bool = True  # email nhắc việc 8:00 hằng ngày + báo cáo tuần thứ Hai
+    # Chạy thử CRM với vài khách: mã khách hàng (LS-...) cách nhau dấu phẩy. Trống = mọi khách hạng Vàng đều dùng được.
+    crm_pilot_codes: str = ""
     # N05: khoá mã hoá kho B (MST cá nhân, bản gốc) — base64 64 byte: python -m app.cli gen-data-key. Mất khoá = mất dữ liệu đã mã hoá.
     enrich_data_key: str = ""
     enrich_raw_retention_days: int = 365  # N07: giữ bản gốc 12 tháng (có thể đặt ngắn hơn để xoá sớm)

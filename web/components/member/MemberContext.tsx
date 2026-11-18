@@ -31,6 +31,8 @@ export interface MemberMe {
     membership_expires_at: string | null;
     membership_active: boolean;
     tier: MemberTier;
+    /** CRM Lite: hạng Vàng (+ danh sách chạy thử nếu đang chạy thử) */
+    crm?: { access: boolean; reason: string };
   };
   /** cùng email (cùng 1 tài khoản) dùng được cổng nào */
   portals?: { member: boolean; partner: boolean };
