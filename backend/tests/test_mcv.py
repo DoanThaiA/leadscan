@@ -171,9 +171,9 @@ def test_webhook_sai_1_ky_tu_bi_401(member, client, fake):
 def test_webhook_timestamp_cu_bi_bo(member, client, fake):
     code, pay = new_order(member)
     fake.mark_paid(pay["payment_code"], send_webhook=False)
-    old = fake.webhook_request(pay["payment_code"], timestamp=int(time.time()) - 301)  # ký đúng nhưng lệch > 5 phút
+    old = fake.webhook_request(pay["payment_code"], timestamp=int(time.time()) - 400)  # ký đúng nhưng lệch > 5 phút (biên rộng: máy chậm không làm test chập chờn)
     assert deliver(client, old).status_code == 401
-    future = fake.webhook_request(pay["payment_code"], timestamp=int(time.time()) + 301)
+    future = fake.webhook_request(pay["payment_code"], timestamp=int(time.time()) + 400)
     assert deliver(client, future).status_code == 401
     assert order_status(code) == "pending" and balance() == 0
     # MCV gửi lại (ký timestamp mới) → nhận
