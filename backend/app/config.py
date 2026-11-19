@@ -108,6 +108,24 @@ class Settings(BaseSettings):
     registration_webhook_secret: str = ""
     registration_setup_days: int = 7  # hạn link đặt mật khẩu gửi cho tài khoản tạo qua webhook (không kèm mật khẩu)
 
+    # Thu thập cơ hội từ Gmail (deploy/gmail-appscript): Apps Script trong Gmail POST thư mới tới /api/webhooks/gmail,
+    # ký HMAC-SHA256 bằng khoá này. Trống = tắt webhook (404).
+    gmail_webhook_secret: str = ""
+    gmail_webhook_max_kb: int = 512  # kích thước tối đa 1 thư gửi lên (Apps Script đã cắt thân thư ~60.000 ký tự)
+    # AI đọc thư → JSON cơ hội. TẮT mặc định: bật khi pháp chế đồng ý gửi nội dung thư khách ra API Claude.
+    # Tắt thì thư qua lọc sơ bộ vào "Cần xem lại" để admin tự tạo phiếu. Khoá: ANTHROPIC_API_KEY.
+    gmail_ai_enabled: bool = False
+    gmail_ai_model: str = "claude-haiku-5-5"  # phân loại + trích xuất: model nhỏ là đủ
+    gmail_ai_effort: str = "low"
+    gmail_ai_budget_usd: float = 10.0  # trần chi phí AI đọc thư / tháng; hết thì thư chờ tới tháng sau (hoặc nâng trần)
+    gmail_ai_price_in: float = 0.10  # USD / 1 triệu token — cập nhật khi đổi model
+    gmail_ai_price_out: float = 0.50
+    # Lĩnh vực nhận cơ hội (tên ngành trong registration_form.INDUSTRIES). Thư là cơ hội nhưng ngoài lĩnh vực → loại.
+    gmail_industries: list[str] = Field(default_factory=lambda: ["Bao bì & in ấn"])
+    gmail_min_confidence: float = 0.6  # AI chắc chắn dưới mức này → "Cần xem lại", không tự tạo nháp
+    gmail_min_body_chars: int = 80  # thư ngắn hơn (sau khi bỏ trích dẫn) → bỏ qua, không gọi AI
+    gmail_body_keep_days: int = 7  # thư bị loại / bỏ qua: xoá nội dung sau số ngày này
+
     # Yêu cầu xuất hoá đơn được gửi tới email này (kế toán xuất thủ công)
     invoice_email: str = "vylyy9999@gmail.com"
 

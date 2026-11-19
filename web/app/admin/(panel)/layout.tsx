@@ -30,6 +30,7 @@ const NAV: NavGroup[] = [
       { href: "/admin/co-hoi", label: "Cơ hội & phiếu", icon: "grid" },
       { href: "/admin/yeu-cau-tim-co-hoi", label: "Yêu cầu tìm cơ hội", icon: "search" },
       { href: "/admin/xac-minh-doi-tac", label: "Xác minh cơ hội đối tác", icon: "flag" },
+      { href: "/admin/email-co-hoi", label: "Cơ hội từ email", icon: "mail" },
       { href: "/admin/enrich", label: "Yêu cầu enrich", icon: "spark" },
       { href: "/admin/lam-giau", label: "Làm giàu theo MST", icon: "layers", enrich: true },
     ],

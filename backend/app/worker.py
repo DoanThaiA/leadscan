@@ -42,6 +42,8 @@ celery_app.conf.update(
         # CRM Lite hạng Vàng (giờ Việt Nam theo timezone ở trên): nhắc việc 8:00 hằng ngày, báo cáo tuần 8:00 thứ Hai
         "crm-daily": {"task": "leadscan.crm_daily_reminders", "schedule": crontab(hour=8, minute=0)},
         "crm-weekly": {"task": "leadscan.crm_weekly_report", "schedule": crontab(hour=8, minute=5, day_of_week="mon")},
+        # thu thập cơ hội từ Gmail: xử lý thư bị lỡ (Redis lỗi lúc nhận, AI lỗi tạm) + xoá nội dung thư bị loại quá hạn
+        "gmail-sweep": {"task": "leadscan.gmail_sweep", "schedule": 600.0},
     },
 )
 
@@ -366,6 +368,31 @@ def crm_weekly_report_task() -> None:
         return
     with new_session() as db:
         log.info("CRM: gửi %s email báo cáo tuần", crm_reminders.send_weekly(db, cfg))
+
+
+@celery_app.task(name="leadscan.gmail_process")
+def gmail_process_task(email_id: int) -> str:
+    """Thư Gmail vừa nhận → lọc sơ bộ → AI trích JSON → phiếu cơ hội nháp (app/services/gmail_ingest.py)."""
+    from app.db import new_session
+    from app.services import gmail_ingest
+
+    with new_session() as db:
+        return gmail_ingest.process(db, email_id)
+
+
+@celery_app.task(name="leadscan.gmail_sweep")
+def gmail_sweep_task() -> int:
+    from app.db import new_session
+    from app.services import gmail_ingest
+
+    with new_session() as db:
+        ids = gmail_ingest.sweep(db)
+        for email_id in ids:  # tuần tự, ít thư mỗi lượt: không dồn nhiều lượt gọi AI cùng lúc
+            gmail_ingest.process(db, email_id)
+        purged = gmail_ingest.purge_old(db)
+    if ids or purged:
+        log.info("Gmail: xử lý lại %s thư, xoá nội dung %s thư bị loại quá hạn", len(ids), purged)
+    return len(ids)
 
 
 @celery_app.task(name="leadscan.send_match_digest")
