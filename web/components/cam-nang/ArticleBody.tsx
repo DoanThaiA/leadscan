@@ -6,6 +6,7 @@ import { articleToc } from "@/lib/blog";
  * Hiển thị bài cẩm nang viết bằng định dạng nhẹ kiểu Markdown (không nhận HTML → không lo chèn mã):
  *   "## Tiêu đề mục" (có id để mục lục nhảy tới) · "### Tiêu đề nhỏ"
  *   "- ý" / "1. ý" danh sách · "> câu" trích dẫn / lưu ý · "![mô tả](đường-dẫn-ảnh)" ảnh (1 dòng riêng)
+ *   "@[chú thích](link-video)" video (1 dòng riêng): YouTube, Vimeo, Facebook hoặc file .mp4/.webm
  *   **đậm**, [chữ](link) — link nội bộ "/…" mở tại chỗ, link ngoài mở tab mới.
  * Dùng chung cho trang công khai và khung xem trước trong admin.
  */
@@ -39,6 +40,7 @@ export default function ArticleBody({ text }: { text: string }) {
     const line = raw.trim();
     const h = line.match(/^(#{2,3})\s+(.*)$/);
     const img = line.match(/^!\[([^\]]*)\]\(([^)\s]+)\)$/);
+    const vid = line.match(/^@\[([^\]]*)\]\(([^)\s]+)\)$/);
     const ul = line.match(/^[-•*+]\s+(.*)$/);
     const ol = line.match(/^\d+[.)]\s+(.*)$/);
     const q = line.match(/^>\s?(.*)$/);
@@ -55,6 +57,21 @@ export default function ArticleBody({ text }: { text: string }) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={img[2]} alt={img[1]} loading="lazy" decoding="async" />
           {img[1] ? <figcaption>{img[1]}</figcaption> : null}
+        </figure>,
+      );
+    } else if (vid && videoEmbed(vid[2])) {
+      flushAll();
+      const e = videoEmbed(vid[2])!;
+      blocks.push(
+        <figure key={k()} className="art-video">
+          {e.kind === "file" ? (
+            <video src={e.src} controls preload="metadata" playsInline />
+          ) : (
+            <iframe src={e.src} title={vid[1] || "Video"} loading="lazy" allowFullScreen
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin" />
+          )}
+          {vid[1] ? <figcaption>{vid[1]}</figcaption> : null}
         </figure>,
       );
     } else if (q) {
@@ -81,6 +98,29 @@ export default function ArticleBody({ text }: { text: string }) {
 /** Chỉ nhận link nội bộ "/…", "#…" hoặc http(s) — chặn javascript:, data: … */
 function safeUrl(u: string): boolean {
   return /^(\/(?!\/)|#|https?:\/\/)/i.test(u);
+}
+
+/** Đổi link video thành địa chỉ nhúng. Chỉ nhận YouTube, Vimeo, Facebook và file video trực tiếp. */
+function videoEmbed(u: string): { kind: "frame" | "file"; src: string } | null {
+  if (!/^https?:\/\//i.test(u)) return null;
+  let url: URL;
+  try { url = new URL(u); } catch { return null; }
+  const host = url.hostname.replace(/^(www|m)\./, "");
+  if (/\.(mp4|webm|ogg)$/i.test(url.pathname)) return { kind: "file", src: u };
+  let id = "";
+  if (host === "youtu.be") id = url.pathname.slice(1).split("/")[0];
+  else if (host === "youtube.com" || host === "youtube-nocookie.com") {
+    id = url.searchParams.get("v") ?? url.pathname.match(/^\/(?:embed|shorts|live)\/([\w-]+)/)?.[1] ?? "";
+  }
+  if (id) return /^[\w-]{6,20}$/.test(id) ? { kind: "frame", src: `https://www.youtube-nocookie.com/embed/${id}` } : null;
+  if (host === "vimeo.com" || host === "player.vimeo.com") {
+    const vid = url.pathname.match(/(\d{5,})/)?.[1];
+    return vid ? { kind: "frame", src: `https://player.vimeo.com/video/${vid}` } : null;
+  }
+  if (host === "facebook.com" || host === "fb.watch") {
+    return { kind: "frame", src: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(u)}&show_text=false` };
+  }
+  return null;
 }
 
 function inline(s: string): ReactNode[] {

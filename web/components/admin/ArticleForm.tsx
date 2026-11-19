@@ -215,7 +215,7 @@ export function ArticleForm({
                 <>
                   <div className="job-hint">
                     <b>Định dạng:</b> <code>## </code> tiêu đề mục (vào mục lục) · <code>### </code> tiêu đề nhỏ · <code>- </code> gạch đầu dòng · <code>1. </code> đánh số ·{" "}
-                    <code>&gt; </code> lưu ý · <code>**đậm**</code> · <code>[chữ](/co-hoi)</code> link · <code>![mô tả](https://…/anh.jpg)</code> ảnh · dòng trống = đoạn mới.
+                    <code>&gt; </code> lưu ý · <code>**đậm**</code> · <code>[chữ](/co-hoi)</code> link · <code>![mô tả](https://…/anh.jpg)</code> ảnh · <code>@[chú thích](https://youtu.be/…)</code> video (YouTube, Vimeo, Facebook, .mp4) · dòng trống = đoạn mới.
                   </div>
                   <textarea
                     id="a-body" className="adm-input" value={v.body} onChange={set("body")} maxLength={100000}
