@@ -1293,3 +1293,4 @@ class PartnerAttachment(Base):
 from app import models_enrich  # noqa: E402, F401
 from app import models_crm  # noqa: E402, F401  — CRM Lite cho hạng Vàng
 from app import models_inbound  # noqa: E402, F401  — thu thập cơ hội từ Gmail
+from app import models_opp_mail  # noqa: E402, F401  — gửi phiếu cơ hội cho khách qua email

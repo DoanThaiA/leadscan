@@ -11,6 +11,7 @@ import { api, errMsg } from "@/lib/admin/api";
 import { fmtDateTime } from "@/lib/admin/format";
 import { fmtPts, type Opp, OPP_STATUS } from "@/lib/commerce";
 import PublicLinkButton from "@/components/admin/PublicLinkButton";
+import OppMailCard from "@/components/admin/OppMailCard";
 
 interface Resp {
   opportunity: Opp;
@@ -136,6 +137,8 @@ Lý do (khách sẽ thấy trong lịch sử điểm):`, "Cơ hội đã chỉnh
           </div>
         ) : <div className="adm-empty">Chưa có ai mua.</div>}
       </section>
+
+      <OppMailCard key={`${o.status}-${o.sold_count}`} oppId={o.id} />
     </>
   );
 }

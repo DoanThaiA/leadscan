@@ -395,6 +395,25 @@ def gmail_sweep_task() -> int:
     return len(ids)
 
 
+@celery_app.task(name="leadscan.send_opportunity_email", bind=True, max_retries=2)
+def send_opportunity_email_task(self, email_id: int) -> str:
+    """Admin gửi phiếu cơ hội cho khách qua email (app/services/opp_mail.py). Lỗi gửi → thử lại sau 2, 4 phút."""
+    from app.db import new_session
+    from app.models_opp_mail import OpportunityEmail
+    from app.services import opp_mail
+    from app.services.notify import mail_provider
+
+    with new_session() as db:
+        status = opp_mail.send_one(db, email_id)
+        if status == "failed" and mail_provider(get_settings()) and not get_settings().celery_eager and self.request.retries < self.max_retries:
+            e = db.get(OpportunityEmail, email_id)
+            if e and e.error.startswith("Máy chủ email"):  # lỗi tạm của Resend/SMTP
+                e.status = "queued"
+                db.commit()
+                raise self.retry(countdown=120 * 2**self.request.retries)
+    return status
+
+
 @celery_app.task(name="leadscan.send_match_digest")
 def send_match_digest_task() -> None:
     """Email gộp "có cơ hội mới phù hợp" cho từng doanh nghiệp có thông báo chưa gửi email.

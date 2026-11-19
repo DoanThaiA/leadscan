@@ -26,10 +26,12 @@ Attachment = tuple[str, str, bytes]
 
 
 def _send_resend(
-    cfg: Settings, to: str, subject: str, body: str, reply_to: str = "", attachments: list[Attachment] | None = None
+    cfg: Settings, to: str, subject: str, body: str, reply_to: str = "", attachments: list[Attachment] | None = None, html: str = ""
 ) -> bool:
     """Gửi qua Resend HTTP API (https://resend.com/docs/api-reference/emails/send-email)."""
     payload: dict = {"from": _sender(cfg), "to": [to], "subject": subject, "text": body}
+    if html:
+        payload["html"] = html
     if reply_to:
         payload["reply_to"] = reply_to
     if attachments:
@@ -54,7 +56,7 @@ def _send_resend(
 
 
 def _send_smtp(
-    cfg: Settings, to: str, subject: str, body: str, reply_to: str = "", attachments: list[Attachment] | None = None
+    cfg: Settings, to: str, subject: str, body: str, reply_to: str = "", attachments: list[Attachment] | None = None, html: str = ""
 ) -> bool:
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -63,6 +65,8 @@ def _send_smtp(
     if reply_to:
         msg["Reply-To"] = reply_to
     msg.set_content(body)
+    if html:
+        msg.add_alternative(html, subtype="html")  # trình đọc mail hiện bản HTML, máy không đọc HTML vẫn có bản chữ
     for name, mime, data in attachments or []:
         maintype, _, subtype = mime.partition("/")
         msg.add_attachment(data, maintype=maintype or "application", subtype=subtype or "octet-stream", filename=name)
@@ -97,15 +101,20 @@ def send_mail(
     to: str | None = None,
     reply_to: str = "",
     attachments: list[Attachment] | None = None,
+    html: str | None = None,
 ) -> bool:
+    """Gửi 1 email gồm bản chữ (body) + bản HTML. Không truyền html → tự dựng HTML từ body theo giao diện LeadScan
+    (services/mail_layout.py), nên mọi email của hệ thống đều có cùng một giao diện."""
     to = to or cfg.notify_email
     provider = mail_provider(cfg)
     if not to or not provider:
         return False
+    if html is None:
+        from app.services import mail_layout
+
+        html = mail_layout.from_text(subject, body, cfg)
     send = _send_resend if provider == "resend" else _send_smtp
-    if reply_to or attachments:
-        return send(cfg, to, subject, body, reply_to=reply_to, attachments=attachments)
-    return send(cfg, to, subject, body)
+    return send(cfg, to, subject, body, reply_to=reply_to, attachments=attachments, html=html)
 
 
 def notify_new_registration(cfg: Settings, c: Company) -> bool:

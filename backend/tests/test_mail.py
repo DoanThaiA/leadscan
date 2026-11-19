@@ -29,7 +29,9 @@ def test_gui_qua_resend(monkeypatch):
     req = route.calls.last.request
     assert req.headers["authorization"] == "Bearer re_test_key"
     body = json.loads(req.content)
+    html = body.pop("html")  # mọi email đều kèm bản HTML giao diện LeadScan (services/mail_layout.py)
     assert body == {"from": "MCV Network <no-reply@mcv.network>", "to": ["vylyy9999@gmail.com"], "subject": "[LeadScan] Thử", "text": "Nội dung tiếng Việt"}
+    assert html.startswith("<!doctype html>") and "Nội dung tiếng Việt" in html and "leadscan-logo-reverse-1200.png" in html
 
 
 def test_resend_loi_tra_false_khong_nem_loi(monkeypatch):
