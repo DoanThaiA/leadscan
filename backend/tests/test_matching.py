@@ -6,7 +6,7 @@ from app.db import new_session
 from app.models import Opportunity, SearchRequestMatch, UserOpportunity
 from app.services import embedding as emb
 from app.services.matching import parse_value_vnd, price_for
-from tests.conftest import register
+from tests.conftest import register, set_contact_email
 from tests.test_member import CARTON_NOTE, ask, make_opp, member, member_client, pay_membership, view  # noqa: F401
 
 CASHEW_NOTE = "Chào bán hạt điều rang muối xuất khẩu, cần tìm nhà nhập khẩu thực phẩm ở châu Âu."
@@ -229,9 +229,11 @@ def test_email_ca_khi_khach_da_xem_trong_cong(admin, member, monkeypatch):
     make_opp(admin)
     assert member.post(f"/api/member/search-requests/{r['id']}/seen").status_code == 204
     assert member.get("/api/member/notifications").json()["unread"] == 0
+    set_contact_email("muahang@minhan.vn")
     worker.send_match_digest_task()
     mails = [m for m in sent if "cơ hội mới phù hợp" in m[0]]
     assert len(mails) == 1 and "Cần 200.000 hộp carton" in mails[0][1]
+    assert mails[0][2] == "muahang@minhan.vn"  # người liên hệ, không phải email đăng nhập
     worker.send_match_digest_task()  # chạy lại không gửi trùng
     assert len([m for m in sent if "cơ hội mới phù hợp" in m[0]]) == 1
 

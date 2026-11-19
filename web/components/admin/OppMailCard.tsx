@@ -11,6 +11,8 @@ type Recipient = {
   id: number;
   full_name: string;
   email: string;
+  position: string;
+  is_primary: boolean;
   company: { id: number; code: string; name: string; industry: string; province: string };
   score: number | null;
   purchased: boolean;
@@ -34,7 +36,8 @@ type Preview = { subject: string; to: string; html: string };
 const BADGE: Record<string, string> = { sent: "active", queued: "new", failed: "rejected" };
 const MAX = 100;
 
-/** Trang phiếu cơ hội (admin): chọn khách hàng → xem trước → gửi phiếu qua email (mỗi người 1 email riêng). */
+/** Trang phiếu cơ hội (admin): chọn người liên hệ của khách hàng → xem trước → gửi phiếu qua email (mỗi người 1 email riêng).
+ *  Người nhận là email trong mục Người liên hệ của khách hàng, không phải email đăng nhập tài khoản thành viên. */
 export default function OppMailCard({ oppId }: { oppId: number }) {
   const [scope, setScope] = useState<"matched" | "all">("matched");
   const [q, setQ] = useState("");
@@ -93,7 +96,7 @@ export default function OppMailCard({ oppId }: { oppId: number }) {
     setPreview(null);
     setPreviewOpen(true);
     try {
-      setPreview(await api.get<Preview>(`${base}/preview` + qs({ member_id: first.id, note: note.trim() || undefined })));
+      setPreview(await api.get<Preview>(`${base}/preview` + qs({ contact_id: first.id, note: note.trim() || undefined })));
     } catch (e) {
       setPreviewOpen(false);
       alert(errMsg(e));
@@ -105,7 +108,7 @@ export default function OppMailCard({ oppId }: { oppId: number }) {
     if (!n || !confirm(`Gửi phiếu cơ hội này qua email cho ${n} người đã chọn? Mỗi người nhận 1 email riêng.`)) return;
     setBusy(true);
     try {
-      const r = await api.post<{ queued: number; skipped: { email: string; reason: string }[] }>(`${base}/send`, { member_ids: [...selected.keys()], note: note.trim() });
+      const r = await api.post<{ queued: number; skipped: { email: string; reason: string }[] }>(`${base}/send`, { contact_ids: [...selected.keys()], note: note.trim() });
       setSelected(new Map());
       setPreviewOpen(false);
       setFlash(`Đang gửi ${r.queued} email` + (r.skipped.length ? ` · bỏ qua ${r.skipped.length} (đã mua phiếu)` : ""));
@@ -138,6 +141,7 @@ export default function OppMailCard({ oppId }: { oppId: number }) {
         <p className="muted" style={{ fontSize: 13 }}>
           Email chỉ có phần xem trước (tiêu đề, tóm tắt, ngành, khu vực, quy mô, hạn, giá phiếu theo điểm phù hợp của từng doanh nghiệp) và nút mở cơ hội trong cổng thành viên.
           Tên bên có nhu cầu, chi tiết và đầu mối chỉ mở khi khách mua phiếu.
+          Email gửi tới <b>người liên hệ</b> của khách hàng (không gửi email đăng nhập) — khách chưa có người liên hệ kèm email thì thêm ở trang khách hàng.
         </p>
         {error ? <div className="adm-alert">{error}</div> : null}
         {blocked ? <div className="adm-alert">{data.blocked_reason}</div> : null}
@@ -150,20 +154,20 @@ export default function OppMailCard({ oppId }: { oppId: number }) {
         </div>
         <div className="adm-search">
           <Icon name="search" />
-          <input className="adm-input" type="search" placeholder="Tìm doanh nghiệp, mã LS-, MST, email, người liên hệ, ngành…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Tìm khách hàng" />
+          <input className="adm-input" type="search" placeholder="Tìm doanh nghiệp, mã LS-, MST, tên / email người liên hệ, ngành…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Tìm khách hàng" />
         </div>
 
         {!data ? (
           <Skeleton h={120} />
         ) : !data.items.length ? (
-          <div className="adm-empty">{scope === "matched" ? "Chưa có doanh nghiệp nào được chấm là phù hợp với phiếu này — chọn tab “Tất cả khách hàng”." : "Không tìm thấy khách hàng."}</div>
+          <div className="adm-empty">{scope === "matched" ? "Chưa có doanh nghiệp nào được chấm là phù hợp với phiếu này — chọn tab “Tất cả khách hàng”." : "Không tìm thấy người liên hệ có email của khách hàng thành viên."}</div>
         ) : (
           <div className="adm-table-wrap" style={{ maxHeight: 380, overflow: "auto" }}>
             <table className="adm-table">
               <thead>
                 <tr>
                   <th style={{ width: 36 }}><input type="checkbox" checked={allPicked} onChange={toggleAll} aria-label="Chọn tất cả trong danh sách" disabled={!pickable.length} /></th>
-                  <th>Khách hàng</th><th>Phù hợp</th><th>Email phiếu này</th>
+                  <th>Khách hàng · người liên hệ</th><th>Phù hợp</th><th>Email phiếu này</th>
                 </tr>
               </thead>
               <tbody>
@@ -172,7 +176,10 @@ export default function OppMailCard({ oppId }: { oppId: number }) {
                     <td><input type="checkbox" checked={selected.has(r.id)} disabled={r.purchased} onChange={() => toggle(r)} onClick={(e) => e.stopPropagation()} aria-label={`Chọn ${r.email}`} /></td>
                     <td>
                       <Link className="name" href={`/admin/khach-hang/${r.company.id}`} onClick={(e) => e.stopPropagation()}>{r.company.name}</Link>
-                      <div className="sub">{r.full_name} · {r.email}</div>
+                      <div className="sub">
+                        {r.full_name || "(chưa có tên)"}{r.position ? ` (${r.position})` : ""} · {r.email}
+                        {r.is_primary ? <span className="adm-tag" style={{ marginLeft: 6, fontSize: 11 }}>Liên hệ chính</span> : null}
+                      </div>
                       <div className="sub"><span className="mono">{r.company.code}</span>{r.company.industry ? ` · ${r.company.industry}` : ""}{r.company.province ? ` · ${r.company.province}` : ""}</div>
                     </td>
                     <td>{r.score !== null ? <ScoreChip score={r.score} /> : <span className="muted">—</span>}</td>
@@ -192,7 +199,7 @@ export default function OppMailCard({ oppId }: { oppId: number }) {
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <span className="muted" style={{ fontSize: 13 }}>Đã chọn {selected.size}{selected.size >= MAX ? ` (tối đa ${MAX})` : ""}:</span>
             {[...selected.values()].slice(0, 12).map((r) => (
-              <button key={r.id} className="adm-tag" onClick={() => toggle(r)} title="Bỏ chọn" style={{ cursor: "pointer" }}>{r.company.name} ✕</button>
+              <button key={r.id} className="adm-tag" onClick={() => toggle(r)} title={`${r.email} — bấm để bỏ chọn`} style={{ cursor: "pointer" }}>{r.full_name || r.email} · {r.company.name} ✕</button>
             ))}
             {selected.size > 12 ? <span className="muted">… và {selected.size - 12} người khác</span> : null}
             <button className="adm-btn sm ghost" onClick={() => setSelected(new Map())}>Bỏ chọn hết</button>

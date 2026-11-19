@@ -302,25 +302,19 @@ def send_welcome_task(company_id: int) -> None:
 
 @celery_app.task(name="leadscan.notify_payment")
 def notify_payment_task(order_id: int) -> None:
-    """Đơn vừa được ghi nhận đã thanh toán → email cho thành viên + báo quản trị."""
-    from sqlalchemy import select
-
+    """Đơn vừa được ghi nhận đã thanh toán → email cho người liên hệ của khách hàng + báo quản trị."""
     from app.db import new_session
-    from app.models import MemberUser, PaymentOrder
-    from app.services.notify import notify_payment_admin, send_payment_success
+    from app.models import PaymentOrder
+    from app.services.notify import company_contact, notify_payment_admin, send_payment_success
 
     cfg = get_settings()
     with new_session() as db:
         o = db.get(PaymentOrder, order_id)
         if not o or o.status != "paid":
             return
-        u = db.get(MemberUser, o.created_by_id) if o.created_by_id else None
-        if not u or not u.is_active:
-            u = db.scalar(
-                select(MemberUser).where(MemberUser.company_id == o.company_id, MemberUser.is_active).order_by(MemberUser.id)
-            )
-        if u:
-            send_payment_success(cfg, o, u.email, u.full_name)
+        to = company_contact(db, o.company_id)  # người liên hệ, không phải email đăng nhập
+        if to:
+            send_payment_success(cfg, o, *to)
         notify_payment_admin(cfg, o)
 
 
@@ -424,8 +418,8 @@ def send_match_digest_task() -> None:
     from sqlalchemy import select, update
 
     from app.db import new_session, utcnow
-    from app.models import MemberNotification, MemberUser, Opportunity, SearchRequest, SearchRequestMatch
-    from app.services.notify import send_match_digest
+    from app.models import MemberNotification, Opportunity, SearchRequest, SearchRequestMatch
+    from app.services.notify import company_contact, send_match_digest
 
     cfg = get_settings()
     with new_session() as db:
@@ -461,10 +455,10 @@ def send_match_digest_task() -> None:
                 groups.setdefault(req.id, (req, []))[1].append((n.opportunity, n.score))
             if not groups:
                 continue
-            users = db.scalars(select(MemberUser).where(MemberUser.company_id == cid, MemberUser.is_active).order_by(MemberUser.id)).all()
-            for u in users:
-                send_match_digest(cfg, u.email, u.full_name, list(groups.values()))
-            log.info("Báo %s cơ hội mới phù hợp cho doanh nghiệp #%s (%s người nhận)", len(rows), cid, len(users))
+            to = company_contact(db, cid)  # 1 email / doanh nghiệp, gửi người liên hệ — không gửi email đăng nhập
+            if to:
+                send_match_digest(cfg, to[0], to[1], list(groups.values()))
+            log.info("Báo %s cơ hội mới phù hợp cho doanh nghiệp #%s (%s)", len(rows), cid, to[0] if to else "chưa có người liên hệ có email")
 
 
 # ------------------------------------------------------------------ so khớp cơ hội (chạy nền)

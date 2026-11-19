@@ -258,6 +258,25 @@ def send_partner_withdrawal_update(cfg: Settings, w) -> bool:
     return send_mail(cfg, f"[Đối tác LeadScan] Lệnh rút {w.code}", "\n".join(lines), to=p.email)
 
 
+def company_contact(db, company_id: int) -> tuple[str, str] | None:
+    """Người nhận email tự động gửi khách hàng: người liên hệ của doanh nghiệp (ưu tiên liên hệ chính) có email.
+
+    KHÔNG dùng email đăng nhập tài khoản thành viên (trừ email chào mừng / đặt mật khẩu — thông tin tài khoản).
+    Trả (email, tên) hoặc None nếu doanh nghiệp chưa có người liên hệ nào có email.
+    """
+    from sqlalchemy import select
+
+    from app.models import Contact
+
+    c = db.scalars(
+        select(Contact).where(Contact.company_id == company_id, Contact.email != "").order_by(Contact.is_primary.desc(), Contact.id).limit(1)
+    ).first()
+    if not c or not c.email.strip():
+        log.warning("Doanh nghiệp #%s chưa có người liên hệ có email — bỏ qua email gửi khách", company_id)
+        return None
+    return c.email.strip(), (c.full_name or "").strip() or "Quý khách"
+
+
 def _member_base(cfg: Settings) -> str:
     return cfg.member_url.rstrip("/")
 

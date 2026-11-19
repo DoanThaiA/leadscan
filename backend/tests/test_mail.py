@@ -127,20 +127,21 @@ def test_dang_ky_khong_co_email_quan_tri_van_chao_mung_khach(client, monkeypatch
 
 def test_thanh_toan_gui_email_thanh_vien_va_bao_quan_tri(client, monkeypatch):
     """Đơn phí thành viên được ghi nhận → email "Kích hoạt thành viên" cho khách + báo quản trị."""
-    from tests.conftest import MEMBER_PW, valid_form
+    from tests.conftest import MEMBER_PW, set_contact_email, valid_form
 
     _env_mail(monkeypatch)
     with respx.mock(assert_all_called=False) as m:
         route = m.post("https://api.resend.com/emails").respond(200, json={"id": "x"})
         assert client.post("/api/registrations", json=valid_form()).status_code == 200
+        set_contact_email("ketoan@minhan.vn")  # người liên hệ khác email đăng nhập (a@minhan.vn)
         client.post("/api/member/auth/login", json={"email": "a@minhan.vn", "password": MEMBER_PW})
         code = client.post("/api/member/orders", json={"kind": "membership"}).json()["order"]["code"]
         before = route.call_count
         assert client.post(f"/api/member/orders/{code}/simulate-paid").status_code == 200
         sent = _sent(route, before)
-        assert set(sent) == {"quantri@gmail.com", "a@minhan.vn"}
+        assert set(sent) == {"quantri@gmail.com", "ketoan@minhan.vn"}  # gửi người liên hệ, không gửi email đăng nhập
 
-        member = sent["a@minhan.vn"]
+        member = sent["ketoan@minhan.vn"]
         assert member["subject"] == "[LeadScan] Kích hoạt thành viên thành công"
         assert code in member["text"] and "10.000.000đ" in member["text"]
         assert "Số dư hiện tại    : 10.000.000 điểm" in member["text"]
@@ -155,3 +156,21 @@ def test_thanh_toan_gui_email_thanh_vien_va_bao_quan_tri(client, monkeypatch):
         before = route.call_count
         assert client.post(f"/api/member/orders/{code}/simulate-paid").status_code == 409
         assert route.call_count == before
+
+
+def test_khach_chua_co_lien_he_co_email_thi_khong_gui_email_dang_nhap(client, monkeypatch):
+    """Email tự động gửi khách đi tới người liên hệ; doanh nghiệp không có người liên hệ nào có email → không gửi."""
+    from sqlalchemy import select
+
+    from app.db import new_session
+    from app.models import Company
+    from app.services import notify
+    from tests.conftest import register, set_contact_email
+
+    cid = register(client)
+    with new_session() as db:
+        assert notify.company_contact(db, cid) == ("a@minhan.vn", "Nguyễn Văn A")
+    set_contact_email("")
+    with new_session() as db:
+        assert notify.company_contact(db, cid) is None
+        assert db.scalar(select(Company.id)) == cid

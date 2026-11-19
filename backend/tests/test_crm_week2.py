@@ -12,6 +12,7 @@ from app.config import get_settings
 from app.db import new_session
 from app.models_crm import CrmAiRun
 from app.services import crm_ai, crm_export, crm_reminders
+from tests.conftest import set_contact_email
 from tests.test_crm import board, gold_with_purchase
 from tests.test_member import member  # noqa: F401
 
@@ -144,10 +145,11 @@ def test_nhac_viec_hang_ngay(admin, member, monkeypatch):
     member.post(f"/api/member/crm/leads/{lid}/tasks", json={"title": "Việc tuần sau", "due_date": (today + timedelta(days=7)).isoformat()})
 
     sent.clear()  # bỏ email phát sinh lúc chuẩn bị dữ liệu (phiếu tìm cơ hội…)
+    set_contact_email("kinhdoanh@minhan.vn")
     with new_session() as db:
         assert crm_reminders.send_daily(db, today=today) == 1
     to, subject, body = sent[0]
-    assert to == "a@minhan.vn" and "2 việc cần làm hôm nay, 1 quá hạn" in subject
+    assert to == "kinhdoanh@minhan.vn" and "2 việc cần làm hôm nay, 1 quá hạn" in subject  # người liên hệ, không phải email đăng nhập
     assert "QUÁ HẠN (1)" in body and "Gửi báo giá" in body and "HẠN HÔM NAY (1)" in body and "Gọi lại" in body
     assert "Việc tuần sau" not in body and f"https://leadscan.test/thanh-vien/crm/{lid}" in body
 
@@ -167,7 +169,9 @@ def test_bao_cao_tuan(admin, member, monkeypatch):
     lid = lead_id(member)
     member.patch(f"/api/member/crm/leads/{lid}", json={"stage": "won"})
     sent.clear()
+    set_contact_email("kinhdoanh@minhan.vn")
     with new_session() as db:
         assert crm_reminders.send_weekly(db, today=date.today() + timedelta(days=1)) == 1
-    _, subject, body = sent[0]
+    to, subject, body = sent[0]
+    assert to == "kinhdoanh@minhan.vn"
     assert "1 lead mới, 1 chốt thắng" in subject and "Thắng: 1" in body and "Mới: 0" in body

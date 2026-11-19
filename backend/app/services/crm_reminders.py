@@ -75,11 +75,13 @@ def daily_for(db: Session, m: MemberUser, today: date) -> dict:
     }
 
 
-def daily_body(cfg: Settings, m: MemberUser, d: dict) -> tuple[str, str] | None:
+def daily_body(cfg: Settings, m: MemberUser, d: dict, name: str = "", shared: bool = False) -> tuple[str, str] | None:
+    """name: tên người nhận (người liên hệ của khách); shared: doanh nghiệp có nhiều tài khoản → ghi rõ việc của ai."""
     if not any(d.values()):
         return None
     base = _crm_url(cfg)
-    lines = [f"Chào {m.full_name},", "", "Việc cần làm hôm nay trong CRM LeadScan:", ""]
+    whose = f" (tài khoản {m.full_name})" if shared else ""
+    lines = [f"Chào {name or m.full_name},", "", f"Việc cần làm hôm nay trong CRM LeadScan{whose}:", ""]
 
     def task_lines(title: str, items: list[CrmTask]):
         if not items:
@@ -114,9 +116,13 @@ def send_daily(db: Session, cfg: Settings | None = None, today: date | None = No
     today = today or vn_today()
     sent = 0
     for c in gold_companies(db, cfg):
-        for m in _members(db, c.id):
-            mail = daily_body(cfg, m, daily_for(db, m, today))
-            if mail and notify.send_mail(cfg, mail[0], mail[1], to=m.email):
+        to = notify.company_contact(db, c.id)  # gửi người liên hệ của khách, không gửi email đăng nhập
+        if not to:
+            continue
+        members = _members(db, c.id)
+        for m in members:
+            mail = daily_body(cfg, m, daily_for(db, m, today), to[1], shared=len(members) > 1)
+            if mail and notify.send_mail(cfg, mail[0], mail[1], to=to[0]):
                 sent += 1
     return sent
 
@@ -139,10 +145,10 @@ def weekly_for(db: Session, company_id: int, today: date) -> dict:
     }
 
 
-def weekly_body(cfg: Settings, c: Company, m: MemberUser, w: dict, today: date) -> tuple[str, str]:
+def weekly_body(cfg: Settings, c: Company, name: str, w: dict, today: date) -> tuple[str, str]:
     start = today - timedelta(days=7)
     lines = [
-        f"Chào {m.full_name},", "",
+        f"Chào {name},", "",
         f"Báo cáo CRM tuần {_fmt(start)} – {_fmt(today - timedelta(days=1))} của {c.name}:", "",
         f"  • Lead mới: {w['new_leads']}",
         f"  • Chốt thắng: {w['won']}   ·   Thua: {w['lost']}",
@@ -160,9 +166,10 @@ def send_weekly(db: Session, cfg: Settings | None = None, today: date | None = N
     today = today or vn_today()
     sent = 0
     for c in gold_companies(db, cfg):
-        w = weekly_for(db, c.id, today)
-        for m in _members(db, c.id):
-            subject, body = weekly_body(cfg, c, m, w, today)
-            if notify.send_mail(cfg, subject, body, to=m.email):
-                sent += 1
+        to = notify.company_contact(db, c.id)  # báo cáo cấp doanh nghiệp → 1 email cho người liên hệ
+        if not to or not _members(db, c.id):
+            continue
+        subject, body = weekly_body(cfg, c, to[1], weekly_for(db, c.id, today), today)
+        if notify.send_mail(cfg, subject, body, to=to[0]):
+            sent += 1
     return sent

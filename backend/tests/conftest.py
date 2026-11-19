@@ -139,6 +139,21 @@ def valid_form(**over) -> dict:
     return form
 
 
+def set_contact_email(email: str, company_id: int | None = None) -> None:
+    """Đổi email người liên hệ chính (đăng ký tạo sẵn = email đăng nhập) để test email gửi người liên hệ, không gửi email đăng nhập."""
+    from sqlalchemy import select
+
+    from app.models import Contact
+
+    with dbmod.new_session() as db:
+        stmt = select(Contact).where(Contact.is_primary.is_(True)).order_by(Contact.id)
+        if company_id:
+            stmt = stmt.where(Contact.company_id == company_id)
+        c = db.scalars(stmt).first()
+        c.email = email
+        db.commit()
+
+
 def register(client, **over) -> int:
     """Gửi form đăng ký, trả về id khách hàng vừa tạo."""
     from sqlalchemy import select

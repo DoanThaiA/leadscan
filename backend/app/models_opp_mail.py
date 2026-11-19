@@ -1,6 +1,7 @@
 """Nhật ký gửi phiếu cơ hội cho khách hàng qua email (admin chọn người nhận ở trang phiếu cơ hội).
 
-OpportunityEmail   1 dòng = 1 email gửi 1 tài khoản thành viên về 1 cơ hội
+OpportunityEmail   1 dòng = 1 email gửi 1 người liên hệ (contacts) của doanh nghiệp thành viên về 1 cơ hội
+  member_user_id: chỉ có ở các dòng cũ (trước khi chuyển sang gửi người liên hệ) — dòng mới để trống
   status: queued (đã xếp hàng) → sent (gửi được) | failed (Resend/SMTP lỗi, xem error)
 Email chỉ chứa phần xem trước công khai của phiếu (không tên bên có nhu cầu, không đầu mối, không chi tiết).
 """

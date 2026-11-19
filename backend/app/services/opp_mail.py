@@ -1,4 +1,6 @@
-"""Gửi phiếu cơ hội cho khách hàng (tài khoản thành viên) qua email — admin chọn người nhận ở trang phiếu.
+"""Gửi phiếu cơ hội cho khách hàng qua email — admin chọn NGƯỜI LIÊN HỆ của doanh nghiệp thành viên ở trang phiếu.
+
+Người nhận là email trong mục Người liên hệ của khách hàng (bảng contacts), không phải email đăng nhập tài khoản thành viên.
 
 Email chỉ có PHẦN XEM TRƯỚC (giống người chưa mua thấy trong cổng thành viên): tiêu đề, tóm tắt, ngành, khu vực,
 quy mô, giá trị, hạn chót, số lượt còn lại, giá phiếu theo điểm phù hợp RIÊNG của doanh nghiệp nhận.
@@ -12,7 +14,9 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import utcnow
-from app.models import MemberUser, Opportunity
+from sqlalchemy import select
+
+from app.models import Company, MemberUser, Opportunity
 from app.models_opp_mail import OpportunityEmail
 from app.services import catalog, mail_layout
 from app.services.mail_layout import BRAND, BRAND_SOFT, INK, LINE, MUTED, esc
@@ -22,6 +26,11 @@ log = logging.getLogger("leadscan.opp_mail")
 
 MAX_RECIPIENTS = 100  # mỗi lần bấm gửi
 MAX_NOTE = 1000
+
+
+def is_member(db: Session, company_id: int) -> bool:
+    """Doanh nghiệp còn ít nhất 1 tài khoản thành viên hoạt động (email dẫn về cổng thành viên)."""
+    return bool(db.scalar(select(MemberUser.id).where(MemberUser.company_id == company_id, MemberUser.is_active).limit(1)))
 
 
 def _pts(n: int) -> str:
@@ -58,11 +67,11 @@ def _facts(o: Opportunity, today: date) -> list[tuple[str, str]]:
     return rows
 
 
-def render(db: Session, o: Opportunity, user: MemberUser, note: str = "", cfg: Settings | None = None) -> tuple[str, str, str]:
-    """(tiêu đề, bản chữ, bản HTML) của email gửi 1 cơ hội cho 1 tài khoản thành viên."""
+def render(db: Session, o: Opportunity, company: Company, name: str, note: str = "", cfg: Settings | None = None) -> tuple[str, str, str]:
+    """(tiêu đề, bản chữ, bản HTML) của email gửi 1 cơ hội cho 1 người liên hệ của doanh nghiệp thành viên."""
     cfg = cfg or get_settings()
     today = date.today()
-    company = user.company
+    name = (name or "").strip() or "Quý khách"
     um = catalog.user_match(db, company.id, o.id)
     score = um.score if um else 0
     price = price_of(o, score, urgency_of(o, today))
@@ -82,7 +91,7 @@ def render(db: Session, o: Opportunity, user: MemberUser, note: str = "", cfg: S
         subject = subject[:119] + "…"
 
     # ---------- bản chữ
-    text = [f"Chào {user.full_name},", "", f"LeadScan gửi {company.name} một cơ hội kinh doanh có thể phù hợp:", ""]
+    text = [f"Chào {name},", "", f"LeadScan gửi {company.name} một cơ hội kinh doanh có thể phù hợp:", ""]
     if note:
         text += ["LỜI NHẮN TỪ LEADSCAN", note, ""]
     text += [f"{title} ({o.code})", ""]
@@ -123,7 +132,7 @@ def render(db: Session, o: Opportunity, user: MemberUser, note: str = "", cfg: S
     card.append("</div>")
 
     inner = [
-        f'<p style="margin:0 0 12px">Chào <b>{esc(user.full_name)}</b>,</p>',
+        f'<p style="margin:0 0 12px">Chào <b>{esc(name)}</b>,</p>',
         f'<p style="margin:0 0 18px;line-height:1.6">LeadScan gửi <b>{esc(company.name)}</b> một cơ hội kinh doanh có thể phù hợp với doanh nghiệp của bạn.</p>',
     ]
     if note:
@@ -154,13 +163,16 @@ def send_one(db: Session, email_id: int) -> str:
     if not e or e.status != "queued":
         return e.status if e else ""
     o = db.get(Opportunity, e.opportunity_id)
-    user = db.get(MemberUser, e.member_user_id) if e.member_user_id else None
-    reason = "Tài khoản thành viên không còn hoạt động." if not user or not user.is_active else (can_send(o) if o else "Phiếu đã bị xoá.")
+    company = db.get(Company, e.company_id) if e.company_id else None
+    reason = (
+        "Doanh nghiệp không còn tài khoản thành viên hoạt động." if not company or not is_member(db, company.id)
+        else (can_send(o) if o else "Phiếu đã bị xoá.")
+    )
     if reason:
         e.status, e.error = "failed", reason
         db.commit()
         return "failed"
-    subject, text, html = render(db, o, user, e.note, cfg)
+    subject, text, html = render(db, o, company, e.recipient_name, e.note, cfg)
     ok = notify.send_mail(cfg, subject, text, to=e.email, reply_to=cfg.notify_email or "", html=html)
     if ok:
         e.status, e.error, e.sent_at = "sent", "", utcnow()
