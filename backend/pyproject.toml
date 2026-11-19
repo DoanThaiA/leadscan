@@ -19,7 +19,6 @@ dependencies = [
     "boto3>=1.35",
     "pillow>=11",
     "openpyxl>=3.1",
-    "anthropic>=1.0",
     "pdfplumber>=0.11",
     "dnspython>=2.6",
 ]

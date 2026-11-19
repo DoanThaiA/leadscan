@@ -53,6 +53,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("LEADSCAN_MEMBERSHIP_FEE", "10000000")
     monkeypatch.setenv("LEADSCAN_MEMBERSHIP_POINTS", "10000000")
     monkeypatch.setenv("COHERE_API_KEY", "")  # test không gọi Cohere thật (dùng vector hash hoặc respx giả lập)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "")  # test không gọi DeepSeek thật
     _clear_caches()
     from app import models, worker  # noqa: F401
 

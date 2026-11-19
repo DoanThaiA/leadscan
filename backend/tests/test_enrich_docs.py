@@ -247,7 +247,7 @@ def test_model_tier_is_off_by_default_and_cached_when_on(listed, monkeypatch):
         return ([
             {"ho_ten": "Nguyễn Văn An", "chuc_danh": "Chủ tịch HĐQT", "nhom": "hdqt", "tu_ngay": None, "den_ngay": None},
             {"ho_ten": "Phạm Minh Đức", "chuc_danh": "Tổng Giám đốc", "nhom": "bdh", "tu_ngay": "2024-01-01", "den_ngay": None},
-        ], 1200, 150)
+        ], 1200, 150, "command-a-plus-05-2026")
 
     monkeypatch.setattr(llm, "call_model", fake_call)
     r = upload(admin, plain, file_name="bc.txt", source_url="https://congty.vn/a.txt")

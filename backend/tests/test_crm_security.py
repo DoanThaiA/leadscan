@@ -12,6 +12,7 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 
+from app.ai import Reply
 from app.config import get_settings
 from app.routes import member_crm
 from app.services import crm_ai
@@ -26,7 +27,7 @@ def gold_15m(monkeypatch):
     monkeypatch.setenv("LEADSCAN_GOLD_TOPUP_THRESHOLD", "15000000")
     monkeypatch.setenv("LEADSCAN_CRM_AI_ENABLED", "true")
     get_settings.cache_clear()
-    monkeypatch.setattr(crm_ai, "call_model", lambda s, p, e: ("nháp", "claude-opus-5-5", 10, 10))
+    monkeypatch.setattr(crm_ai, "call_model", lambda s, p: Reply("nháp", "cohere", "command-a-plus-05-2026", 10, 10))
     yield
     get_settings.cache_clear()
 

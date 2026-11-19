@@ -88,10 +88,6 @@ def budget_out(db: Session, company_id: int, cfg: Settings | None = None) -> dic
     }
 
 
-def cost_of(tin: int, tout: int, cfg: Settings) -> float:
-    return (tin * cfg.crm_ai_price_in + tout * cfg.crm_ai_price_out) / 1_000_000
-
-
 # ------------------------------------------------------------------ dữ liệu gửi cho mô hình (chỉ dữ liệu doanh nghiệp)
 
 OPP_FIELDS = (
@@ -159,42 +155,17 @@ def build_prompt(db: Session, lead: CrmLead, kind: str, channel: str = "email", 
 # ------------------------------------------------------------------ gọi mô hình
 
 
-def call_model(system: str, prompt: str, effort: str) -> tuple[str, str, int, int]:
-    """Gọi Claude. Trả về (văn bản, model đã trả lời, input_tokens, output_tokens). Tách riêng để test thay thế được."""
-    import anthropic
+def call_model(system: str, prompt: str):
+    """Gọi AI (Cohere → DeepSeek). Trả về app.ai.Reply. Tách riêng để test thay thế được."""
+    from app import ai
 
-    cfg = get_settings()
-    client = anthropic.Anthropic(timeout=90.0, max_retries=2)
     try:
-        resp = client.beta.messages.create(
-            model=cfg.crm_ai_model,
-            max_tokens=4000,
-            system=system,
-            messages=[{"role": "user", "content": prompt}],
-            output_config={"effort": effort},
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",  # bị bộ lọc an toàn từ chối → API tự chạy lại trên model dự phòng
-        )
-    except anthropic.AuthenticationError as e:
-        raise AiError("Khoá ANTHROPIC_API_KEY không hợp lệ hoặc chưa cấu hình.") from e
-    except anthropic.RateLimitError as e:
-        raise AiError("Dịch vụ AI đang quá tải, thử lại sau ít phút.") from e
-    except anthropic.APIStatusError as e:
-        raise AiError(f"Dịch vụ AI lỗi {e.status_code}.") from e
-    except anthropic.APIConnectionError as e:
-        raise AiError("Không kết nối được dịch vụ AI.") from e
-    except anthropic.AnthropicError as e:
-        raise AiError("Dịch vụ AI lỗi.") from e
-    except TypeError as e:  # SDK ném TypeError (không phải AnthropicError) khi máy chủ chưa có khoá / thông tin xác thực
-        if "authentication" not in str(e):
-            raise
-        raise AiError("Máy chủ chưa cấu hình khoá ANTHROPIC_API_KEY cho trợ lý AI.") from e
-    if resp.stop_reason == "refusal":
-        raise AiError("AI từ chối xử lý nội dung này.")
-    text = "".join(b.text for b in resp.content if b.type == "text").strip()
-    if not text:
+        rep = ai.generate(system, prompt, max_tokens=4000, timeout=90.0)
+    except ai.AiError as e:
+        raise AiError(str(e)) from e
+    if not rep.text:
         raise AiError("AI không trả về nội dung.")
-    return text, resp.model, resp.usage.input_tokens, resp.usage.output_tokens
+    return rep
 
 
 def run(db: Session, lead: CrmLead, member: MemberUser, kind: str, channel: str = "email", note: str = "") -> CrmAiRun:
@@ -211,18 +182,17 @@ def run(db: Session, lead: CrmLead, member: MemberUser, kind: str, channel: str 
     add_hit(db, key)
     db.commit()
     system, prompt = build_prompt(db, lead, kind, channel, note)
-    r = CrmAiRun(company_id=lead.company_id, lead_id=lead.id, member_id=member.id, kind=kind, model=cfg.crm_ai_model)
+    r = CrmAiRun(company_id=lead.company_id, lead_id=lead.id, member_id=member.id, kind=kind, model=cfg.cohere_chat_model if cfg.cohere_api_key else cfg.deepseek_model)
     try:
-        # tóm tắt là việc đơn giản → effort thấp; soạn nội dung cần văn hay hơn → trung bình
-        text, model, tin, tout = call_model(system, prompt, "low" if kind == "summary" else "medium")
+        rep = call_model(system, prompt)
     except AiError as e:
         r.error = str(e)[:300]
         db.add(r)
         db.commit()
         log.warning("CRM AI %s lead %s lỗi: %s", kind, lead.id, e)
         raise HTTPException(502, str(e)) from None
-    r.result, r.model, r.input_tokens, r.output_tokens = text, model, tin, tout
-    r.cost_usd = cost_of(tin, tout, cfg)
+    r.result, r.model, r.input_tokens, r.output_tokens = rep.text, rep.model, rep.input_tokens, rep.output_tokens
+    r.cost_usd = rep.cost_usd
     db.add(r)
     crm.log(db, lead, member, "ai", f"AI: {'tóm tắt công ty' if kind == 'summary' else 'soạn tin mời'}")
     db.commit()

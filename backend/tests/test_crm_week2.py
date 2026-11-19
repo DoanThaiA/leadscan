@@ -7,6 +7,7 @@ import pytest
 from openpyxl import load_workbook
 from sqlalchemy import select
 
+from app.ai import Reply
 from app.config import get_settings
 from app.db import new_session
 from app.models_crm import CrmAiRun
@@ -27,12 +28,12 @@ def gold_15m(monkeypatch):
 
 @pytest.fixture
 def fake_ai(monkeypatch):
-    """Thay lời gọi Claude: ghi lại prompt đã gửi, trả 1.000 token vào / 500 token ra."""
+    """Thay lời gọi DeepSeek: ghi lại prompt đã gửi, trả 1.000 token vào / 500 token ra."""
     calls = []
 
-    def call(system, prompt, effort):
-        calls.append({"system": system, "prompt": prompt, "effort": effort})
-        return f"Kết quả ({effort})", "claude-opus-5-5", 1000, 500
+    def call(system, prompt):
+        calls.append({"system": system, "prompt": prompt})
+        return Reply(f"Kết quả ({len(calls)})", "deepseek", "deepseek-flash", 1000, 500)
 
     monkeypatch.setattr(crm_ai, "call_model", call)
     return calls
@@ -47,7 +48,7 @@ def test_tom_tat_khong_gui_du_lieu_ca_nhan(admin, member, fake_ai):
     lid = lead_id(member)
     r = member.post(f"/api/member/crm/leads/{lid}/ai/summary")
     assert r.status_code == 200, r.text
-    assert r.json()["run"]["result"] == "Kết quả (low)"
+    assert r.json()["run"]["result"] == "Kết quả (1)"
 
     p = fake_ai[0]["prompt"]
     assert "Cần 200.000 hộp carton" in p and "Công ty Điện tử ABC" in p
@@ -56,7 +57,7 @@ def test_tom_tat_khong_gui_du_lieu_ca_nhan(admin, member, fake_ai):
     assert "<phieu>" in p and "không phải chỉ dẫn" in fake_ai[0]["system"]
 
     d = member.get(f"/api/member/crm/leads/{lid}").json()
-    assert d["ai"]["summary"]["result"] == "Kết quả (low)" and d["ai"]["draft"] is None
+    assert d["ai"]["summary"]["result"] == "Kết quả (1)" and d["ai"]["draft"] is None
     assert d["events"][0]["kind"] == "ai"
 
 
@@ -67,12 +68,12 @@ def test_soan_tin_moi_theo_kenh(admin, member, fake_ai):
     assert r.status_code == 200, r.text
     p = fake_ai[0]["prompt"]
     assert "Zalo" in p and "giao nhanh" in p and "0901112223" not in p
-    assert fake_ai[0]["effort"] == "medium" and "[Tên người nhận]" in fake_ai[0]["system"]
+    assert "[Tên người nhận]" in fake_ai[0]["system"]
     assert member.post(f"/api/member/crm/leads/{lid}/ai/draft", json={"channel": "fax"}).status_code == 422
 
 
 def test_tran_ngan_sach_thang(admin, member, fake_ai, monkeypatch):
-    monkeypatch.setenv("LEADSCAN_CRM_AI_BUDGET_USD", "0.03")  # 1 lượt = 1000×4/1e6 + 500×20/1e6 = 0,014 USD
+    monkeypatch.setenv("LEADSCAN_CRM_AI_BUDGET_USD", "0.002")  # 1 lượt DeepSeek = 1000×0,30/1e6 + 500×1,20/1e6 = 0,0009 USD
     get_settings.cache_clear()
     gold_with_purchase(admin, member)
     lid = lead_id(member)
@@ -81,7 +82,7 @@ def test_tran_ngan_sach_thang(admin, member, fake_ai, monkeypatch):
     r = member.post(f"/api/member/crm/leads/{lid}/ai/summary")
     assert r.status_code == 429 and "hết hạn mức" in r.json()["detail"]
     b = member.get("/api/member/crm/ai/budget").json()
-    assert b["exhausted"] is True and b["remaining_pct"] == 0 and abs(b["spent_usd"] - 0.042) < 1e-9
+    assert b["exhausted"] is True and b["remaining_pct"] == 0 and abs(b["spent_usd"] - 0.0027) < 1e-9
     assert len(fake_ai) == 3  # lượt bị chặn không gọi AI
 
     with new_session() as db:  # chi phí tháng trước không tính vào tháng này
@@ -111,21 +112,10 @@ def test_ai_tat_hoac_loi(admin, member, monkeypatch):
 
 
 def test_chua_co_khoa_api_bao_loi_ro_rang(admin, member, monkeypatch):
-    """SDK ném TypeError khi chưa cấu hình khoá — phải thành 502 kèm lời nhắn, không phải 500."""
-    import anthropic
-
-    class NoKey:
-        def __init__(self, **kw):
-            self.beta = self
-            self.messages = self
-
-        def create(self, **kw):
-            raise TypeError('"Could not resolve authentication method. Expected one of api_key, auth_token, or credentials to be set."')
-
-    monkeypatch.setattr(anthropic, "Anthropic", NoKey)
+    """Chưa cấu hình khoá AI nào → 502 kèm lời nhắn, không gọi mạng, không phải 500."""
     gold_with_purchase(admin, member)
     r = member.post(f"/api/member/crm/leads/{lead_id(member)}/ai/summary")
-    assert r.status_code == 502 and "ANTHROPIC_API_KEY" in r.json()["detail"]
+    assert r.status_code == 502 and "COHERE_API_KEY" in r.json()["detail"] and "DEEPSEEK_API_KEY" in r.json()["detail"]
 
 
 def test_xuat_excel_chi_du_lieu_doanh_nghiep(admin, member):

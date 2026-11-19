@@ -8,7 +8,7 @@ lịch sử, xuất Excel (chỉ dữ liệu doanh nghiệp), 2 nút AI (tóm t�
 - [ ] Chạy migration trên máy chủ: `alembic upgrade head` (thêm 5 bảng `crm_*`, không sửa bảng cũ).
 - [ ] Pháp chế đồng ý gửi **dữ liệu doanh nghiệp** (nội dung phiếu không kèm đầu mối, hồ sơ MST kho A, hồ sơ doanh nghiệp của khách) ra API Claude.
       Chưa đồng ý thì để `LEADSCAN_CRM_AI_ENABLED=false`: CRM vẫn chạy đủ, chỉ ẩn kết quả AI.
-- [ ] Nếu bật AI: đặt `ANTHROPIC_API_KEY`, `LEADSCAN_CRM_AI_ENABLED=true`. Kiểm tra `LEADSCAN_CRM_AI_BUDGET_USD` (mặc định 22 USD/khách/tháng)
+- [ ] Nếu bật AI: đặt `COHERE_API_KEY` (chính) và `DEEPSEEK_API_KEY` (dự phòng), `LEADSCAN_CRM_AI_ENABLED=true`. Kiểm tra `LEADSCAN_CRM_AI_BUDGET_USD` (mặc định 22 USD/khách/tháng)
       và giá `LEADSCAN_CRM_AI_PRICE_IN/OUT` khớp model đang dùng.
 - [ ] `celery beat` đang chạy (email nhắc việc / báo cáo tuần) và đã cấu hình gửi mail (Resend hoặc SMTP).
 

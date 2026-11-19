@@ -14,7 +14,6 @@ Nội dung thư là dữ liệu không tin cậy: prompt dặn AI bỏ qua mọi
 (cắt độ dài, chỉ nhận ngành / khu vực trong danh sách) và chỉ tạo phiếu NHÁP — admin duyệt trước khi mở bán.
 """
 
-import json
 import logging
 import re
 from datetime import date, datetime, timedelta
@@ -228,39 +227,14 @@ def email_prompt(e: InboundEmail) -> str:
     return "<email>\n" + "\n".join(h for h in head if h) + "\n\n" + body + "\n</email>"
 
 
-def call_model(text: str, cfg: Settings) -> tuple[dict, int, int]:
-    """Gọi Claude (structured output). Trả (JSON, input_tokens, output_tokens). Tách riêng để test thay thế."""
-    import anthropic
+def call_model(text: str, cfg: Settings):
+    """Gọi AI (Cohere → DeepSeek, JSON theo schema). Trả app.ai.Reply (JSON ở .data). Tách riêng để test thay thế."""
+    from app import ai
 
-    client = anthropic.Anthropic(timeout=120.0, max_retries=2)
     try:
-        resp = client.messages.create(
-            model=cfg.gmail_ai_model,
-            max_tokens=8000,
-            system=SYSTEM,
-            messages=[{"role": "user", "content": text}],
-            output_config={"effort": cfg.gmail_ai_effort, "format": {"type": "json_schema", "schema": schema()}},
-        )
-    except anthropic.AuthenticationError as e:
-        raise AiError("Khoá ANTHROPIC_API_KEY không hợp lệ hoặc chưa cấu hình.") from e
-    except anthropic.BadRequestError as e:
-        raise AiError(f"Yêu cầu AI không hợp lệ: {e.message}") from e
-    except anthropic.RateLimitError as e:
-        raise AiError("AI vượt giới hạn tốc độ — sẽ thử lại.", retryable=True) from e
-    except anthropic.APIStatusError as e:
-        raise AiError(f"API AI lỗi {e.status_code}: {e.message}", retryable=e.status_code >= 500) from e
-    except anthropic.APIConnectionError as e:
-        raise AiError("Không kết nối được API AI — sẽ thử lại.", retryable=True) from e
-    if resp.stop_reason == "refusal":
-        raise AiError("AI từ chối xử lý thư này.")
-    if resp.stop_reason == "max_tokens":
-        raise AiError("Kết quả AI quá dài, bị cắt.")
-    body = next((b.text for b in resp.content if b.type == "text"), "")
-    try:
-        data = json.loads(body)
-    except json.JSONDecodeError as ex:
-        raise AiError("AI trả về JSON không hợp lệ.") from ex
-    return data, resp.usage.input_tokens, resp.usage.output_tokens
+        return ai.generate(SYSTEM, text, schema=schema(), max_tokens=8000, timeout=120.0)
+    except ai.AiError as e:
+        raise AiError(str(e), retryable=e.retryable) from e
 
 
 def _opt(v: object, n: int) -> str:
@@ -424,10 +398,10 @@ def process(db: Session, email_id: int) -> str:
         db.commit()
         return "new"
     try:
-        raw, tin, tout = call_model(email_prompt(e), cfg)
-        e.ai_model, e.ai_input_tokens, e.ai_output_tokens = cfg.gmail_ai_model, tin, tout
-        e.ai_cost_usd = (e.ai_cost_usd or 0) + (tin * cfg.gmail_ai_price_in + tout * cfg.gmail_ai_price_out) / 1_000_000
-        e.ai_json = clean_ai(raw)
+        rep = call_model(email_prompt(e), cfg)
+        e.ai_model, e.ai_input_tokens, e.ai_output_tokens = rep.model[:60], rep.input_tokens, rep.output_tokens
+        e.ai_cost_usd = (e.ai_cost_usd or 0) + rep.cost_usd
+        e.ai_json = clean_ai(rep.data)
     except AiError as ex:
         if ex.retryable:  # lượt quét định kỳ sẽ thử lại
             e.status, e.error = "new", str(ex)[:500]

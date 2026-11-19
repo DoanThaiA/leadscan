@@ -1,14 +1,12 @@
-"""Tầng 3 bóc tách (B01): Claude đọc văn bản báo cáo quản trị và trả danh sách người + chức danh theo JSON schema.
+"""Tầng 3 bóc tách (B01): AI (Cohere, dự phòng DeepSeek — app/ai.py) đọc văn bản báo cáo quản trị và trả danh sách người + chức danh theo JSON schema.
 
 • TẮT mặc định (LEADSCAN_ENRICH_LLM_ENABLED). Chỉ gửi VĂN BẢN đã cắt mục người nội bộ / người có liên quan
   (governance.text_for_model) — không gửi file PDF gốc.
 • Lưu đệm theo (mã băm văn bản, tác vụ + phiên bản prompt, model) trong kho B — cùng nội dung không gọi lại.
-• Bật fallback phía máy chủ ("fallbacks": "default"): nếu model bị bộ lọc an toàn từ chối, API tự chạy lại trên model
-  dự phòng trong cùng request. Từ chối hẳn (stop_reason "refusal") → coi như tầng 3 thất bại, tài liệu vào hàng chờ duyệt.
+• Cohere ép đúng JSON schema; DeepSeek dự phòng chỉ bảo đảm JSON hợp lệ — mục sai mẫu bị bỏ; lỗi → tài liệu vào hàng chờ duyệt.
 """
 
 import hashlib
-import json
 import logging
 
 from sqlalchemy import select
@@ -68,62 +66,32 @@ def _hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def call_model(text: str) -> tuple[list[dict], int, int]:
-    """Gọi Claude. Trả về (people, input_tokens, output_tokens). Tách riêng để test thay thế được."""
-    import anthropic
+def call_model(text: str) -> tuple[list[dict], int, int, str]:
+    """Gọi AI (Cohere → DeepSeek). Trả về (people, input_tokens, output_tokens, model). Tách riêng để test thay thế được."""
+    from app import ai
 
-    cfg = get_settings()
-    client = anthropic.Anthropic(timeout=180.0, max_retries=2)
     try:
-        resp = client.beta.messages.create(
-            model=cfg.enrich_llm_model,
-            max_tokens=16000,
-            system=SYSTEM,
-            messages=[{"role": "user", "content": f"<van_ban>\n{text}\n</van_ban>"}],
-            output_config={
-                "effort": cfg.enrich_llm_effort,
-                "format": {"type": "json_schema", "schema": SCHEMA},
-            },
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-        )
-    except anthropic.BadRequestError as e:
-        raise LlmError(f"Yêu cầu không hợp lệ: {e.message}") from e
-    except anthropic.AuthenticationError as e:
-        raise LlmError("Khoá ANTHROPIC_API_KEY không hợp lệ hoặc chưa cấu hình.") from e
-    except anthropic.RateLimitError as e:
-        raise LlmError("Vượt giới hạn tốc độ của API — thử lại sau.") from e
-    except anthropic.APIStatusError as e:
-        raise LlmError(f"API lỗi {e.status_code}: {e.message}") from e
-    except anthropic.APIConnectionError as e:
-        raise LlmError("Không kết nối được API mô hình.") from e
-
-    if resp.stop_reason == "refusal":
-        raise LlmError("Mô hình từ chối xử lý tài liệu này.")
-    if resp.stop_reason == "max_tokens":
-        raise LlmError("Kết quả quá dài, bị cắt.")
-    body = next((b.text for b in resp.content if b.type == "text"), "")
-    try:
-        data = json.loads(body)
-    except json.JSONDecodeError as e:
-        raise LlmError("Mô hình trả về JSON không hợp lệ.") from e
-    return list(data.get("people") or []), resp.usage.input_tokens, resp.usage.output_tokens
+        rep = ai.generate(SYSTEM, f"<van_ban>\n{text}\n</van_ban>", schema=SCHEMA, max_tokens=8000, timeout=180.0)
+    except ai.AiError as e:
+        raise LlmError(str(e)) from e
+    people = (rep.data or {}).get("people")
+    return [p for p in people if isinstance(p, dict)] if isinstance(people, list) else [], rep.input_tokens, rep.output_tokens, rep.model
 
 
 def extract_people(db: Session, text: str) -> list[dict] | None:
     """Tầng 3 có lưu đệm. None nếu tầng 3 tắt; ném LlmError nếu gọi thất bại."""
     if not enabled() or not text.strip():
         return None
-    model = get_settings().enrich_llm_model
     h = _hash(text)
-    hit = db.scalar(select(LlmCache).where(LlmCache.content_hash == h, LlmCache.task == TASK, LlmCache.model == model))
+    # kết quả lưu đệm dùng lại được bất kể model nào đã trả lời (Cohere hay DeepSeek dự phòng)
+    hit = db.scalar(select(LlmCache).where(LlmCache.content_hash == h, LlmCache.task == TASK).order_by(LlmCache.id.desc()).limit(1))
     if hit:
         return list(hit.result.get("people") or [])
-    people, tin, tout = call_model(text)
-    db.add(LlmCache(content_hash=h, task=TASK, model=model, result={"people": people}, input_tokens=tin, output_tokens=tout))
+    people, tin, tout, model = call_model(text)
+    db.add(LlmCache(content_hash=h, task=TASK, model=model[:60], result={"people": people}, input_tokens=tin, output_tokens=tout))
     try:
         db.commit()
     except IntegrityError:  # worker khác vừa lưu cùng nội dung
         db.rollback()
-    log.info("LLM bóc tách %s người (%s in / %s out tokens)", len(people), tin, tout)
+    log.info("LLM (%s) bóc tách %s người (%s in / %s out tokens)", model, len(people), tin, tout)
     return people

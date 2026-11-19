@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth import current_user, require_admin
+from app import ai
 from app.config import get_settings
 from app.db import get_db, utcnow
 from app.models import AdminUser
@@ -56,7 +57,7 @@ def meta(db: Session = Depends(get_db), _: AdminUser = Depends(current_user)):
     counts = dict(db.execute(select(InboundEmail.status, func.count()).group_by(InboundEmail.status)).all())
     return {
         "statuses": INBOUND_STATUSES, "counts": counts, "industries": cfg.gmail_industries,
-        "webhook_enabled": bool(cfg.gmail_webhook_secret), "ai_enabled": cfg.gmail_ai_enabled, "ai_model": cfg.gmail_ai_model,
+        "webhook_enabled": bool(cfg.gmail_webhook_secret), "ai_enabled": cfg.gmail_ai_enabled, "ai_model": ai.describe(),
         "ai_month_cost_usd": round(gmail_ingest.month_cost(db), 4), "ai_budget_usd": cfg.gmail_ai_budget_usd,
         "min_confidence": cfg.gmail_min_confidence, "keep_days": cfg.gmail_body_keep_days,
         "last_received_at": _iso(db.scalar(select(func.max(InboundEmail.created_at)))),

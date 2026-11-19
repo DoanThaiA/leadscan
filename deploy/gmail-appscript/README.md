@@ -6,7 +6,7 @@ Thư khách gửi vào Gmail được Apps Script đẩy sang LeadScan cứ 5 ph
 Gmail ──(Apps Script, 5 phút)──► POST /api/webhooks/gmail ──► inbound_emails
                                    (chữ ký HMAC-SHA256)              │ worker
                                                                      ▼
-            lọc sơ bộ (noreply, thư ngắn, người gửi bị chặn) → AI (claude-haiku-5-5) → JSON
+            lọc sơ bộ (noreply, thư ngắn, người gửi bị chặn) → AI (Cohere Command A+, dự phòng deepseek-flash) → JSON
                                                                      ▼
         đúng lĩnh vực + chắc chắn → phiếu NHÁP  ·  không chắc → Cần xem lại  ·  không phải / ngành khác → Đã loại
 ```
@@ -25,7 +25,7 @@ Gmail ──(Apps Script, 5 phút)──► POST /api/webhooks/gmail ──► i
 2. Đặt khoá vào `.env`:
    ```
    LEADSCAN_GMAIL_WEBHOOK_SECRET=<khoá vừa tạo>
-   # Bật AI khi pháp chế đã đồng ý gửi nội dung thư ra API Claude (cần ANTHROPIC_API_KEY):
+   # Bật AI khi pháp chế đã đồng ý gửi nội dung thư ra API AI (cần COHERE_API_KEY và/hoặc DEEPSEEK_API_KEY):
    LEADSCAN_GMAIL_AI_ENABLED=true
    LEADSCAN_GMAIL_INDUSTRIES=["Bao bì & in ấn"]
    ```

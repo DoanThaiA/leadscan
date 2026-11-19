@@ -45,6 +45,10 @@ function MatchPageInner() {
   const boardRef = useRef<HTMLDivElement>(null);
   const [seen, setSeen] = useState<Understood | null>(null);
   const [copied, setCopied] = useState(false);
+  // "AI viết lại": giữ bản khách tự viết để hoàn tác
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiPrev, setAiPrev] = useState<string | null>(null);
+  const [aiErr, setAiErr] = useState("");
 
   // Xem trước hệ thống hiểu mô tả thế nào (sản phẩm, địa điểm) khi khách đang gõ
   const regionsKey = c?.regions.join("|") ?? "";
@@ -102,6 +106,32 @@ function MatchPageInner() {
     reloadNotices();
   }, [loadReqs, reloadNotices]);
 
+  async function aiRewrite() {
+    if (!c || aiBusy) return;
+    if (note.trim().length < 5) {
+      setAiErr("Hãy ghi vài từ về sản phẩm và khách hàng bạn muốn tìm, rồi bấm AI viết lại.");
+      return;
+    }
+    setAiBusy(true);
+    setAiErr("");
+    setMsg(null);
+    try {
+      const r = await mapi.post<{ note: string }>("/search-requests/rewrite", { ...c, note });
+      setAiPrev(note);
+      setNote(r.note);
+    } catch (err) {
+      setAiErr(errMsg(err));
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  function aiUndo() {
+    if (aiPrev === null) return;
+    setNote(aiPrev);
+    setAiPrev(null);
+  }
+
   const set = (patch: Partial<Criteria>) => { setC((prev) => (prev ? { ...prev, ...patch } : prev)); setMsg(null); };
 
   async function submit(e: FormEvent) {
@@ -117,6 +147,7 @@ function MatchPageInner() {
       const r = await mapi.post<SearchReq>("/search-requests", { ...c, note });
       setReqs((prev) => [r, ...(prev ?? []).filter((x) => x.id !== r.id)]);
       setNote("");
+      setAiPrev(null);
       polls.current = 0;
       const n = r.match_count ?? 0;
       setMsg({
@@ -163,16 +194,36 @@ function MatchPageInner() {
 
         <div className="sf-grid">
           <div className="sf-note">
-            <label htmlFor="sr-note" className="mt-label"><Icon name="note" />Mô tả nhu cầu</label>
+            <div className="sf-note-head">
+              <label htmlFor="sr-note" className="mt-label"><Icon name="note" />Mô tả nhu cầu</label>
+              <button
+                type="button"
+                className="adm-btn sm sf-ai"
+                onClick={aiRewrite}
+                disabled={aiBusy || !c || !note.trim()}
+                title="AI viết lại yêu cầu của bạn cho đầy đủ, rõ ràng theo mẫu — bạn xem lại trước khi gửi"
+              >
+                <Icon name="spark" size={14} /> {aiBusy ? "AI đang viết lại…" : "AI viết lại"}
+              </button>
+            </div>
             <textarea
               id="sr-note"
               className="adm-input"
               maxLength={3000}
               value={note}
-              onChange={(e) => { setNote(e.target.value); setMsg(null); }}
+              readOnly={aiBusy}
+              aria-busy={aiBusy}
+              onChange={(e) => { setNote(e.target.value); setMsg(null); setAiErr(""); }}
               placeholder="Sản phẩm/dịch vụ bạn cung cấp, loại khách hàng cần tìm, số lượng, thị trường, thời gian… Ví dụ: Chúng tôi sản xuất bao PP dệt 25–50 kg, công suất 2 triệu bao/tháng. Cần tìm nhà nhập khẩu hoặc nhà máy phân bón, gạo, thức ăn chăn nuôi ở Châu Phi và Đông Nam Á, đơn hàng từ 1 container/tháng."
             />
             <div className="sr-count muted">{note.trim().length}/3000</div>
+            {aiPrev !== null ? (
+              <div className="sf-ai-note" role="status">
+                <span><Icon name="spark" size={13} /> Đã viết lại bằng AI — xem lại, sửa nếu cần rồi bấm tìm kiếm.</span>
+                <button type="button" className="adm-btn sm" onClick={aiUndo}>Hoàn tác</button>
+              </div>
+            ) : null}
+            {aiErr ? <div className="adm-alert" role="alert" style={{ marginTop: 8 }}>{aiErr}</div> : null}
             {seen ? (
               <div className="sf-seen" role="status">
                 <span><b>Sản phẩm:</b> {seen.products.length ? seen.products.join(", ") : <em>chưa nhận ra sản phẩm cụ thể — hãy ghi tên sản phẩm (vd: túi giữ nhiệt)</em>}</span>

@@ -7,6 +7,7 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import select
 
+from app.ai import Reply
 from app.config import get_settings
 from app.db import new_session, utcnow
 from app.models import Opportunity
@@ -102,7 +103,7 @@ def ai(monkeypatch, hook):
         state["calls"].append(text)
         if state["error"]:
             raise state["error"]
-        return dict(state["result"]), 1200, 300
+        return Reply("", "deepseek", "deepseek-flash", 1200, 300, data=dict(state["result"]))
 
     monkeypatch.setattr(gmail_ingest, "call_model", fake)
     return state

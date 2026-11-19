@@ -1,5 +1,6 @@
 """API cổng thành viên: /api/member/*"""
 
+import logging
 import re
 import secrets
 from datetime import timedelta
@@ -874,6 +875,34 @@ class UnderstandIn(BaseModel):
 def understand_search_request(body: UnderstandIn, _: MemberUser = Depends(current_member)):
     """Xem trước (khi khách đang gõ): hệ thống nhận ra sản phẩm, địa điểm nào trong mô tả."""
     return _understood(body.note, _norm_list(body.regions))
+
+
+class RewriteIn(MatchCriteria):
+    note: str = Field("", max_length=3000)
+
+
+@router.post("/search-requests/rewrite")
+def rewrite_search_request(body: RewriteIn, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
+    """Nút "AI viết lại": yêu cầu thô của khách → mô tả đầy đủ, rõ ràng theo mẫu (khách xem lại rồi mới gửi)."""
+    from app import ai
+    from app.services import search_ai
+
+    note = body.note.strip()
+    if len(note) < 5:
+        raise HTTPException(422, "Hãy ghi vài từ về sản phẩm và khách hàng bạn muốn tìm để AI viết lại.")
+    if not ai.configured():
+        raise HTTPException(503, "Trợ lý AI chưa được bật cho hệ thống.")
+    key = f"search-ai:{user.company_id}"
+    if rate_limited(db, key, get_settings().search_ai_rewrite_per_hour, timedelta(hours=1)):
+        raise HTTPException(429, "Bạn dùng AI viết lại hơi nhiều, vui lòng thử lại sau ít phút.")
+    add_hit(db, key)
+    db.commit()
+    try:
+        rep = search_ai.rewrite(note, body.cleaned())
+    except ai.AiError as e:
+        logging.getLogger("leadscan.ai").warning("AI viết lại yêu cầu (doanh nghiệp %s) lỗi: %s", user.company_id, e)
+        raise HTTPException(502, "AI đang bận, chưa viết lại được. Vui lòng thử lại sau ít phút hoặc tự sửa mô tả.") from None
+    return {"note": rep.text, "provider": rep.provider, "model": rep.model}
 
 
 @router.get("/search-requests")

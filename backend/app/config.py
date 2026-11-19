@@ -112,14 +112,10 @@ class Settings(BaseSettings):
     # ký HMAC-SHA256 bằng khoá này. Trống = tắt webhook (404).
     gmail_webhook_secret: str = ""
     gmail_webhook_max_kb: int = 512  # kích thước tối đa 1 thư gửi lên (Apps Script đã cắt thân thư ~60.000 ký tự)
-    # AI đọc thư → JSON cơ hội. TẮT mặc định: bật khi pháp chế đồng ý gửi nội dung thư khách ra API Claude.
-    # Tắt thì thư qua lọc sơ bộ vào "Cần xem lại" để admin tự tạo phiếu. Khoá: ANTHROPIC_API_KEY.
+    # AI đọc thư → JSON cơ hội. TẮT mặc định: bật khi pháp chế đồng ý gửi nội dung thư khách ra API AI nước ngoài.
+    # Tắt thì thư qua lọc sơ bộ vào "Cần xem lại" để admin tự tạo phiếu. Model: xem mục "AI sinh văn bản" bên dưới.
     gmail_ai_enabled: bool = False
-    gmail_ai_model: str = "claude-haiku-5-5"  # phân loại + trích xuất: model nhỏ là đủ
-    gmail_ai_effort: str = "low"
     gmail_ai_budget_usd: float = 10.0  # trần chi phí AI đọc thư / tháng; hết thì thư chờ tới tháng sau (hoặc nâng trần)
-    gmail_ai_price_in: float = 0.10  # USD / 1 triệu token — cập nhật khi đổi model
-    gmail_ai_price_out: float = 0.50
     # Lĩnh vực nhận cơ hội (tên ngành trong registration_form.INDUSTRIES). Thư là cơ hội nhưng ngoài lĩnh vực → loại.
     gmail_industries: list[str] = Field(default_factory=lambda: ["Bao bì & in ấn"])
     gmail_min_confidence: float = 0.6  # AI chắc chắn dưới mức này → "Cần xem lại", không tự tạo nháp
@@ -185,19 +181,29 @@ class Settings(BaseSettings):
     # không có → thư mục này trên máy chủ (trống = backend/data/enrich-raw). Giữ 12 tháng (N07).
     enrich_raw_dir: str = ""
     enrich_user_agent: str = "LeadScanBot/1.0 (+https://leadscan.net)"
-    # Tầng 3 bóc tách (B01): mô hình ngôn ngữ Claude cho tài liệu mà bảng + luật không đọc được. TẮT mặc định —
-    # bật chỉ khi pháp chế đồng ý gửi văn bản (đã cắt phần người nội bộ) ra API nước ngoài. Khoá: ANTHROPIC_API_KEY.
+    # Tầng 3 bóc tách (B01): mô hình ngôn ngữ cho tài liệu mà bảng + luật không đọc được. TẮT mặc định —
+    # bật chỉ khi pháp chế đồng ý gửi văn bản (đã cắt phần người nội bộ) ra API nước ngoài.
     enrich_llm_enabled: bool = False
-    enrich_llm_model: str = "claude-opus-5-5"
-    enrich_llm_effort: str = "low"  # low | medium | high — bóc tách danh sách là việc đơn giản
     # CRM Lite hạng Vàng — nút AI "Tóm tắt công ty" / "Soạn tin mời". TẮT mặc định như tầng 3 ở trên: chỉ gửi dữ liệu
-    # doanh nghiệp (không gửi tên/SĐT/email đầu mối) ra API Claude. Khoá: ANTHROPIC_API_KEY.
+    # doanh nghiệp (không gửi tên/SĐT/email đầu mối) ra API AI.
     crm_ai_enabled: bool = False
-    crm_ai_model: str = "claude-opus-5-5"
     crm_ai_budget_usd: float = 22.0  # trần chi phí AI mỗi doanh nghiệp / tháng (giá API thực)
-    # Giá USD / 1 triệu token (vào, ra) để tính chi phí từng lượt — cập nhật khi đổi model hoặc Anthropic đổi giá
-    crm_ai_price_in: float = 4.0
-    crm_ai_price_out: float = 20.0
+    # Nút "AI viết lại" mô tả yêu cầu tìm cơ hội (cổng thành viên): số lượt tối đa mỗi doanh nghiệp / giờ
+    search_ai_rewrite_per_hour: int = 20
+
+    # AI sinh văn bản (app/ai.py) cho mọi tính năng ở trên: Cohere trước, lỗi / hết lượt / quá tần suất → DeepSeek.
+    # Cohere dùng chung COHERE_API_KEY với embedding (khoá Trial: 1.000 lượt/tháng cho mọi endpoint, chat 20 lượt/phút).
+    cohere_chat_url: str = "https://api.cohere.com/v2/chat"
+    cohere_chat_model: str = "command-a-plus-05-2026"  # Command A+: model mạnh nhất của Cohere, đa ngôn ngữ, JSON theo schema
+    cohere_chat_monthly_limit: int = 400  # trần lượt chat / tháng — chừa phần còn lại của 1.000 lượt Trial cho embedding
+    cohere_price_in: float = 0.0  # USD / 1 triệu token — khoá Trial miễn phí; đổi khi lên khoá Production
+    cohere_price_out: float = 0.0
+    # DeepSeek (API định dạng OpenAI) — dự phòng khi Cohere không dùng được
+    deepseek_api_key: str = Field("", validation_alias=AliasChoices("DEEPSEEK_API_KEY", "LEADSCAN_DEEPSEEK_API_KEY"))
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-flash"  # rẻ nhất mà tốt nhất của DeepSeek; chạy ở chế độ tắt suy nghĩ
+    deepseek_price_in: float = 0.30  # USD / 1 triệu token (giá giờ cao điểm; ngoài giờ cao điểm bằng một nửa)
+    deepseek_price_out: float = 1.20
     crm_reminders_enabled: bool = True  # email nhắc việc 8:00 hằng ngày + báo cáo tuần thứ Hai
     # Chạy thử CRM với vài khách: mã khách hàng (LS-...) cách nhau dấu phẩy. Trống = mọi khách hạng Vàng đều dùng được.
     crm_pilot_codes: str = ""

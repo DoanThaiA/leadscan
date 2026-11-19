@@ -95,6 +95,10 @@ def cmd_diagnose(_args) -> int:
         _line(not cfg.cohere_monthly_limit or used < cfg.cohere_monthly_limit, "Embedding Cohere", f"{cfg.cohere_doc_model} / {cfg.cohere_query_model} — đã gọi {used}{limit} lần tháng này")
     else:
         _line(False, "Embedding Cohere", "chưa đặt COHERE_API_KEY — đang dùng vector hash (chỉ nên dùng khi chạy thử)")
+    from app import ai
+
+    chat = f" — chat Cohere đã gọi {usage.calls_this_month('cohere-chat')}/{cfg.cohere_chat_monthly_limit} lần tháng này" if cfg.cohere_api_key else ""
+    _line(bool(cfg.deepseek_api_key), "AI sinh văn bản", ai.describe() + chat + ("" if cfg.deepseek_api_key else " — chưa có DEEPSEEK_API_KEY để dự phòng"))
     with new_session() as db:
         print("Khách hàng theo trạng thái: " + (", ".join(f"{k}={v}" for k, v in counts.items()) or "(chưa có)"))
     return 0
