@@ -80,7 +80,7 @@ export interface CompanyProfile {
   signals: Signal[];
   /** điện thoại / email chung của doanh nghiệp */
   contacts?: { kind: "phone" | "fax" | "email"; value: string; source_code: string; source_name: string }[];
-  can: { people: boolean; evidence: boolean };
+  can: { people: boolean; evidence: boolean; add_people?: boolean };
   created_at: string;
 }
 

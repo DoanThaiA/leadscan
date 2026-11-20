@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 
 import { EnrichNav } from "@/components/admin/EnrichNav";
-import { Icon, Skeleton } from "@/components/admin/ui";
+import { Dialog, Field, Icon, Skeleton } from "@/components/admin/ui";
 import { api, errMsg } from "@/lib/admin/api";
 import { type CompanyProfile, type Evidence, type EnrichMeta, fmtValue, type Person, useEnrichMeta } from "@/lib/admin/enrich";
 import { fmtDate, fmtDateTime } from "@/lib/admin/format";
@@ -156,9 +156,12 @@ function InfoTab({ p, meta }: { p: CompanyProfile; meta: EnrichMeta }) {
 function PeopleTab({ p }: { p: CompanyProfile }) {
   const [people, setPeople] = useState<Person[] | null>(null);
   const [error, setError] = useState("");
-  useEffect(() => {
+  const [adding, setAdding] = useState(false);
+  const [notice, setNotice] = useState("");
+  const load = useCallback(() => {
     if (p.can.people) api.get<Person[]>(`/enrich/companies/${p.mst}/people`).then(setPeople, (e) => setError(errMsg(e)));
   }, [p.mst, p.can.people]);
+  useEffect(load, [load]);
 
   if (!p.can.people) return <div className="adm-empty"><Icon name="lock" /> Vai trò của bạn không được xem dữ liệu cá nhân (kho B).</div>;
   if (error) return <div className="adm-alert">{error}</div>;
@@ -168,9 +171,19 @@ function PeopleTab({ p }: { p: CompanyProfile }) {
   const showYear = people.some((x) => "nam_sinh" in x);
   return (
     <>
-      <p className="er-note" style={{ marginBottom: 12 }}><Icon name="lock" /><span>Dữ liệu cá nhân (kho B) — mỗi lần mở tab này được ghi vào nhật ký truy cập.</span></p>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", marginBottom: 12 }}>
+        <p className="er-note" style={{ margin: 0 }}><Icon name="lock" /><span>Dữ liệu cá nhân (kho B) — mỗi lần mở tab này được ghi vào nhật ký truy cập.</span></p>
+        {p.can.add_people ? <button className="adm-btn primary sm" onClick={() => { setNotice(""); setAdding(true); }}><Icon name="plus" size={14} /> Thêm người liên quan</button> : null}
+      </div>
+      {notice ? <div className="adm-alert ok" style={{ marginBottom: 12 }}>{notice}</div> : null}
+      <AddPersonDialog
+        open={adding}
+        mst={p.mst}
+        onClose={() => setAdding(false)}
+        onSaved={(created) => { setAdding(false); setNotice(created ? "Đã thêm người liên quan." : "Người này đã có hồ sơ ở doanh nghiệp — đã bổ sung chức danh / liên hệ vào hồ sơ đó."); load(); }}
+      />
       {!people.length ? (
-        <div className="adm-empty">Chưa có người nào. Người ra quyết định được thu thập từ giai đoạn 3 (doanh nghiệp niêm yết) và 4 (website, MST cá nhân).</div>
+        <div className="adm-empty">Chưa có người nào. Người ra quyết định được thu thập từ giai đoạn 3 (doanh nghiệp niêm yết) và 4 (website, MST cá nhân){p.can.add_people ? ", hoặc bấm “Thêm người liên quan” để nhập tay" : ""}.</div>
       ) : (
         <div className="adm-table-wrap">
           <table className="adm-table">
@@ -203,6 +216,54 @@ function PeopleTab({ p }: { p: CompanyProfile }) {
         </div>
       )}
     </>
+  );
+}
+
+const TITLE_SUGGESTIONS = [
+  "Người đại diện theo pháp luật", "Chủ tịch HĐQT", "Phó Chủ tịch HĐQT", "Thành viên HĐQT", "Chủ tịch HĐTV", "Tổng Giám đốc",
+  "Phó Tổng Giám đốc", "Giám đốc", "Phó Giám đốc", "Giám đốc Tài chính", "Giám đốc Kinh doanh", "Giám đốc Marketing",
+  "Giám đốc Nhân sự", "Kế toán trưởng", "Trưởng phòng Mua hàng", "Trưởng phòng Kinh doanh", "Trưởng Ban kiểm soát", "Chủ doanh nghiệp tư nhân",
+];
+
+function AddPersonDialog({ open, mst, onClose, onSaved }: { open: boolean; mst: string; onClose: () => void; onSaved: (created: boolean) => void }) {
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (open) setMsg(""); }, [open]);
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const body = Object.fromEntries(["ho_ten", "chuc_danh", "email", "phone", "tu_ngay", "den_ngay", "source_url", "ghi_chu"].map((k) => [k, String(f.get(k) ?? "").trim()]));
+    if (!body.ho_ten || !body.chuc_danh) return setMsg("Nhập họ tên và chức danh.");
+    setBusy(true);
+    try {
+      const r = await api.post<{ person_id: number; created: boolean }>(`/enrich/companies/${mst}/people`, body);
+      onSaved(r.created);
+    } catch (err) { setMsg(errMsg(err)); } finally { setBusy(false); }
+  }
+  return (
+    <Dialog open={open} title="Thêm người liên quan" onClose={onClose} wide>
+      {open ? (
+        <form className="adm-form" onSubmit={submit} noValidate>
+          {msg ? <div className="adm-alert full">{msg}</div> : null}
+          <Field label="Họ và tên *" htmlFor="ap-name"><input id="ap-name" className="adm-input" name="ho_ten" maxLength={100} autoFocus autoComplete="off" /></Field>
+          <Field label="Chức danh *" htmlFor="ap-title">
+            <input id="ap-title" className="adm-input" name="chuc_danh" maxLength={200} list="ap-titles" autoComplete="off" />
+            <datalist id="ap-titles">{TITLE_SUGGESTIONS.map((t) => <option key={t} value={t} />)}</datalist>
+          </Field>
+          <Field label="Email công việc" htmlFor="ap-email"><input id="ap-email" className="adm-input" name="email" type="email" maxLength={200} autoComplete="off" /></Field>
+          <Field label="Điện thoại công việc" htmlFor="ap-phone"><input id="ap-phone" className="adm-input" name="phone" type="tel" maxLength={40} autoComplete="off" placeholder="0912 345 678" /></Field>
+          <Field label="Giữ chức từ ngày" htmlFor="ap-from"><input id="ap-from" className="adm-input" name="tu_ngay" type="date" /></Field>
+          <Field label="Đến ngày (bỏ trống nếu đang giữ)" htmlFor="ap-to"><input id="ap-to" className="adm-input" name="den_ngay" type="date" /></Field>
+          <Field label="Nguồn (đường dẫn trang đã xem, nếu có)" full htmlFor="ap-url"><input id="ap-url" className="adm-input" name="source_url" maxLength={1000} placeholder="https://…" autoComplete="off" /></Field>
+          <Field label="Ghi chú nguồn" full htmlFor="ap-note"><textarea id="ap-note" className="adm-input" name="ghi_chu" maxLength={1000} rows={2} placeholder="Vd: danh thiếp tại hội chợ, khách tự cung cấp qua điện thoại…" /></Field>
+          <p className="er-note full" style={{ margin: 0 }}><Icon name="lock" /><span>Chỉ nhập thông tin công việc. Không nhập CCCD, địa chỉ nhà, thông tin gia đình. Người cùng tên ở doanh nghiệp này sẽ được gộp vào hồ sơ sẵn có.</span></p>
+          <div className="adm-actions full">
+            <button type="button" className="adm-btn" onClick={onClose}>Huỷ</button>
+            <button type="submit" className="adm-btn primary" disabled={busy}>{busy ? "Đang lưu…" : "Lưu"}</button>
+          </div>
+        </form>
+      ) : null}
+    </Dialog>
   );
 }
 

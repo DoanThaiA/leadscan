@@ -8,6 +8,7 @@ Thứ tự khớp khi một nguồn nói "người X giữ chức Y ở doanh ng
 Chỉ gộp tự động khi MST cá nhân chứng minh hai hồ sơ là một.
 """
 
+import re
 from dataclasses import dataclass
 
 from sqlalchemy import or_, select, update
@@ -364,3 +365,89 @@ def import_personal_mst(db: Session, user: AdminUser, *, file_name: str, data: b
         )
     db.commit()
     return rep
+
+
+# ------------------------------------------------------------------ nhập tay người liên quan (hồ sơ doanh nghiệp)
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$")
+
+
+def add_manual(
+    db: Session,
+    user: AdminUser,
+    company_mst: str,
+    *,
+    ho_ten: str,
+    chuc_danh: str,
+    email: str = "",
+    phone: str = "",
+    tu_ngay: str = "",
+    den_ngay: str = "",
+    source_url: str = "",
+    ghi_chu: str = "",
+) -> dict:
+    """Biên tập viên thêm một người liên quan cho doanh nghiệp (họ tên, chức danh, liên hệ công việc).
+
+    Đi qua apply_facts như mọi nguồn khác (khớp người B06, nghi trùng, bằng chứng, nhật ký N06), nguồn "Biên tập viên",
+    method "thu_cong" — quyết định biên tập. Không nhận MST cá nhân / năm sinh ở đây (T09; MST cá nhân có luồng nhập riêng).
+    """
+    import hashlib
+    import json
+
+    from app.enrich import compliance, sources
+    from app.enrich.apply import Origin, _blocked_values, apply_facts
+    from app.enrich.connectors.base import Facts, PersonFact
+    from app.enrich.governance import clean_name
+    from app.enrich.normalize import clean_text, normalize_phone, parse_date
+    from app.models_enrich import EnrichCompany, OptOut
+
+    if not db.get(EnrichCompany, company_mst):
+        raise PeopleError("MST doanh nghiệp không có trong hệ thống.")
+    name = clean_name(ho_ten)
+    if not name:
+        raise PeopleError("Họ tên không hợp lệ (chỉ gồm chữ, tối đa 60 ký tự, không có số).")
+    title = clean_text(chuc_danh, 200)
+    if not title:
+        raise PeopleError("Nhập chức danh.")
+    email = (email or "").strip().lower()
+    if email and not EMAIL_RE.match(email):
+        raise PeopleError("Email không hợp lệ.")
+    phone_n = None
+    if (phone or "").strip():
+        phone_n = normalize_phone(phone)
+        if not phone_n:
+            raise PeopleError("Số điện thoại không hợp lệ (vd: 0912 345 678).")
+    dates = {}
+    for k, raw in (("tu_ngay", tu_ngay), ("den_ngay", den_ngay)):
+        dates[k] = parse_date(raw) if (raw or "").strip() else None
+        if (raw or "").strip() and not dates[k]:
+            raise PeopleError(f"Ngày không hợp lệ: {raw}")
+    if dates["tu_ngay"] and dates["den_ngay"] and dates["den_ngay"] < dates["tu_ngay"]:
+        raise PeopleError("“Đến ngày” phải sau “Từ ngày”.")
+    blocked = _blocked_values(db)
+    if (email and email in blocked) or (phone_n and phone_n.lower() in blocked):
+        raise PeopleError("Email / điện thoại này nằm trong danh sách từ chối — không được lưu (C10).")
+    if compliance.name_company_key(name, company_mst) in compliance.hashed_block(db):
+        raise PeopleError("Người này đã yêu cầu xoá dữ liệu tại doanh nghiệp này — không được thu thập lại (T05).")
+
+    existed = at_company(db, company_mst, bo_dau(name))
+    now = utcnow()
+    note = clean_text(ghi_chu, 1000) or ""
+    excerpt = f"{user.full_name} nhập tay lúc {now:%d/%m/%Y %H:%M} UTC" + (f" — {note}" if note else "")
+    url = (source_url or "").strip()[:1000]
+    h = hashlib.sha256(
+        json.dumps([company_mst, name, title, email, phone_n, url, now.isoformat()], ensure_ascii=False).encode()
+    ).hexdigest()
+    fact = PersonFact(
+        name, title, excerpt, tu_ngay=dates["tu_ngay"], den_ngay=dates["den_ngay"], email=email or None, phone=phone_n
+    )
+    apply_facts(
+        db, company_mst, Facts(people=[fact]),
+        Origin(source=sources.ensure(db, sources.EDITOR), source_url=url, content_hash=h, method="thu_cong", fetched_at=now, actor_id=user.id),
+    )
+    person = at_company(db, company_mst, bo_dau(name))
+    if not person or db.scalar(select(OptOut.id).where(OptOut.kind == "person", OptOut.value == str(person.id))):
+        db.rollback()
+        raise PeopleError("Người này nằm trong danh sách từ chối xử lý dữ liệu — không được lưu (C10).")
+    db.commit()
+    return {"person_id": person.id, "created": existed is None}

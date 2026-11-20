@@ -32,6 +32,7 @@ class PersonFact:
     den_ngay: date | None = None  # có → vai trò đã kết thúc (miễn nhiệm, từ nhiệm)
     mst_ca_nhan: str | None = None  # chỉ nguồn nội bộ có (khớp người chắc chắn — B06)
     email: str | None = None  # email công việc thấy ngay cạnh tên người (website)
+    phone: str | None = None  # điện thoại công việc (đã chuẩn hoá +84…) — hiện chỉ biên tập viên nhập tay
 
 
 @dataclass

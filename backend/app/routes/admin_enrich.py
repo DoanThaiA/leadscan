@@ -266,7 +266,7 @@ def get_company(mst: str, user: AdminUser = Depends(perm.require("a.read")), db:
             }
             for s in signals
         ],
-        "can": {"people": perm.has(user, "b.read"), "evidence": perm.has(user, "a.evidence")},
+        "can": {"people": perm.has(user, "b.read"), "evidence": perm.has(user, "a.evidence"), "add_people": perm.has(user, "people.manage")},
         "created_at": _iso(c.created_at),
     }
 

@@ -17,7 +17,7 @@ from app.enrich import emails, khob, people
 from app.enrich import permissions as perm
 from app.models import AdminUser
 from app.models_enrich import PURPOSES
-from app.routes.admin_enrich import FileIn, _iso
+from app.routes.admin_enrich import FileIn, _get_company, _iso
 from app.schemas import Line
 
 router = APIRouter(prefix="/api/admin/enrich")
@@ -57,6 +57,31 @@ def related_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="ben-lien-quan-{person_id}.csv"', "Cache-Control": "no-store"},
     )
+
+
+# ------------------------------------------------------------------ nhập tay người liên quan (hồ sơ doanh nghiệp)
+
+
+class ManualPersonIn(BaseModel):
+    ho_ten: Line = Field(min_length=2, max_length=100)
+    chuc_danh: Line = Field(min_length=1, max_length=200)
+    email: Line = Field("", max_length=200)
+    phone: Line = Field("", max_length=40)
+    tu_ngay: Line = Field("", max_length=20)
+    den_ngay: Line = Field("", max_length=20)
+    source_url: Line = Field("", max_length=1000)
+    ghi_chu: str = Field("", max_length=1000)
+
+
+@router.post("/companies/{mst}/people", status_code=201)
+def add_company_person(mst: str, body: ManualPersonIn, user: AdminUser = Depends(perm.require("people.manage")), db: Session = Depends(get_db)):
+    """Biên tập viên nhập tay một người liên quan (họ tên, chức danh, email / điện thoại công việc) cho doanh nghiệp."""
+    c = _get_company(db, mst)
+    try:
+        return people.add_manual(db, user, c.mst, **body.model_dump())
+    except people.PeopleError as e:
+        db.rollback()
+        raise HTTPException(422, str(e)) from e
 
 
 # ------------------------------------------------------------------ nghi trùng, gộp, tách, hoàn tác

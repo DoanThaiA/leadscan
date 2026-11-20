@@ -300,6 +300,9 @@ def apply_facts(db: Session, mst: str, facts: Facts, origin: Origin, *, recomput
                 if email not in blocked_values:
                     add_contact(db, "person", str(person.id), "email", email, src.code, inferred=False)
                     person_fields.append(("email", email))
+            if p.phone and p.phone not in blocked_values:
+                add_contact(db, "person", str(person.id), "phone", p.phone, src.code, inferred=False)
+                person_fields.append(("dien_thoai", p.phone))
             for fld, val in person_fields:
                 exists = db.scalar(
                     select(PersonEvidence.id).where(

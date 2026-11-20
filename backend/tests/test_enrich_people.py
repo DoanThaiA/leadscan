@@ -292,3 +292,58 @@ def test_website_connector_end_to_end(two, monkeypatch):
     finally:
         storage.set_backend(None)
         runner._robots.clear()
+
+
+# ------------------------------------------------------------------ nhập tay người liên quan
+
+
+def test_manual_add_company_person(two):
+    from app.models_enrich import AccessLog, EnrichContact, OptOut, PersonEvidence, PersonRole
+
+    url = f"/api/admin/enrich/companies/{X}/people"
+    body = {"ho_ten": "Phạm Thu Hà", "chuc_danh": "Giám đốc Kinh doanh", "email": "Ha.Pham@DaiViet.vn", "phone": "0912 345 678",
+            "tu_ngay": "01/03/2024", "source_url": "https://daiviet.vn/lien-he", "ghi_chu": "Danh thiếp hội chợ"}
+    r = two.post(url, json=body)
+    assert r.status_code == 201 and r.json()["created"] is True
+    pid = r.json()["person_id"]
+    row = next(p for p in two.get(url).json() if p["id"] == pid)
+    assert row["chuc_danh"] == "Giám đốc Kinh doanh" and row["chuc_danh_chuan"] == "giam_doc_khoi" and row["la_nguoi_quyet_dinh"]
+    assert row["tu_ngay"] == "2024-03-01"
+    assert {(c["kind"], c["value"]) for c in row["lien_he"]} == {("email", "ha.pham@daiviet.vn"), ("phone", "+84912345678")}
+    with dbmod.new_session() as db:
+        evs = db.scalars(select(PersonEvidence).where(PersonEvidence.person_id == pid)).all()
+        assert {e.field for e in evs} == {"ho_ten", "chuc_danh", "email", "dien_thoai"}
+        assert all(e.method == "thu_cong" and e.source_code == "bien_tap" and "Danh thiếp hội chợ" in e.excerpt for e in evs)
+        assert db.scalar(select(AccessLog.id).where(AccessLog.action == "write", AccessLog.target == f"company:{X}/people<-bien_tap"))
+
+    # cùng tên ở cùng DN → cùng hồ sơ, thêm vai trò; không nhân đôi liên hệ
+    r = two.post(url, json={"ho_ten": "PHẠM THU HÀ", "chuc_danh": "Thành viên HĐQT", "email": "ha.pham@daiviet.vn"})
+    assert r.status_code == 201 and r.json() == {"person_id": pid, "created": False}
+    with dbmod.new_session() as db:
+        assert db.scalar(select(func.count()).select_from(PersonRole).where(PersonRole.person_id == pid)) == 2
+        assert db.scalar(select(func.count()).select_from(EnrichContact).where(EnrichContact.owner_id == str(pid))) == 2
+
+    # kiểm tra đầu vào
+    for bad, msg in [({"email": "khong-phai-email"}, "Email"), ({"phone": "12345"}, "điện thoại"), ({"ho_ten": "Công ty 123"}, "Họ tên"),
+                     ({"tu_ngay": "2024-05-01", "den_ngay": "2024-01-01"}, "Đến ngày")]:
+        r = two.post(url, json={"ho_ten": "Lê Văn Nam", "chuc_danh": "Kế toán trưởng", **bad})
+        assert r.status_code == 422 and msg in r.json()["detail"], bad
+    assert two.post("/api/admin/enrich/companies/0999999999/people", json={"ho_ten": "Lê Văn Nam", "chuc_danh": "Kế toán trưởng"}).status_code == 404
+
+    # danh sách từ chối
+    with dbmod.new_session() as db:
+        db.add(OptOut(kind="email", value="nam.le@daiviet.vn", reason="Từ chối"))
+        db.add(OptOut(kind="person", value=str(pid), reason="Từ chối"))
+        db.commit()
+    r = two.post(url, json={"ho_ten": "Lê Văn Nam", "chuc_danh": "Kế toán trưởng", "email": "nam.le@daiviet.vn"})
+    assert r.status_code == 422 and "từ chối" in r.json()["detail"]
+    r = two.post(url, json={"ho_ten": "Phạm Thu Hà", "chuc_danh": "Kế toán trưởng"})
+    assert r.status_code == 422 and "từ chối" in r.json()["detail"]
+    with dbmod.new_session() as db:
+        assert db.scalar(select(func.count()).select_from(PersonRole).where(PersonRole.person_id == pid)) == 2
+
+    # quyền: kinh doanh xem được nhưng không nhập được
+    sales = login_as("kinh_doanh", "sales9@leadscan.vn")
+    assert sales.get(f"/api/admin/enrich/companies/{X}").json()["can"]["add_people"] is False
+    assert two.get(f"/api/admin/enrich/companies/{X}").json()["can"]["add_people"] is True
+    assert sales.post(url, json={"ho_ten": "Lê Văn Nam", "chuc_danh": "Kế toán trưởng"}).status_code == 403
