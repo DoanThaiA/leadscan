@@ -454,6 +454,28 @@ def dashboard(p: PartnerUser = Depends(verified_partner), db: Session = Depends(
     }
 
 
+# ================================================================== nhu cầu đang tìm (phiếu tìm cơ hội của thành viên, ẩn danh)
+
+
+@router.get("/needs")
+def list_needs(
+    q: str = Query("", max_length=100),
+    industry: str = Query("", max_length=100),
+    region: str = Query("", max_length=80),
+    unmet: bool = False,
+    sort: str = Query("new", pattern="^(new|unmet)$"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+    _: PartnerUser = Depends(verified_partner),
+    db: Session = Depends(get_db),
+):
+    """Thành viên đang cần tìm loại khách hàng / cơ hội nào — đối tác đi tìm doanh nghiệp có nhu cầu mua phù hợp."""
+    from app.services import open_needs
+
+    return {**open_needs.list_needs(db, q=q, industry=industry, region=region, unmet=unmet, sort=sort, page=page, page_size=page_size),
+            "industries": INDUSTRIES, "regions": AREAS}
+
+
 # ================================================================== ví hoa hồng (Mốc 3)
 
 

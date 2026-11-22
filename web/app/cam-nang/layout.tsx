@@ -3,6 +3,7 @@ import "./cam-nang.css";
 
 import type { ReactNode } from "react";
 
+import AssistantChat from "@/components/assistant/AssistantChat";
 import Footer from "@/components/landing/Footer";
 import Header from "@/components/landing/Header";
 import IconSprite from "@/components/landing/IconSprite";
@@ -15,6 +16,7 @@ export default function BlogLayout({ children }: { children: ReactNode }) {
       <Header base="/" extra={[{ href: "/bai-viet", label: "Bài viết", active: true }]} />
       <main id="main">{children}</main>
       <Footer base="/" />
+      <AssistantChat audience="guest" />
     </>
   );
 }

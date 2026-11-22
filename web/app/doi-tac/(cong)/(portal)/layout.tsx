@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { Icon, initials } from "@/components/admin/ui";
+import AssistantChat from "@/components/assistant/AssistantChat";
 import { Logo } from "@/components/brand/Logo";
 import { PartnerProvider, usePartner } from "@/components/partner/PartnerContext";
 import { papi } from "@/lib/partner/api";
@@ -12,6 +13,7 @@ import { papi } from "@/lib/partner/api";
 // Menu cổng (brief mục 8.2).
 const NAV = [
   { href: "/doi-tac/tong-quan", label: "Tổng quan", icon: "home" },
+  { href: "/doi-tac/nhu-cau", label: "Nhu cầu đang tìm", icon: "target" },
   { href: "/doi-tac/gui-co-hoi", label: "Gửi cơ hội", icon: "plus" },
   { href: "/doi-tac/co-hoi", label: "Cơ hội của tôi", icon: "grid" },
   { href: "/doi-tac/ket-noi-ai", label: "Kết nối AI", icon: "spark" },
@@ -82,6 +84,7 @@ function Shell({ children }: { children: ReactNode }) {
       </aside>
 
       <main className="adm-main">{children}</main>
+      <AssistantChat audience="partner" />
     </div>
   );
 }

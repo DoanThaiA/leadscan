@@ -70,7 +70,7 @@ def test_handshake_and_tools(partner):
     n = c.post(url, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
     assert n.status_code == 202 and n.content == b""
     names = [t["name"] for t in rpc(c, url, "tools/list").json()["result"]["tools"]]
-    assert names == ["get_submission_guide", "submit_opportunity", "list_my_opportunities", "get_opportunity"]
+    assert names == ["get_submission_guide", "submit_opportunity", "list_my_opportunities", "get_opportunity", "list_open_needs"]
     assert rpc(c, url, "nope").json()["error"]["code"] == -32601
     assert rpc(c, url, "tools/call", {"name": "nope", "arguments": {}}).json()["error"]["code"] == -32602
     assert c.get(url).status_code == 405

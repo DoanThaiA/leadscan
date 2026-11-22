@@ -11,6 +11,7 @@ import HowItWorks from "@/components/landing/HowItWorks";
 import IconSprite from "@/components/landing/IconSprite";
 import Join from "@/components/landing/Join";
 import LandingEffects from "@/components/landing/LandingEffects";
+import AssistantChat from "@/components/assistant/AssistantChat";
 import MobileCta from "@/components/landing/MobileCta";
 import PromoPopup from "@/components/landing/PromoPopup";
 import Register from "@/components/landing/Register";
@@ -56,6 +57,7 @@ export default async function LandingPage() {
       </main>
       <Footer />
       <MobileCta />
+      <AssistantChat audience="guest" raised />
       <LandingEffects />
       <PromoPopup />
     </>

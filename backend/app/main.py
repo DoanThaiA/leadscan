@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from app.routes import admin, articles, admin_commerce, admin_enrich, admin_enrich_docs, admin_enrich_ops, admin_enrich_ops5, admin_enrich_people, admin_jobs, admin_partner_payouts, admin_partner_reports, admin_partner_submissions, admin_partners, admin_pricing, admin_promos, careers, mcv, member, member_crm, partner, partner_mcp, payments, public, public_opportunities, public_promos, registration_webhook
 from app.routes import admin_inbound_emails, admin_opp_mail, gmail_webhook
+from app.routes import assistant
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -49,6 +50,9 @@ app.include_router(admin_partner_payouts.batches)
 app.include_router(admin_partner_reports.router)
 app.include_router(payments.router)
 app.include_router(mcv.router)
+app.include_router(assistant.public)
+app.include_router(assistant.member)
+app.include_router(assistant.partner)
 
 
 @app.exception_handler(RequestValidationError)

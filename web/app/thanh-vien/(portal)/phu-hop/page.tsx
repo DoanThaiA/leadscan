@@ -217,6 +217,10 @@ function MatchPageInner() {
               placeholder="Sản phẩm/dịch vụ bạn cung cấp, loại khách hàng cần tìm, số lượng, thị trường, thời gian… Ví dụ: Chúng tôi sản xuất bao PP dệt 25–50 kg, công suất 2 triệu bao/tháng. Cần tìm nhà nhập khẩu hoặc nhà máy phân bón, gạo, thức ăn chăn nuôi ở Châu Phi và Đông Nam Á, đơn hàng từ 1 container/tháng."
             />
             <div className="sr-count muted">{note.trim().length}/3000</div>
+            <p className="muted" style={{ fontSize: 12.5, margin: "4px 0 0" }}>
+              Để tìm thêm cơ hội cho bạn, mô tả được hiển thị <b>ẩn danh</b> cho đối tác LeadScan (không kèm tên doanh nghiệp; tên, số điện thoại,
+              email, đường link, mã số thuế trong mô tả được che).
+            </p>
             {aiPrev !== null ? (
               <div className="sf-ai-note" role="status">
                 <span><Icon name="spark" size={13} /> Đã viết lại bằng AI — xem lại, sửa nếu cần rồi bấm tìm kiếm.</span>

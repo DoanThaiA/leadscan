@@ -185,6 +185,25 @@ TOOLS = [
         },
         "annotations": {"title": "Chi tiết cơ hội", "readOnlyHint": True, "openWorldHint": False},
     },
+    {
+        "name": "list_open_needs",
+        "title": "Nhu cầu đang tìm",
+        "description": "Danh sách ẩn danh các nhu cầu thành viên LeadScan đang tìm (họ bán gì, cần tìm loại khách hàng / cơ hội nào, ngành, "
+                       "khu vực) để đối tác biết nên đi tìm doanh nghiệp có nhu cầu mua nào. match_count = 0 nghĩa là chưa có cơ hội nào "
+                       "phù hợp — nên ưu tiên. Không có tên hay liên hệ của thành viên.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Từ khoá sản phẩm / khách hàng cần tìm (vd: bao bì, linh kiện). Bỏ trống = tất cả."},
+                "industry": {"type": "string", "enum": ["", *INDUSTRIES], "description": "Lọc theo ngành hàng."},
+                "region": {"type": "string", "enum": ["", *AREAS], "description": "Lọc theo khu vực / tỉnh thành."},
+                "unmet_only": {"type": "boolean", "description": "Chỉ nhu cầu chưa có cơ hội phù hợp."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 30, "description": "Số nhu cầu tối đa (mặc định 10)."},
+            },
+            "additionalProperties": False,
+        },
+        "annotations": {"title": "Nhu cầu đang tìm", "readOnlyHint": True, "openWorldHint": False},
+    },
 ]
 
 INSTRUCTIONS = (
@@ -296,6 +315,20 @@ def tool_get(db: Session, p: PartnerUser, args: dict) -> dict:
     return {**out, "portal_url": _portal_link(s)}
 
 
+def tool_needs(db: Session, args: dict) -> dict:
+    from app.services import open_needs
+
+    try:
+        limit = max(1, min(30, int(args.get("limit") or 10)))
+    except (TypeError, ValueError):
+        limit = 10
+    unmet = bool(args.get("unmet_only"))
+    d = open_needs.list_needs(db, q=str(args.get("query") or "")[:100], industry=str(args.get("industry") or ""),
+                              region=str(args.get("region") or ""), unmet=unmet, sort="unmet" if unmet else "new", page_size=limit)
+    return {"total": d["total"], "shown": len(d["items"]), "stats": d["stats"], "items": d["items"],
+            "portal_url": f"{get_settings().site_url.rstrip('/')}/doi-tac/nhu-cau"}
+
+
 def call_tool(db: Session, p: PartnerUser, name: str, args: dict, client: str) -> dict:
     if name == "get_submission_guide":
         return tool_guide(db, p)
@@ -305,6 +338,8 @@ def call_tool(db: Session, p: PartnerUser, name: str, args: dict, client: str) -
         return tool_list(db, p, args)
     if name == "get_opportunity":
         return tool_get(db, p, args)
+    if name == "list_open_needs":
+        return tool_needs(db, args)
     raise KeyError(name)
 
 

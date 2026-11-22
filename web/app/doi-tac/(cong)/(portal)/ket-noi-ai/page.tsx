@@ -14,6 +14,7 @@ const TOOLS: [string, string][] = [
   ["Đăng cơ hội lên LeadScan", "Gửi cơ hội vào hàng đợi xác minh — giống hệt form Gửi cơ hội trong cổng."],
   ["Cơ hội của tôi", "Danh sách cơ hội đã đăng, trạng thái xác minh, điểm, lượt bán, tiền thưởng."],
   ["Chi tiết cơ hội", "Xem 1 cơ hội theo mã GT-… và lịch sử trạng thái."],
+  ["Nhu cầu đang tìm", "Thành viên đang cần tìm khách hàng / cơ hội nào (ẩn danh) — gợi ý nên đi tìm doanh nghiệp nào."],
 ];
 
 const PROMPTS = [

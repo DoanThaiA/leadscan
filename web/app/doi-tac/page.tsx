@@ -6,6 +6,7 @@ import type { Metadata } from "next";
 import Footer from "@/components/landing/Footer";
 import IconSprite from "@/components/landing/IconSprite";
 import LandingEffects from "@/components/landing/LandingEffects";
+import AssistantChat from "@/components/assistant/AssistantChat";
 import MobileCta from "@/components/landing/MobileCta";
 import PartnerHeader from "@/components/partner/PartnerHeader";
 import SignupForm from "@/components/partner/SignupForm";
@@ -220,6 +221,7 @@ export default async function PartnerLandingPage() {
       </main>
       <Footer base="/" />
       <MobileCta small="Mỗi cơ hội đạt xác minh" value="Ít nhất 1 ly cafe" label="Đăng ký đối tác" />
+      <AssistantChat audience="guest" raised />
       <LandingEffects />
     </>
   );

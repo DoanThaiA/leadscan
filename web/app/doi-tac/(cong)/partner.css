@@ -124,3 +124,27 @@
 .ptn-mcp-prompt { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 8px; font-size: 14px; }
 .ptn-mcp-prompt span { flex: 1; min-width: 0; }
 @media (max-width: 640px) { .ptn-mcp-url, .ptn-mcp-prompt { flex-direction: column; align-items: stretch; } .ptn-mcp-tabs { padding: 10px 16px 0; } }
+
+/* Nhu cầu đang tìm (/doi-tac/nhu-cau) */
+.adm-grid.ptn-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 640px) { .adm-grid.ptn-cols-3 { grid-template-columns: 1fr; } }
+.ptn-need-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 16px; font-size: 13px; }
+.ptn-need-chips button, .ptn-need-chips .off { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12.5px; color: var(--ink-2); }
+.ptn-need-chips button { cursor: pointer; }
+.ptn-need-chips button:hover { border-color: var(--brand-600); }
+.ptn-need-chips button.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.ptn-need-chips b { font-weight: 700; margin-left: 2px; }
+.ptn-switch-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); white-space: nowrap; cursor: pointer; }
+.ptn-needs { display: grid; }
+.ptn-need { display: grid; gap: 10px; padding: 16px; border-top: 1px solid var(--line-2); }
+.ptn-need:first-child { border-top: 0; }
+.ptn-need header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12.5px; }
+.ptn-need h3 { margin: 0; font-size: 15.5px; color: var(--ink); }
+.ptn-need-text { display: grid; gap: 3px; font-size: 14px; line-height: 1.55; color: var(--ink-2); overflow-wrap: anywhere; }
+.ptn-need-text p { margin: 0; }
+.ptn-need-text b { color: var(--ink); font-weight: 600; }
+.ptn-need-clamp { max-height: 7.6em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
+.ptn-need .ptn-linkbtn { justify-self: start; font-size: 13px; }
+.ptn-need .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.ptn-need .adm-tag { display: inline-flex; align-items: center; gap: 4px; }
+.ptn-need footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-top: 10px; border-top: 1px dashed var(--line-2); }

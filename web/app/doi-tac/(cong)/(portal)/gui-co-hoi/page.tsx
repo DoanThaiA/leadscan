@@ -42,7 +42,11 @@ function F({ label, hint, error, children, full, id }: { label: ReactNode; hint?
 /** Form gửi cơ hội (brief mục 8.3). ?sua=<id> → sửa cơ hội đã gửi khi LeadScan chưa bắt đầu xác minh. */
 function SubmitForm() {
   const router = useRouter();
-  const editId = useSearchParams().get("sua");
+  const sp = useSearchParams();
+  const editId = sp.get("sua");
+  // Từ trang "Nhu cầu đang tìm": điền sẵn ngành, nhắc nhu cầu đang đi tìm
+  const needCode = editId ? null : sp.get("nhu_cau");
+  const needIndustry = editId ? null : sp.get("nganh");
   const [initial, setInitial] = useState<Submission | null>(null);
   const [locked, setLocked] = useState<Submission | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -185,6 +189,12 @@ function SubmitForm() {
 
       <form ref={formRef} noValidate onSubmit={onSubmit} onInput={clear} onChange={clear} className="ptn-form">
         {banner ? <div className="adm-alert" role="alert" style={{ marginBottom: 16 }}>{banner}</div> : null}
+        {needCode ? (
+          <div className="adm-alert warn" role="status" style={{ marginBottom: 16 }}>
+            Bạn đang gửi cơ hội cho nhu cầu <b className="mono">{needCode}</b>. Hãy điền thông tin <b>doanh nghiệp đang cần mua</b> mà bạn biết
+            (không phải thành viên đã đăng nhu cầu). <Link href="/doi-tac/nhu-cau" style={{ textDecoration: "underline" }}>← Xem lại danh sách nhu cầu</Link>
+          </div>
+        ) : null}
 
         <section className="adm-card">
           <div className="hd"><h2>1. Doanh nghiệp có nhu cầu</h2></div>
@@ -205,7 +215,7 @@ function SubmitForm() {
               <datalist id="s-prov-list">{opts.regions.map((r) => <option key={r} value={r} />)}</datalist>
             </F>
             <F label="Ngành hàng *" error={errors.industry} id="s-ind">
-              <select id="s-ind" className="adm-input" name="industry" defaultValue={iv("industry") ?? ""}>
+              <select id="s-ind" className="adm-input" name="industry" defaultValue={iv("industry") ?? (needIndustry && opts.industries.includes(needIndustry) ? needIndustry : "")}>
                 <option value="" disabled>Chọn ngành hàng…</option>
                 {opts.industries.map((x) => <option key={x}>{x}</option>)}
               </select>

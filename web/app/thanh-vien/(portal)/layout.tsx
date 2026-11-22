@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { Icon, initials } from "@/components/admin/ui";
+import AssistantChat from "@/components/assistant/AssistantChat";
 import { MemberProvider, useMember } from "@/components/member/MemberContext";
 import { TierBadge } from "@/components/member/Tier";
 import { NoticeBell, NoticeProvider, useNotices } from "@/components/member/Notifications";
@@ -114,6 +115,7 @@ function Shell({ children }: { children: ReactNode }) {
         ) : null}
         {children}
       </main>
+      <AssistantChat audience="member" />
     </div>
   );
 }

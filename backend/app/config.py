@@ -190,6 +190,15 @@ class Settings(BaseSettings):
     crm_ai_budget_usd: float = 22.0  # trần chi phí AI mỗi doanh nghiệp / tháng (giá API thực)
     # Nút "AI viết lại" mô tả yêu cầu tìm cơ hội (cổng thành viên): số lượt tối đa mỗi doanh nghiệp / giờ
     search_ai_rewrite_per_hour: int = 20
+    # Trợ lý LeadScan (chatbot hỏi đáp về hệ thống — app/assistant): khách xem web, thành viên, đối tác.
+    # Chỉ gửi câu hỏi + kiến thức hệ thống + số liệu của chính người hỏi (không gửi email/SĐT/đầu mối) ra API AI.
+    assistant_enabled: bool = True
+    assistant_guest_enabled: bool = True  # khách chưa đăng nhập (trang chủ, /doi-tac, /co-hoi…)
+    assistant_providers: str = "deepseek,cohere"  # thứ tự thử; DeepSeek trước để không tiêu lượt Cohere Trial của tính năng khác
+    assistant_monthly_limit: int = 6000  # số câu hỏi tối đa / tháng của thành viên + đối tác (0 = không giới hạn)
+    assistant_guest_monthly_limit: int = 3000  # số câu hỏi tối đa / tháng của khách chưa đăng nhập
+    assistant_per_hour: int = 40  # mỗi tài khoản / giờ
+    assistant_guest_per_hour: int = 15  # mỗi IP / giờ
 
     # AI sinh văn bản (app/ai.py) cho mọi tính năng ở trên: Cohere trước, lỗi / hết lượt / quá tần suất → DeepSeek.
     # Cohere dùng chung COHERE_API_KEY với embedding (khoá Trial: 1.000 lượt/tháng cho mọi endpoint, chat 20 lượt/phút).

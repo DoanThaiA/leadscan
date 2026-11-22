@@ -1,0 +1,116 @@
+/* Trợ lý LeadScan — widget chat nổi, tự mang màu riêng để dùng được trên landing, cổng thành viên, cổng đối tác */
+.asst {
+  --a-brand: #004b87;
+  --a-brand-800: #00355f;
+  --a-brand-50: #eef4fa;
+  --a-accent: #ffcd00;
+  --a-ink: #1d262e;
+  --a-muted: #4c555e;
+  --a-line: #e6e9ec;
+  --a-bg: #ffffff;
+  --a-soft: #f5f7f9;
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  font: 14px/1.5 var(--font-inter, system-ui), system-ui, sans-serif;
+  color: var(--a-ink);
+}
+
+.asst-fab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  min-width: 52px;
+  padding: 0 18px 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--a-brand);
+  color: #fff;
+  font: 600 14px/1 inherit;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 53, 95, 0.28);
+  transition: transform 0.15s, background 0.15s;
+}
+.asst-fab:hover { background: var(--a-brand-800); transform: translateY(-1px); }
+.asst-fab:focus-visible { outline: 3px solid var(--a-accent); outline-offset: 2px; }
+.asst-fab.on { padding: 0; justify-content: center; width: 52px; }
+.asst-fab svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.asst-panel {
+  width: min(400px, calc(100vw - 32px));
+  height: min(600px, calc(100vh - 110px));
+  height: min(600px, calc(100dvh - 110px));
+  display: flex;
+  flex-direction: column;
+  background: var(--a-bg);
+  border: 1px solid var(--a-line);
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 30, 56, 0.22);
+  overflow: hidden;
+  animation: asst-in 0.18s ease-out;
+}
+@keyframes asst-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.asst-hd { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 14px; background: var(--a-brand); color: #fff; }
+.asst-hd > div { flex: 1; min-width: 0; display: grid; }
+.asst-hd b { font-size: 15px; }
+.asst-hd small { font-size: 12px; opacity: 0.85; }
+.asst-avatar { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--a-accent); color: var(--a-brand-800); font: 800 12px/1 inherit; font-family: inherit; }
+.asst-ghost { border: 1px solid rgba(255, 255, 255, 0.4); background: transparent; color: #fff; border-radius: 6px; padding: 4px 8px; font: 12px inherit; font-family: inherit; cursor: pointer; }
+.asst-ghost:hover { background: rgba(255, 255, 255, 0.12); }
+.asst-x { border: 0; background: transparent; color: #fff; font-size: 24px; line-height: 1; width: 32px; height: 32px; border-radius: 6px; cursor: pointer; }
+.asst-x:hover { background: rgba(255, 255, 255, 0.12); }
+
+.asst-body { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--a-soft); overscroll-behavior: contain; }
+.asst-welcome p { margin: 0 0 10px; }
+.asst-sugs { display: grid; gap: 6px; }
+.asst-sugs button { text-align: left; border: 1px solid var(--a-line); background: #fff; color: var(--a-brand); border-radius: 10px; padding: 8px 12px; font: 13.5px/1.4 inherit; font-family: inherit; cursor: pointer; }
+.asst-sugs button:hover { border-color: var(--a-brand); background: var(--a-brand-50); }
+
+.asst-msg { max-width: 88%; padding: 9px 12px; border-radius: 14px; overflow-wrap: anywhere; }
+.asst-msg.user { align-self: flex-end; background: var(--a-brand); color: #fff; border-bottom-right-radius: 4px; white-space: pre-wrap; }
+.asst-msg.assistant { align-self: flex-start; background: #fff; border: 1px solid var(--a-line); border-bottom-left-radius: 4px; }
+.asst-msg.err { background: #fdecec; border-color: #f3c1c1; color: #b42318; }
+.asst-msg p { margin: 0; }
+.asst-msg p + p, .asst-msg p + ul, .asst-msg p + ol, .asst-msg ul + p, .asst-msg ol + p { margin-top: 6px; }
+.asst-msg ul, .asst-msg ol { margin: 4px 0 0; padding-left: 20px; }
+.asst-msg li + li { margin-top: 2px; }
+.asst-msg a { color: var(--a-brand); font-weight: 600; text-decoration: underline; }
+.asst-msg code { background: var(--a-soft); padding: 0 4px; border-radius: 4px; font-size: 12.5px; }
+.asst-rate { display: flex; gap: 4px; justify-content: flex-end; margin-top: 4px; font-size: 12px; color: var(--a-muted); }
+.asst-rate button { border: 0; background: transparent; cursor: pointer; font-size: 14px; padding: 2px 4px; border-radius: 4px; opacity: 0.6; }
+.asst-rate button:hover { opacity: 1; background: var(--a-soft); }
+.asst-tools { align-self: flex-start; font-size: 12px; color: var(--a-muted); padding-left: 4px; }
+
+.asst-msg.typing { display: flex; gap: 4px; padding: 12px 14px; }
+.asst-msg.typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--a-muted); opacity: 0.4; animation: asst-dot 1s infinite; }
+.asst-msg.typing span:nth-child(2) { animation-delay: 0.15s; }
+.asst-msg.typing span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes asst-dot { 50% { opacity: 1; transform: translateY(-2px); } }
+
+.asst-form { display: flex; gap: 8px; align-items: flex-end; padding: 10px; border-top: 1px solid var(--a-line); background: #fff; }
+.asst-form textarea { flex: 1; resize: none; max-height: 120px; min-height: 40px; border: 1px solid var(--a-line); border-radius: 10px; padding: 9px 12px; font: 14px/1.4 inherit; font-family: inherit; color: var(--a-ink); field-sizing: content; }
+.asst-form textarea:focus { outline: 2px solid var(--a-brand); outline-offset: -1px; border-color: transparent; }
+.asst-form button { flex: none; width: 40px; height: 40px; border: 0; border-radius: 10px; background: var(--a-accent); color: var(--a-brand-800); cursor: pointer; display: grid; place-items: center; }
+.asst-form button:disabled { opacity: 0.45; cursor: default; }
+.asst-form button svg { width: 20px; height: 20px; fill: currentColor; }
+.asst-note { margin: 0; padding: 0 12px 8px; font-size: 11px; color: var(--a-muted); background: #fff; }
+
+@media (max-width: 640px) {
+  .asst { right: 12px; bottom: 12px; }
+  .asst.raised { bottom: 84px; } /* trang chủ: chừa chỗ thanh "Đăng ký thành viên" cố định ở đáy */
+  .asst-fab span { display: none; }
+  .asst-fab { padding: 0; width: 52px; justify-content: center; }
+  .asst-panel { width: calc(100vw - 24px); height: calc(100dvh - 90px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .asst-panel, .asst-msg.typing span { animation: none; }
+}
+@media print { .asst { display: none; } }
