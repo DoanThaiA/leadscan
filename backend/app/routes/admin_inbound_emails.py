@@ -111,7 +111,8 @@ def detail(email_id: int, db: Session = Depends(get_db), _: AdminUser = Depends(
             select(InboundEmail).where(InboundEmail.thread_id == e.thread_id, InboundEmail.id != e.id).order_by(InboundEmail.id)
         ).unique().all()]
     return {
-        **_row(e), "to": e.to, "body_text": e.body_text, "attachment_names": e.attachment_names or [], "ai_json": e.ai_json,
+        **_row(e), "to": e.to, "body_text": e.body_text, "attachment_names": e.attachment_names or [],
+        "attachments": e.attachments or [], "is_forward": gmail_ingest.is_forward(e.subject, e.body_text), "ai_json": e.ai_json,
         "ai_model": e.ai_model, "ai_tokens": [e.ai_input_tokens, e.ai_output_tokens], "ai_cost_usd": round(e.ai_cost_usd or 0, 5),
         "processed_at": _iso(e.processed_at), "blocked": gmail_ingest.is_blocked(db, e.from_email), "thread": thread,
     }

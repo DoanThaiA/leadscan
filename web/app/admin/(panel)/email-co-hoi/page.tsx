@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Dialog, Icon, Skeleton, StatusBadge } from "@/components/admin/ui";
 import { api, errMsg, qs } from "@/lib/admin/api";
 import { fmtDateTime, fmtNum, fromNow } from "@/lib/admin/format";
+import { fmtBytes } from "@/lib/commerce";
 
 type Opp = { id: number; code: string; status: string; title: string };
 type Row = {
@@ -29,6 +30,8 @@ type Detail = Row & {
   to: string;
   body_text: string;
   attachment_names: string[];
+  attachments: { name: string; type: string; size: number; text: string; note: string }[];
+  is_forward: boolean;
   ai_json: Record<string, unknown> | null;
   ai_model: string;
   ai_cost_usd: number;
@@ -231,7 +234,7 @@ export default function InboundEmailsPage() {
               <div><dt>Nhận lúc</dt><dd>{fmtDateTime(detail.received_at ?? detail.created_at)}</dd></div>
               <div><dt>Trạng thái</dt><dd><StatusBadge status={BADGE[detail.status] ?? "new"} label={meta?.statuses[detail.status] ?? detail.status} /> {detail.error || detail.reason}</dd></div>
               {detail.ai_model ? <div><dt>AI</dt><dd>{detail.ai_model} · {detail.ai_cost_usd.toFixed(4)} USD</dd></div> : null}
-              {detail.attachment_names.length ? <div><dt>Tệp đính kèm</dt><dd>{detail.attachment_names.join(", ")} <span className="muted">(chỉ có tên tệp, mở Gmail để tải)</span></dd></div> : null}
+              {detail.attachment_names.length && !detail.attachments.length ? <div><dt>Tệp đính kèm</dt><dd>{detail.attachment_names.join(", ")} <span className="muted">(chỉ có tên tệp, mở Gmail để tải)</span></dd></div> : null}
             </dl>
 
             {detail.ai_json ? (
@@ -250,11 +253,27 @@ export default function InboundEmailsPage() {
             ) : null}
 
             <div>
-              <h3 style={{ fontSize: 14, marginBottom: 6 }}><Icon name="mail" size={14} /> Thư gốc</h3>
+              <h3 style={{ fontSize: 14, marginBottom: 6 }}><Icon name="mail" size={14} /> Thư gốc{detail.is_forward ? " (thư chuyển tiếp)" : ""}</h3>
               {detail.purged ? <p className="muted">Nội dung đã xoá theo thời hạn lưu.</p> : (
                 <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 13, maxHeight: 360, overflow: "auto", background: "var(--bg-soft, #f6f7f9)", padding: 12, borderRadius: 8 }}>{detail.body_text}</pre>
               )}
             </div>
+
+            {!detail.purged && detail.attachments.length ? (
+              <div>
+                <h3 style={{ fontSize: 14, marginBottom: 6 }}>Tệp đính kèm ({detail.attachments.length})</h3>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {detail.attachments.map((f, i) => f.text ? (
+                    <details key={i}>
+                      <summary style={{ cursor: "pointer" }}>{f.name} <span className="muted">· {fmtBytes(f.size)} · đã đọc {f.text.length.toLocaleString("vi-VN")} ký tự</span></summary>
+                      <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 13, maxHeight: 360, overflow: "auto", background: "var(--bg-soft, #f6f7f9)", padding: 12, borderRadius: 8, marginTop: 6 }}>{f.text}</pre>
+                    </details>
+                  ) : (
+                    <div key={i}>{f.name} <span className="muted">· {f.note}</span></div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {detail.thread.length ? (
               <div>

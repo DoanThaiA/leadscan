@@ -13,7 +13,7 @@ Trạng thái thư (status):
   merged    cùng luồng thư với thư đã có phiếu → gắn vào phiếu đó, không tạo phiếu mới
   error     lỗi gọi AI / dữ liệu AI sai mẫu (thử lại bằng nút "Xử lý lại")
 
-Quyền riêng tư: thư skipped / rejected bị xoá nội dung (body_text, ai_json) sau cfg.gmail_body_keep_days ngày,
+Quyền riêng tư: thư skipped / rejected bị xoá nội dung (body_text, attachments, ai_json) sau cfg.gmail_body_keep_days ngày,
 chỉ giữ người gửi, tiêu đề, lý do.
 """
 
@@ -49,6 +49,8 @@ class InboundEmail(Base):
     received_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
     body_text: Mapped[str] = mapped_column(Text, default="")
     attachment_names: Mapped[list] = mapped_column(JSON, default=list)
+    # Chữ đọc từ tệp đính kèm: [{name, type, size, text, note}] — note = lý do không đọc được (ảnh, PDF scan, quá lớn…)
+    attachments: Mapped[list] = mapped_column(JSON, default=list)
 
     status: Mapped[str] = mapped_column(String(12), default="new", index=True)
     reason: Mapped[str] = mapped_column(String(500), default="")  # lý do bỏ qua / loại / cần xem lại

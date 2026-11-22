@@ -12,6 +12,12 @@
 
 var MAX_PER_RUN = 30;        // số thư tối đa mỗi lượt (lượt chạy ≤ 6 phút)
 var MAX_BODY_CHARS = 60000;  // cắt thân thư quá dài
+// Tệp đính kèm: gửi NỘI DUNG (base64) các loại máy chủ đọc được chữ; tệp khác / quá lớn chỉ gửi tên.
+var MAX_FILES = 20;
+var MAX_FILE_BYTES = 10 * 1024 * 1024;   // 1 tệp
+var MAX_TOTAL_BYTES = 15 * 1024 * 1024;  // tổng 1 thư (base64 ≈ 20 MB, máy chủ nhận tối đa 24 MB)
+var READABLE_EXT = /\.(pdf|docx|xlsx|xlsm|pptx|txt|csv|tsv|html?|eml)$/i;
+var READABLE_TYPE = /^(application\/pdf|text\/(plain|csv|html)|message\/rfc822|application\/vnd\.openxmlformats-officedocument\.)/i;
 // Chỉ Hộp thư đến; bỏ Quảng cáo / Mạng xã hội / Diễn đàn (Gmail đã tự phân loại). Thư rác & thùng rác không nằm trong inbox.
 var QUERY = 'in:inbox -category:promotions -category:social -category:forums';
 
@@ -98,9 +104,20 @@ function run_() {
       subject: m.getSubject(),
       date: m.getDate().toISOString(),
       body: (m.getPlainBody() || '').slice(0, MAX_BODY_CHARS),
-      attachments: m.getAttachments({ includeInlineImages: false }).map(function (a) { return a.getName(); }),
+      attachments: attachments_(m),
     });
-    var code = post_(payload).getResponseCode();
+    var code;
+    try {
+      code = post_(payload).getResponseCode();
+      if (code === 413) { // quá lớn: gửi lại chỉ kèm tên tệp để không mất thư
+        var lite = JSON.parse(payload);
+        lite.attachments.forEach(function (a) { if (a.data) { delete a.data; a.skipped = 'too_large'; } });
+        code = post_(JSON.stringify(lite)).getResponseCode();
+      }
+    } catch (err) { // mạng lỗi / quá thời gian chờ: lượt sau gửi lại (máy chủ chống trùng theo mã thư)
+      Logger.log('Gửi lỗi (' + err + ') — lượt sau thử lại từ thư ' + m.getId());
+      break;
+    }
     if (code === 200 || code === 201) {
       sent++;
     } else if (code === 413 || code === 422) {
@@ -113,6 +130,25 @@ function run_() {
   }
   p.setProperty('CURSOR_TS', String(cursor));
   if (sent) Logger.log('Đã gửi ' + sent + ' thư.');
+}
+
+/** Tệp đính kèm (không gồm ảnh chèn trong thân thư): tên, loại, dung lượng + nội dung base64 nếu máy chủ đọc được. */
+function attachments_(m) {
+  var total = 0;
+  return m.getAttachments({ includeInlineImages: false }).slice(0, MAX_FILES).map(function (a) {
+    var name = a.getName() || 'tep-dinh-kem';
+    var type = a.getContentType() || '';
+    var size = a.getSize();
+    var item = { name: name, type: type, size: size };
+    if (!READABLE_EXT.test(name) && !READABLE_TYPE.test(type)) return item; // ảnh, .doc/.xls cũ, .zip… → chỉ tên
+    if (size > MAX_FILE_BYTES || total + size > MAX_TOTAL_BYTES) {
+      item.skipped = 'too_large';
+      return item;
+    }
+    total += size;
+    item.data = Utilities.base64Encode(a.getBytes());
+    return item;
+  });
 }
 
 function post_(body) {

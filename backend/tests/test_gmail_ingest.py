@@ -1,8 +1,12 @@
 """Thu thập cơ hội từ Gmail: webhook ký HMAC → lọc sơ bộ → AI (giả lập) → phiếu nháp; trang quản trị duyệt thư."""
 
+import base64
+import io
 import json
 import time
+import zipfile
 from datetime import timedelta
+from email.message import EmailMessage
 
 import pytest
 from sqlalchemy import select
@@ -13,7 +17,7 @@ from app.db import new_session, utcnow
 from app.models import Opportunity
 from app.models_inbound import InboundEmail
 from app.routes.gmail_webhook import signature
-from app.services import gmail_ingest
+from app.services import gmail_files, gmail_ingest
 
 URL = "/api/webhooks/gmail"
 SECRET = "khoa-gmail-thu-nghiem-0123456789"
@@ -315,3 +319,171 @@ def test_admin_reject_block_reprocess(admin, ai):
     blocks = admin.get("/api/admin/inbound-emails/blocks").json()["items"]
     assert [b["pattern"] for b in blocks] == ["@spam.vn"]
     assert admin.delete(f"/api/admin/inbound-emails/blocks/{blocks[0]['id']}").status_code == 200
+
+
+# ------------------------------------------------------------------ thư chuyển tiếp + tệp đính kèm
+
+FWD_BODY = """Chị xem giúp em cơ hội này nhé.
+
+---------- Forwarded message ---------
+From: Anh Nguyen <anh.nguyen@lidl.sg>
+Date: Tue, Nov 19, 2026 at 9:15 AM
+Subject: New business partners for carry bags
+To: <sales@k-packings.vn>
+
+""" + LIDL_BODY
+
+
+def b64(data: bytes) -> str:
+    return base64.b64encode(data).decode()
+
+
+def make_docx(paragraphs: list[str], table: list[list[str]]) -> bytes:
+    w = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    p = "".join(f"<w:p><w:r><w:t>{x}</w:t></w:r></w:p>" for x in paragraphs)
+    rows = "".join("<w:tr>" + "".join(f"<w:tc><w:p><w:r><w:t>{c}</w:t></w:r></w:p></w:tc>" for c in r) + "</w:tr>" for r in table)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("word/document.xml", f"<w:document {w}><w:body>{p}<w:tbl>{rows}</w:tbl></w:body></w:document>")
+    return buf.getvalue()
+
+
+def make_xlsx(rows: list[list]) -> bytes:
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    for r in rows:
+        wb.active.append(r)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def make_pdf(text: str) -> bytes:
+    """PDF 1 trang có lớp chữ (Helvetica, ASCII)."""
+    stream = f"BT /F1 12 Tf 50 750 Td ({text}) Tj ET".encode()
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out, offs = bytearray(b"%PDF-1.4\n"), []
+    for i, o in enumerate(objs, 1):
+        offs.append(len(out))
+        out += b"%d 0 obj\n" % i + o + b"\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1) + b"".join(b"%010d 00000 n \n" % x for x in offs)
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref)
+    return bytes(out)
+
+
+def make_eml(body: str, attach: tuple[str, bytes, str] | None = None) -> bytes:
+    m = EmailMessage()
+    m["From"], m["To"], m["Subject"] = "Tran Binh <binh@hopgiay.vn>", "sales@k-packings.vn", "Hoi gia thung carton"
+    m.set_content(body)
+    if attach:
+        maintype, subtype = attach[2].split("/")
+        m.add_attachment(attach[1], maintype=maintype, subtype=subtype, filename=attach[0])
+    return bytes(m)
+
+
+def test_forwarded_email_reads_original(client, ai):
+    """Thư forward: trước đây bị cắt mất phần thư gốc → "quá ngắn". Giờ AI đọc cả thư gốc."""
+    assert post(client, mail(subject="Fwd: New business partners for carry bags", body=FWD_BODY)).status_code == 201
+    e = email_row()
+    assert e.status == "drafted", (e.status, e.reason)
+    prompt = ai["calls"][0]
+    assert "CHUYỂN TIẾP" in prompt and "BSCI or SA8000" in prompt and "anh.nguyen@lidl.sg" in prompt
+
+
+@pytest.mark.parametrize("subject, body", [
+    ("Fwd: hỏi hàng", FWD_BODY),  # Gmail
+    ("FW: hỏi hàng", "Nhờ anh xử lý.\n\n________________________________\nFrom: Anh Nguyen <anh.nguyen@lidl.sg>\nSent: Tuesday\n\n" + LIDL_BODY),  # Outlook
+    ("hỏi hàng", "---------- Thư được chuyển tiếp ----------\nTừ: Anh Nguyen <anh.nguyen@lidl.sg>\n\n" + LIDL_BODY),
+])
+def test_forward_detection(subject, body):
+    assert gmail_ingest.is_forward(subject, body)
+    assert gmail_ingest.forwarded_from(body) == ("Anh Nguyen", "anh.nguyen@lidl.sg")
+    e = InboundEmail(subject=subject, body_text=body)
+    assert "BSCI or SA8000" in gmail_ingest.main_text(e)
+
+
+def test_reply_still_strips_quote():
+    e = InboundEmail(subject="Re: hỏi hàng", body_text="Ok anh.\n\nOn Mon, 18 Nov 2026 at 10:00 Anh wrote:\n> " + "x" * 500)
+    assert not gmail_ingest.is_forward(e.subject, e.body_text) and gmail_ingest.main_text(e) == "Ok anh."
+
+
+def test_forward_admin_draft_uses_original_sender(admin, hook):
+    post(admin, mail(subject="Fwd: New business partners for carry bags", body=FWD_BODY, **{"from": "Nhan vien <nv@leadscan.net>"}))
+    e = email_row()
+    assert e.status == "review"
+    r = admin.post(f"/api/admin/inbound-emails/{e.id}/draft")
+    with new_session() as db:
+        o = db.get(Opportunity, r.json()["opportunity"]["id"])
+        assert o.title == "New business partners for carry bags"
+        assert [(c.full_name, c.email) for c in o.contacts] == [("Anh Nguyen", "anh.nguyen@lidl.sg")]
+        assert "BSCI or SA8000" in o.detail
+    assert admin.get(f"/api/admin/inbound-emails/{e.id}").json()["is_forward"] is True
+
+
+def test_attachments_read_and_sent_to_ai(client, ai):
+    docx = make_docx(["Yeu cau bao gia thung carton 5 lop"], [["Quy cach", "So luong"], ["60x40x40 cm", "20.000 thung"]])
+    xlsx = make_xlsx([["San pham", "So luong"], ["Hop giay kraft", 5000]])
+    pdf = make_pdf("RFQ: tui giay kraft, han chot 15/12/2026")
+    eml = make_eml("Ben em can mua 3.000 tem nhan decal.", ("specs.txt", "Kich thuoc tem 5x3 cm".encode(), "text/plain"))
+    files = [
+        {"name": "RFQ.docx", "type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "size": len(docx), "data": b64(docx)},
+        {"name": "list.xlsx", "type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "size": len(xlsx), "data": b64(xlsx)},
+        {"name": "rfq.pdf", "type": "application/pdf", "size": len(pdf), "data": b64(pdf)},
+        {"name": "Fwd hoi gia.eml", "type": "message/rfc822", "size": len(eml), "data": b64(eml)},
+        {"name": "anh.jpg", "type": "image/jpeg", "size": 1000},
+        {"name": "catalog.pdf", "type": "application/pdf", "size": 50_000_000, "skipped": "too_large"},
+        {"name": "old.doc", "type": "application/msword", "size": 100},
+    ]
+    assert post(client, mail(body="Anh xem file dinh kem giup em.", attachments=files)).status_code == 201
+    e = email_row()
+    assert e.status == "drafted", (e.status, e.reason)  # thân thư ngắn nhưng tệp có nội dung → không bị bỏ qua
+    assert e.attachment_names == [f["name"] for f in files]
+    got = {f["name"]: f for f in e.attachments}
+    assert "60x40x40 cm | 20.000 thung" in got["RFQ.docx"]["text"]
+    assert "Hop giay kraft | 5000" in got["list.xlsx"]["text"]
+    assert "han chot 15/12/2026" in got["rfq.pdf"]["text"]
+    assert "3.000 tem nhan" in got["Fwd hoi gia.eml"]["text"] and "binh@hopgiay.vn" in got["Fwd hoi gia.eml"]["text"]
+    assert "Kich thuoc tem 5x3 cm" in got["Fwd hoi gia.eml"]["text"]  # tệp bên trong thư đính kèm
+    assert "Ảnh" in got["anh.jpg"]["note"] and "quá lớn" in got["catalog.pdf"]["note"] and "Định dạng cũ" in got["old.doc"]["note"]
+    prompt = ai["calls"][0]
+    assert '<tep ten="RFQ.docx">' in prompt and "20.000 thung" in prompt and "Hop giay kraft" in prompt and "3.000 tem nhan" in prompt
+    assert '<tep ten="anh.jpg">(Ảnh' in prompt
+    with new_session() as db:
+        assert "RFQ.docx" in db.get(Opportunity, e.opportunity_id).detail
+
+
+def test_attachment_errors_do_not_break_email(client, hook):
+    files = [
+        {"name": "hong.pdf", "type": "application/pdf", "data": b64(b"khong phai pdf")},
+        {"name": "hong.docx", "type": "", "data": b64(b"PK khong phai zip")},
+        {"name": "rac.txt", "type": "text/plain", "data": "!!!khong-phai-base64"},
+    ]
+    assert post(client, mail(attachments=files)).status_code == 201
+    got = {f["name"]: f for f in email_row().attachments}
+    assert got["hong.pdf"]["note"] and got["hong.docx"]["note"] and not got["hong.pdf"]["text"]
+
+
+def test_zip_bomb_rejected(monkeypatch):
+    monkeypatch.setattr(gmail_files, "MAX_UNZIPPED", 1000)
+    item = gmail_files.extract_one("a.docx", "", make_docx(["x" * 5000], []))
+    assert item["text"] == "" and "quá lớn" in item["note"]
+
+
+def test_purge_clears_attachment_text(client, ai):
+    ai["result"] = {**LIDL_AI, "is_opportunity": False}
+    post(client, mail(attachments=[{"name": "a.txt", "type": "text/plain", "data": b64("bi mat".encode())}]))
+    assert email_row().attachments[0]["text"] == "bi mat"
+    with new_session() as db:
+        e = db.get(InboundEmail, email_row().id)
+        e.processed_at = utcnow() - timedelta(days=8)
+        db.commit()
+        gmail_ingest.purge_old(db)
+    assert email_row().attachments == []

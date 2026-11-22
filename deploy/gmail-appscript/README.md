@@ -14,7 +14,11 @@ Gmail ──(Apps Script, 5 phút)──► POST /api/webhooks/gmail ──► i
 - **Chỉ gửi thư mới.** Thư nhận trước lúc chạy `setup()` không bao giờ được gửi.
 - Script chỉ đọc **Hộp thư đến**. Nó bỏ qua tab Quảng cáo, Mạng xã hội, Diễn đàn và thư do chính bạn gửi.
 - Script **không sửa, không gắn nhãn, không xoá** thư nào trong Gmail.
-- Tệp đính kèm chỉ được gửi **tên tệp**, không gửi nội dung.
+- **Thư chuyển tiếp (forward)** được đọc cả phần thư gốc bên trong. AI lấy bên có nhu cầu và người liên hệ từ thư gốc, không lấy người chuyển tiếp.
+- **Tệp đính kèm** được gửi cả nội dung, máy chủ đọc chữ trong tệp rồi đưa cho AI cùng thân thư:
+  - Đọc được: PDF có lớp chữ, Word `.docx`, Excel `.xlsx`, PowerPoint `.pptx`, `.txt`/`.csv`, `.html`, và thư đính kèm `.eml` (kiểu "Chuyển tiếp dưới dạng tệp đính kèm", đọc cả tệp bên trong thư đó).
+  - Chưa đọc được (chỉ hiện tên và lý do, mở Gmail để xem): ảnh, PDF scan, `.doc`/`.xls`/`.ppt` đời cũ, `.zip`, `.msg`.
+  - Mỗi tệp tối đa 10 MB, tổng mỗi thư 15 MB; tệp vượt mức chỉ gửi tên. PDF chỉ đọc 30 trang đầu.
 
 ## 1. Máy chủ
 
@@ -34,7 +38,7 @@ Gmail ──(Apps Script, 5 phút)──► POST /api/webhooks/gmail ──► i
    docker compose exec api alembic upgrade head
    docker compose restart api worker beat
    ```
-4. Cập nhật Nginx (`deploy/nginx.conf` có thêm `location = /api/webhooks/gmail`, cho phép body đến 1 MB), rồi `nginx -s reload`.
+4. Cập nhật Nginx (`deploy/nginx.conf` có `location = /api/webhooks/gmail`, cho phép body đến 25 MB vì thư kèm nội dung tệp đính kèm), rồi `nginx -s reload`.
 
 Nếu AI đang tắt, thư qua được lọc sơ bộ vẫn vào tab **Cần xem lại**, và admin bấm **Tạo phiếu nháp** bằng tay.
 
@@ -53,6 +57,8 @@ Nếu AI đang tắt, thư qua được lọc sơ bộ vẫn vào tab **Cần xe
    - Lần đầu Google sẽ hỏi quyền đọc Gmail và gọi URL bên ngoài. Màn hình "Google hasn't verified this app" là bình thường, vì đây là script của chính bạn: chọn **Advanced**, rồi **Go to … (unsafe)**, rồi **Allow**.
    - Log hiện `Kết nối OK` là đạt.
 5. Chọn hàm `setup` và bấm **Run**. Script ghi lại mốc bắt đầu và tạo trigger chạy 5 phút một lần.
+
+**Đã cài bản cũ (chỉ gửi tên tệp)?** Mở project Apps Script, dán đè toàn bộ `Code.gs` mới rồi lưu. Không cần chạy lại `setup()`: trigger dùng bản mới từ lượt chạy kế tiếp.
 
 Kiểm tra: gửi một thư thử vào Gmail đó. Sau khoảng 5 phút, thư sẽ xuất hiện trong trang quản trị **Cơ hội từ email**.
 

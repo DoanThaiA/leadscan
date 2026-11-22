@@ -111,7 +111,9 @@ class Settings(BaseSettings):
     # Thu thập cơ hội từ Gmail (deploy/gmail-appscript): Apps Script trong Gmail POST thư mới tới /api/webhooks/gmail,
     # ký HMAC-SHA256 bằng khoá này. Trống = tắt webhook (404).
     gmail_webhook_secret: str = ""
-    gmail_webhook_max_kb: int = 512  # kích thước tối đa 1 thư gửi lên (Apps Script đã cắt thân thư ~60.000 ký tự)
+    # Kích thước tối đa 1 thư gửi lên: thân thư ≤ 60.000 ký tự + tệp đính kèm (Apps Script gửi tối đa 15 MB tệp, base64 ≈ 20 MB).
+    # Đổi thì đổi cả client_max_body_size của /api/webhooks/gmail trong deploy/nginx.conf.
+    gmail_webhook_max_kb: int = 24_576
     # AI đọc thư → JSON cơ hội. TẮT mặc định: bật khi pháp chế đồng ý gửi nội dung thư khách ra API AI nước ngoài.
     # Tắt thì thư qua lọc sơ bộ vào "Cần xem lại" để admin tự tạo phiếu. Model: xem mục "AI sinh văn bản" bên dưới.
     gmail_ai_enabled: bool = False

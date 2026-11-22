@@ -5,7 +5,8 @@ Xác thực (khoá LEADSCAN_GMAIL_WEBHOOK_SECRET; trống = webhook tắt → 40
   X-LeadScan-Signature: <hex HMAC-SHA256(khoá, "<timestamp>." + body)>
 
 Body JSON (1 thư / request):
-  id, thread_id, from ("Tên <email>"), to, subject, date (ISO 8601), body (văn bản thuần), attachments [tên tệp]
+  id, thread_id, from ("Tên <email>"), to, subject, date (ISO 8601), body (văn bản thuần),
+  attachments [{name, type, size, data (base64, chỉ loại máy chủ đọc được), skipped ("too_large")}] — hoặc [tên tệp] (bản cũ)
 
 Kết quả:
   201 {"ok": true, "id"}                    đã nhận, xếp hàng xử lý (lọc + AI + tạo phiếu nháp)
