@@ -124,7 +124,7 @@ export default async function PublicOppPage({ params }: Props) {
             <aside className="pub-buy" id="mua">
               <small>Giá phiếu từ</small>
               <b className="pub-price">{vnd(o.price_from)}</b>
-              <span className="pub-note">Giá thành viên tính theo mức phù hợp với doanh nghiệp của bạn.</span>
+              <span className="pub-note">Bấm mua: hệ thống chấm mức phù hợp với yêu cầu tìm cơ hội của doanh nghiệp bạn rồi mới ra giá của bạn (từ mức này trở lên).</span>
               <SlotBar o={o} />
               <BuyButton id={o.id} code={o.code} disabled={o.sold_out} />
               <ShareButton title={o.title} />

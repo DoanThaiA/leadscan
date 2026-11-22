@@ -22,7 +22,7 @@
 - /co-hoi: danh sách cơ hội đang mở bán, ai cũng xem được. Lọc theo ngành, khu vực, tìm theo mặt hàng hoặc mã CH-…; có trang theo ngành và theo khu vực. Chi tiết: /co-hoi/<mã CH-…>, có nút chia sẻ (Zalo, Facebook).
 - Trang chi tiết công khai hiện đúng phần thành viên thấy khi chưa mua: tiêu đề, tóm tắt, ngành, khu vực, quy mô, giá trị ước tính, hạn chót, nguồn tin, độ tin cậy nguồn, độ cấp thiết, số đầu mối, số ảnh/tệp, số lượt mua tối đa, "Giá phiếu từ".
 - "Giá phiếu từ" là giá thấp nhất; giá thật của mỗi thành viên tính theo điểm phù hợp riêng.
-- Bấm "Mua phiếu" khi chưa đăng nhập: hiện lựa chọn Đăng ký thành viên / Đăng nhập, xong quay lại đúng cơ hội. Đã đăng nhập: cơ hội được thêm vào "Tất cả cơ hội" và "Kho của tôi" để mua như thường (giá bằng mức "Giá phiếu từ" vì chưa so khớp với yêu cầu của doanh nghiệp).
+- Bấm "Mua phiếu" khi chưa đăng nhập: hiện lựa chọn Đăng ký thành viên / Đăng nhập, xong quay lại đúng cơ hội. Đã đăng nhập: hệ thống quét cơ hội với các phiếu tìm cơ hội của doanh nghiệp để chấm điểm phù hợp và ra giá riêng (không lấy "Giá phiếu từ"), rồi thêm vào "Tất cả cơ hội" và "Kho của tôi" để xem giá và mua như thường. Doanh nghiệp chưa gửi phiếu tìm cơ hội nào thì chưa chấm được điểm → áp giá cơ bản; gửi phiếu tìm sau đó thì giá các cơ hội này được chấm lại.
 - Công cụ: search_opportunities, get_opportunity (chỉ phần xem trước công khai); list_options (danh mục ngành, khu vực).
 - /cam-nang: Cẩm nang (bài viết hướng dẫn tìm khách hàng B2B, kiếm thu nhập khi giới thiệu cơ hội, dùng LeadScan); có trang theo khu vực. /bai-viet: các danh mục bài viết khác.
 - /doi-tac: giới thiệu chương trình đối tác, form đăng ký đối tác, hỏi đáp. /doi-tac/dieu-khoan: Điều khoản đối tác & Chính sách bảo mật (bản dự thảo, đang chờ luật sư duyệt).

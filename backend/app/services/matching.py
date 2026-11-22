@@ -623,7 +623,93 @@ def match_request(db: Session, req: SearchRequest, cfg: Settings | None = None, 
         db.delete(stale)
     refresh_company(db, req.company_id, touched, req.member_user_id)
     db.flush()
+    rescore_shared(db, req.company_id, cfg)  # cơ hội mở từ link công khai: giá theo yêu cầu mới
     return matched
+
+
+SHARED_NO_REQUEST = "Bạn chưa gửi yêu cầu tìm cơ hội nào nên hệ thống chưa chấm được điểm phù hợp — đang áp giá cơ bản"
+SHARED_NOTE = "Bạn mở cơ hội này từ liên kết công khai — điểm chấm theo yêu cầu tìm cơ hội của bạn"
+MAX_SHARED_REQUESTS = 30  # số phiếu tìm gần nhất của doanh nghiệp đem chấm khi mở từ link
+
+
+def score_shared(db: Session, company_id: int, opp: Opportunity, member_user_id: int | None = None, cfg: Settings | None = None) -> UserOpportunity:
+    """Thành viên mở cơ hội từ trang công khai /co-hoi/<mã> (bấm "Mua"): QUÉT cơ hội với các phiếu tìm cơ hội của doanh nghiệp
+    rồi mới ra điểm & giá — không áp giá "từ" như ngoài trang công khai.
+
+    - Khớp ≥ 1 phiếu tìm (qua vòng loại + đạt ngưỡng) → ghi như so khớp thường (SearchRequestMatch + "Tất cả cơ hội").
+    - Không khớp phiếu nào → vẫn thêm vào "Tất cả cơ hội" (via_share) với điểm cao nhất chấm được → giá theo điểm đó.
+    - Chưa có phiếu tìm nào → điểm 0, giá cơ bản, lý do ghi rõ để khách gửi yêu cầu.
+    Đã mua thì không đụng tới (giá đã chốt lúc mua). Trả về dòng UserOpportunity của doanh nghiệp."""
+    cfg = cfg or get_settings()
+    today = date.today()
+    reqs = list(db.scalars(
+        select(SearchRequest).options(undefer(SearchRequest.embedding))
+        .where(SearchRequest.company_id == company_id, SearchRequest.status != "rejected")
+        .order_by(SearchRequest.id.desc()).limit(MAX_SHARED_REQUESTS)
+    ).unique())
+    best: tuple[Scored, SearchRequest] | None = None
+    matched = False
+    if reqs:
+        semantic = True
+        try:
+            sync_opp_embeddings(db, cfg, [opp])  # chỉ gọi API khi nội dung phiếu đổi
+            sync_request_embeddings(db, cfg, reqs)
+        except emb.EmbeddingError:
+            semantic = False  # dự phòng: chỉ tiêu chí + từ khoá
+        idf = corpus_idf(db)
+        for r in reqs:
+            cos = None
+            if semantic and r.embedding is not None and opp.embedding is not None and r.embedding_model == opp.embedding_model:
+                cos = emb.cosine(r.embedding, opp.embedding)
+            q = RequestCtx(r)
+            s = score_pair(q, opp, cos, cfg, today, idf)
+            if _matchable(opp, today) and is_match(q, s, cfg):
+                existing = db.scalar(select(SearchRequestMatch).where(SearchRequestMatch.request_id == r.id, SearchRequestMatch.opportunity_id == opp.id))
+                _upsert_request_match(db, r.id, opp.id, s, existing)
+                matched = True
+            if best is None or s.score > best[0].score:
+                best = (s, r)
+    if matched:
+        refresh_company(db, company_id, {opp.id}, member_user_id)
+        db.flush()
+    else:
+        _lock_company(db, company_id)
+    u = db.scalar(select(UserOpportunity).where(UserOpportunity.company_id == company_id, UserOpportunity.opportunity_id == opp.id))
+    if u is None:
+        u = UserOpportunity(company_id=company_id, opportunity_id=opp.id, via_share=True)
+        db.add(u)
+    if not matched:
+        if best:
+            s, r = best
+            u.score, u.score_fit, u.score_urgency, u.score_trust, u.best_request_id = s.score, s.fit, s.urgency, s.trust, r.id
+            u.reasons = [SHARED_NOTE, *s.reasons]
+        else:
+            u.score = u.score_fit = 0
+            u.score_urgency, u.score_trust, u.best_request_id = urgency_of(opp, today), _trust(opp), None
+            u.reasons = [SHARED_NO_REQUEST]
+    db.flush()
+    return u
+
+
+def rescore_shared(db: Session, company_id: int, cfg: Settings | None = None) -> int:
+    """Doanh nghiệp vừa gửi / sửa phiếu tìm → chấm lại các cơ hội mở từ link công khai (chưa mua, chưa khớp phiếu nào)
+    để giá theo yêu cầu mới. Trả về số cơ hội đã chấm lại."""
+    bought = select(Purchase.opportunity_id).where(Purchase.company_id == company_id)
+    rows = db.scalars(
+        select(UserOpportunity).where(UserOpportunity.company_id == company_id, UserOpportunity.via_share.is_(True),
+                                      UserOpportunity.opportunity_id.not_in(bought))
+    ).unique().all()
+    matched_ids = set(db.scalars(
+        select(SearchRequestMatch.opportunity_id).join(SearchRequest, SearchRequest.id == SearchRequestMatch.request_id)
+        .where(SearchRequest.company_id == company_id)
+    ))
+    n = 0
+    for u in rows:
+        if u.opportunity_id in matched_ids or u.opportunity.status != "published":
+            continue  # đã khớp phiếu tìm → điểm do so khớp thường cập nhật
+        score_shared(db, company_id, u.opportunity, cfg=cfg)
+        n += 1
+    return n
 
 
 def match_opportunity(db: Session, opp: Opportunity, cfg: Settings | None = None, semantic: bool = True) -> int:

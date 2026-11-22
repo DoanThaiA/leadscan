@@ -443,21 +443,19 @@ def get_opportunity(opp_id: int, user: MemberUser = Depends(current_member), db:
 
 @router.post("/opportunities/{opp_id}/open-shared")
 def open_shared(opp_id: int, user: MemberUser = Depends(current_member), db: Session = Depends(get_db)):
-    """Thành viên bấm "Mua" trên trang công khai /co-hoi/<mã>: cơ hội chưa so khớp với doanh nghiệp → thêm vào "Tất cả cơ hội"
-    + Kho của tôi (đánh dấu via_share, so khớp lại không xoá) để xem & mua. Điểm phù hợp = 0 phần khớp yêu cầu → giá cơ bản."""
-    from datetime import date as _date
-
-    from app.services.matching import _trust, urgency_of
+    """Thành viên bấm "Mua" trên trang công khai /co-hoi/<mã>: QUÉT cơ hội với các phiếu tìm cơ hội của doanh nghiệp để ra
+    điểm phù hợp & giá riêng (matching.score_shared) — không lấy giá "từ" của trang công khai — rồi thêm vào "Tất cả cơ hội"
+    + Kho của tôi để xem & mua. Đã mua thì giữ nguyên (giá đã chốt lúc mua)."""
+    from app.services.matching import score_shared
 
     o = db.get(Opportunity, opp_id)
     if not o or o.status != "published":
         raise HTTPException(404, "Cơ hội không còn mở bán.")
     cid = user.company_id
-    if catalog.user_match(db, cid, o.id) is None and not db.scalar(select(Purchase.id).where(Purchase.company_id == cid, Purchase.opportunity_id == o.id)):
-        urg, trust = urgency_of(o, _date.today()), _trust(o)
-        db.add(UserOpportunity(company_id=cid, opportunity_id=o.id, score=0, score_fit=0,  # chưa so khớp với yêu cầu → điểm phù hợp 0 (giá cơ bản)
-                               score_urgency=urg, score_trust=trust, via_share=True,
-                               reasons=["Bạn mở cơ hội này từ liên kết chia sẻ — chưa so khớp với yêu cầu tìm cơ hội của bạn"]))
+    if not db.scalar(select(Purchase.id).where(Purchase.company_id == cid, Purchase.opportunity_id == o.id)):
+        u = catalog.user_match(db, cid, o.id)
+        if u is None or u.via_share:  # cơ hội đã khớp phiếu tìm thì điểm do so khớp thường giữ; mở từ link thì chấm lại mỗi lần
+            score_shared(db, cid, o, user.id)
         if not catalog.saved_ids(db, cid, [o.id]):
             db.add(SavedOpportunity(company_id=cid, opportunity_id=o.id, member_user_id=user.id))
         db.commit()

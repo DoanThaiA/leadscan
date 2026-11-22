@@ -70,7 +70,8 @@ def test_member_opens_shared_link_then_buys(admin, client):
     r = m.post(f"/api/member/opportunities/{oid}/open-shared")
     assert r.status_code == 200 and r.json()["id"] == oid
     o = m.get(f"/api/member/opportunities/{oid}").json()["opportunity"]
-    assert o["saved"] is True and "liên kết chia sẻ" in o["reasons"][0] and "buyer_name" not in o
+    assert o["saved"] is True and "chưa gửi yêu cầu tìm cơ hội" in o["reasons"][0] and "buyer_name" not in o
+    assert o["score"] == 0  # chưa có phiếu tìm → chưa chấm được → giá cơ bản
     pay_membership(m)
     assert m.post(f"/api/member/opportunities/{oid}/purchase").status_code == 200
     # gọi lại không tạo trùng
@@ -92,6 +93,69 @@ def test_shared_row_survives_rematch(admin, client):
         matching.match_opportunity(db, db.get(Opportunity, oid))  # so khớp lại: không phiếu tìm nào khớp
         db.commit()
     assert m.get(f"/api/member/opportunities/{oid}").status_code == 200  # vẫn giữ
+
+
+NOPLACE = "Cần mua hộp carton, thùng giấy bao bì 5 lớp cho nhà máy điện tử, số lượng lớn mỗi tháng."
+
+
+def _row(oid):
+    with new_session() as db:
+        return db.scalar(select(UserOpportunity).where(UserOpportunity.opportunity_id == oid))
+
+
+def test_shared_link_scans_before_pricing(admin, client):
+    """Bấm mua từ trang công khai: hệ thống QUÉT cơ hội với phiếu tìm của doanh nghiệp rồi mới ra giá — không lấy giá "từ"."""
+    from tests.test_member import CARTON_NOTE, ask
+
+    register(client)
+    m = member_client()
+    pay_membership(m)
+    # phiếu tìm đúng sản phẩm nhưng chọn khu vực khác → không qua vòng loại, cơ hội không tự vào "Tất cả cơ hội"
+    ask(m, NOPLACE, regions=["Miền Nam"])
+    oid = make_opp(admin, title="Cần 200.000 hộp carton 5 lớp/tháng cho nhà máy điện tử", summary=CARTON_NOTE)
+    assert m.get(f"/api/member/opportunities/{oid}").status_code == 404
+    code = admin.get(f"/api/admin/opportunities/{oid}").json()["opportunity"]["code"]
+    price_from = new_client().get(f"/api/public/opportunities/{code}").json()["price_from"]
+
+    assert m.post(f"/api/member/opportunities/{oid}/open-shared").status_code == 200
+    o = m.get(f"/api/member/opportunities/{oid}").json()["opportunity"]
+    u = _row(oid)
+    assert u.via_share and u.best_request_id is not None and u.score > 50  # điểm thật theo nội dung phiếu tìm
+    assert "liên kết công khai" in o["reasons"][0] and o["score"] == u.score
+    assert o["price"] > price_from  # giá riêng theo điểm, không phải giá "từ" ngoài trang công khai
+    pay_membership(m)
+    before = m.get("/api/member/wallet").json()["me"]["company"]["points_balance"]
+    assert m.post(f"/api/member/opportunities/{oid}/purchase").status_code == 200
+    after = m.get("/api/member/wallet").json()["me"]["company"]["points_balance"]
+    assert before - after == o["price"]  # trừ đúng giá đã chấm
+
+
+def test_shared_link_rescored_after_new_request(admin, client):
+    from tests.test_member import CARTON_NOTE, ask
+
+    register(client)
+    m = member_client()
+    pay_membership(m)
+    oid = make_opp(admin, title="Cần 200.000 hộp carton 5 lớp/tháng cho nhà máy điện tử", summary=CARTON_NOTE)
+    m.post(f"/api/member/opportunities/{oid}/open-shared")
+    assert _row(oid).score == 0
+    ask(m, NOPLACE, regions=["Miền Nam"])  # gửi phiếu tìm sau → cơ hội mở từ link được chấm lại
+    assert _row(oid).score > 50
+    assert m.get(f"/api/member/opportunities/{oid}").json()["opportunity"]["score"] == _row(oid).score
+
+
+def test_shared_link_matching_request_counts_as_match(admin, client):
+    """Phiếu tìm khớp hẳn (qua vòng loại) → ghi như so khớp thường: có trong kết quả của phiếu tìm."""
+    from tests.test_member import CARTON_NOTE, ask
+
+    register(client)
+    m = member_client()
+    pay_membership(m)
+    req = ask(m, CARTON_NOTE)
+    oid = make_opp(admin, title="Cần 200.000 hộp carton 5 lớp/tháng cho nhà máy điện tử", summary=CARTON_NOTE)
+    m.post(f"/api/member/opportunities/{oid}/open-shared")
+    ids = [it["id"] for it in m.get(f"/api/member/search-requests/{req['id']}/opportunities").json()["items"]]
+    assert oid in ids and _row(oid).score > 50
 
 
 def test_open_shared_rejects_closed(admin, client):
