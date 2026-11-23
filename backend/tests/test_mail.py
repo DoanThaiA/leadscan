@@ -44,7 +44,7 @@ def test_resend_loi_tra_false_khong_nem_loi(monkeypatch):
 
 
 def test_hoa_don_gui_qua_resend_va_ghi_nhan_da_gui(client, monkeypatch):
-    """Luồng thật: thanh toán → gửi thông tin hoá đơn → worker gửi Resend tới kế toán → email_sent_at được ghi."""
+    """Luồng thật (tắt IAM): thanh toán → worker tự gửi thông tin hoá đơn qua Resend tới kế toán → email_sent_at được ghi."""
     from sqlalchemy import select
 
     from app.db import new_session
@@ -55,13 +55,11 @@ def test_hoa_don_gui_qua_resend_va_ghi_nhan_da_gui(client, monkeypatch):
     _cfg(monkeypatch, resend_api_key="re_test_key")
     register(client)
     m = member_client()
-    code = pay_membership(m)
     with respx.mock(assert_all_called=True) as rm:
         route = rm.post("https://api.resend.com/emails").respond(200, json={"id": "email_456"})
-        r = m.post(f"/api/member/orders/{code}/invoice", json={"company_name": "Minh An", "tax_code": "0101234567", "address": "Bắc Ninh", "receive_email": "kt@minhan.vn"})
-        assert r.status_code == 201
-    sent = json.loads(route.calls.last.request.content)
-    assert sent["to"] == ["vylyy9999@gmail.com"] and code in sent["subject"] and "0101234567" in sent["text"]
+        code = pay_membership(m)
+    sent = _sent(route)["vylyy9999@gmail.com"]
+    assert code in sent["subject"] and "0101234567" in sent["text"] and "Tiền thuế GTGT" in sent["text"]
     with new_session() as db:
         assert db.scalar(select(InvoiceRequest)).email_sent_at is not None
 
@@ -139,7 +137,9 @@ def test_thanh_toan_gui_email_thanh_vien_va_bao_quan_tri(client, monkeypatch):
         before = route.call_count
         assert client.post(f"/api/member/orders/{code}/simulate-paid").status_code == 200
         sent = _sent(route, before)
-        assert set(sent) == {"quantri@gmail.com", "ketoan@minhan.vn"}  # gửi người liên hệ, không gửi email đăng nhập
+        # gửi người liên hệ (không gửi email đăng nhập) + kế toán nhận thông tin xuất hoá đơn (tắt IAM)
+        assert set(sent) == {"quantri@gmail.com", "ketoan@minhan.vn", "vylyy9999@gmail.com"}
+        assert code in sent["vylyy9999@gmail.com"]["subject"]
 
         member = sent["ketoan@minhan.vn"]
         assert member["subject"] == "[LeadScan] Kích hoạt thành viên thành công"

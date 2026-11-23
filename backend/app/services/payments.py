@@ -159,8 +159,8 @@ def mark_paid(
     from app.worker import einvoice_for_order_task, enqueue, notify_payment_task  # import muộn: tránh vòng import
 
     enqueue(notify_payment_task, order.id)  # email cho thành viên + báo quản trị (chạy nền)
-    if cfg.iam_enabled and cfg.iam_issue_on_payment and order.amount > 0:  # đơn 0đ không xuất hoá đơn
-        enqueue(einvoice_for_order_task, order.id)  # tự xuất hoá đơn điện tử IAM
+    if cfg.iam_issue_on_payment and order.amount > 0:  # đơn 0đ không xuất hoá đơn
+        enqueue(einvoice_for_order_task, order.id)  # bật IAM: tự xuất HĐĐT; tắt IAM: email kế toán xuất thủ công
     return True
 
 

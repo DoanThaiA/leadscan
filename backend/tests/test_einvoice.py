@@ -190,15 +190,49 @@ def test_da_ky_o_lan_truoc_khong_xuat_trung(client, iam):
     assert len(iam.created) == 1 and code in iam.invoices  # không gọi tạo hoá đơn lần 2
 
 
-def test_tat_iam_giu_cach_cu(client, iam, monkeypatch):
+def _iam_off(monkeypatch) -> list:
     monkeypatch.setenv("LEADSCAN_IAM_ENABLED", "false")
     from app.config import get_settings
 
     get_settings.cache_clear()
+    sent = []
+    monkeypatch.setattr("app.services.notify.send_mail", lambda cfg, subject, body, to=None: sent.append((to, subject, body)) or True)
+    return sent
+
+
+def test_tat_iam_thanh_toan_xong_email_ke_toan_xuat_thu_cong(client, iam, monkeypatch):
+    sent = _iam_off(monkeypatch)
     register(client)
     m = member_client()
     code = pay_membership(m)
-    assert _inv() is None
+
+    inv = _inv()
+    assert inv.source == "auto" and inv.status == "pending" and inv.email_sent_at and iam.created == [] and iam.logins == 0
+    mails = [(s, b) for to, s, b in sent if to == "vylyy9999@gmail.com"]
+    assert len(mails) == 1
+    subject, body = mails[0]
+    assert code in subject and "CHƯA tự xuất" not in body
+    for text in (inv.company_name, inv.tax_code, "KCN Quế Võ", "a@minhan.vn", "Phí thành viên LeadScan B2B", "Gói",
+                 "9.090.909đ", "10%", "909.091đ", "10.000.000đ", "Mười triệu đồng", "TM/CK", "hồ sơ doanh nghiệp"):
+        assert text in body, text
+    # khách gửi form sau đó → đã có thông tin, không email trùng
+    form = {"company_name": "Minh An", "tax_code": "0101234567", "address": "Bắc Ninh", "receive_email": "kt@minhan.vn"}
+    assert m.post(f"/api/member/orders/{code}/invoice", json=form).status_code == 409
+    assert len([1 for to, *_ in sent if to == "vylyy9999@gmail.com"]) == 1
+
+
+def test_tat_iam_thieu_dia_chi_cho_form_roi_email(client, iam, monkeypatch):
+    sent = _iam_off(monkeypatch)
+    cid = register(client)
+    with new_session() as db:
+        db.get(Company, cid).address = ""
+        db.commit()
+    m = member_client()
+    code = pay_membership(m)
+    assert _inv() is None and not [1 for to, *_ in sent if to == "vylyy9999@gmail.com"]
+
     form = {"company_name": "Minh An", "tax_code": "0101234567", "address": "Bắc Ninh", "receive_email": "kt@minhan.vn"}
     assert m.post(f"/api/member/orders/{code}/invoice", json=form).status_code == 201
     assert _inv().status == "pending" and iam.created == []
+    body = [b for to, s, b in sent if to == "vylyy9999@gmail.com"][0]
+    assert "Bắc Ninh" in body and "kt@minhan.vn" in body and "khách nhập qua form" in body

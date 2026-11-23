@@ -128,7 +128,7 @@ class Settings(BaseSettings):
     invoice_email: str = "vylyy9999@gmail.com"
 
     # Hoá đơn điện tử IAM Invoice (iamsoftware.com.vn): tự xuất HĐĐT sau khi thanh toán.
-    # Tắt (mặc định) → giữ cách cũ: email kế toán xuất thủ công.
+    # Tắt (mặc định) → xuất thủ công: thanh toán xong email đủ thông tin hoá đơn (người mua, hàng hoá, thuế) tới invoice_email.
     iam_enabled: bool = False
     iam_base_url: str = "https://invoice.iamsoftware.com.vn"  # demo: https://demo-invoice.iamsoftware.com.vn
     iam_username: str = ""  # tài khoản thật: MST, vd 0111272400 (demo: 0312303803-999)
@@ -142,8 +142,9 @@ class Settings(BaseSettings):
     iam_vat_rate: str = "10"  # thuế suất GTGT: 0, 5, 8, 10, KCT, KKKNT. Số tiền đơn hàng đã GỒM thuế.
     iam_payment_method: str = "PiCashOrWireTransfer"  # TM/CK
     iam_unit: str = "Gói"  # đơn vị tính trên hoá đơn
-    # Thanh toán xong → tự lấy thông tin doanh nghiệp đã đăng ký (tên, MST, địa chỉ) để xuất luôn, khách không phải điền.
-    # False = chờ khách gửi form "Thông tin xuất hoá đơn" rồi mới xuất.
+    # Thanh toán xong → tự lấy thông tin doanh nghiệp đã đăng ký (tên, MST, địa chỉ) để xuất luôn (IAM) hoặc email kế toán
+    # (tắt IAM), khách không phải điền. Thiếu địa chỉ → chờ khách gửi form.
+    # False = chờ khách gửi form "Thông tin xuất hoá đơn" rồi mới xuất / email.
     iam_issue_on_payment: bool = True
     iam_timeout_seconds: float = 60.0
 

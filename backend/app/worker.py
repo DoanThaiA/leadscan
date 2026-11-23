@@ -180,7 +180,8 @@ def issue_einvoice_task(self, invoice_id: int) -> None:
 
 @celery_app.task(name="leadscan.einvoice_for_order")
 def einvoice_for_order_task(order_id: int) -> None:
-    """Đơn vừa thanh toán → lấy thông tin doanh nghiệp đã đăng ký, tạo yêu cầu hoá đơn và xuất HĐĐT luôn."""
+    """Đơn vừa thanh toán → lấy thông tin doanh nghiệp đã đăng ký, tạo yêu cầu hoá đơn rồi:
+    bật IAM → xuất HĐĐT luôn; tắt IAM → email thông tin hoá đơn tới kế toán (LEADSCAN_INVOICE_EMAIL) xuất thủ công."""
     from sqlalchemy.exc import IntegrityError
 
     from app.db import new_session
@@ -200,8 +201,9 @@ def einvoice_for_order_task(order_id: int) -> None:
             log.info("Đơn %s: thiếu tên/MST/địa chỉ doanh nghiệp → chờ khách gửi thông tin xuất hoá đơn", o.code)
             return
         invoice_id = inv.id
-    if not enqueue(issue_einvoice_task, invoice_id):
-        issue_einvoice_task.apply(args=[invoice_id])
+    task = issue_einvoice_task if get_settings().iam_enabled else send_invoice_request_task
+    if not enqueue(task, invoice_id):
+        task.apply(args=[invoice_id])
 
 
 @celery_app.task(name="leadscan.send_password_reset")

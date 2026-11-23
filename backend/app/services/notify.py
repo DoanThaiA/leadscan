@@ -142,8 +142,18 @@ def _vnd(n: int | None) -> str:
 
 def send_invoice_request(cfg: Settings, inv) -> bool:
     """Gửi thông tin xuất hoá đơn tới kế toán (cfg.invoice_email) để xuất thủ công."""
+    from app.services.einvoice import NO_TAX_RATES, amount_in_words, item_name, split_vat
+
     o = inv.order
     c = o.company
+    total = int(o.paid_amount or o.amount)
+    rate = cfg.iam_vat_rate.strip().upper()
+    if rate not in NO_TAX_RATES:
+        rate = cfg.iam_vat_rate.strip()
+    pre, tax = split_vat(total, rate)
+    rate_label = f"{rate}%" if rate not in NO_TAX_RATES else rate
+    pay_label = {"PiCashOrWireTransfer": "TM/CK", "PiCash": "Tiền mặt", "PiWireTransfer": "Chuyển khoản"}.get(cfg.iam_payment_method, "TM/CK")
+    source = "khách nhập qua form \"Thông tin xuất hoá đơn\"" if inv.source == "member" else "lấy từ hồ sơ doanh nghiệp đã đăng ký"
     failed = (
         f"!! Hệ thống CHƯA tự xuất được hoá đơn điện tử qua IAM: {inv.einvoice_error}\n"
         "   Kiểm tra lại trên IAM (mã tra cứu = mã đơn) rồi bấm \"Phát hành HĐĐT\" ở trang Hoá đơn, hoặc xuất thủ công.\n\n"
@@ -154,17 +164,27 @@ def send_invoice_request(cfg: Settings, inv) -> bool:
         "YÊU CẦU XUẤT HOÁ ĐƠN — LeadScan B2B\n"
         "=====================================\n\n"
         + failed
-        + f"Mã đơn thanh toán : {o.code}\n"
-        f"Nội dung          : {'Phí thành viên LeadScan' if o.kind == 'membership' else 'Nạp điểm LeadScan'}\n"
-        f"Số tiền           : {_vnd(o.paid_amount or o.amount)}\n"
-        f"Thanh toán lúc    : {_vn(o.paid_at)}\n\n"
-        "THÔNG TIN XUẤT HOÁ ĐƠN\n"
+        + "ĐƠN THANH TOÁN\n"
+        f"Mã đơn thanh toán : {o.code}\n"
+        f"Thanh toán lúc    : {_vn(o.paid_at)}\n"
+        f"Mã giao dịch      : {o.provider_txn_id or '—'}\n"
+        f"Hình thức TT      : {pay_label}\n\n"
+        "NGƯỜI MUA (thông tin " + source + ")\n"
         f"Tên đơn vị        : {inv.company_name}\n"
         f"Mã số thuế        : {inv.tax_code}\n"
         f"Địa chỉ           : {inv.address}\n"
         f"Người mua hàng    : {inv.buyer_name or '—'}\n"
         f"Email nhận HĐ     : {inv.receive_email}\n"
         f"Ghi chú           : {inv.note or '—'}\n\n"
+        "HÀNG HOÁ, DỊCH VỤ\n"
+        f"Tên hàng hoá/DV   : {item_name(o, cfg)}\n"
+        f"Đơn vị tính       : {cfg.iam_unit}\n"
+        "Số lượng          : 1\n"
+        f"Đơn giá / Thành tiền (chưa thuế): {_vnd(pre)}\n"
+        f"Thuế suất GTGT    : {rate_label}\n"
+        f"Tiền thuế GTGT    : {_vnd(tax)}\n"
+        f"Tổng thanh toán   : {_vnd(total)}\n"
+        f"Số tiền bằng chữ  : {amount_in_words(total)}\n\n"
         f"Khách hàng trên hệ thống: {c.name} ({c.code})\n"
         f"Sau khi xuất, cập nhật số hoá đơn tại: {cfg.admin_url.rstrip('/')}/hoa-don\n"
     )
