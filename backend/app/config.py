@@ -130,8 +130,8 @@ class Settings(BaseSettings):
     # Hoá đơn điện tử IAM Invoice (iamsoftware.com.vn): tự xuất HĐĐT sau khi thanh toán.
     # Tắt (mặc định) → giữ cách cũ: email kế toán xuất thủ công.
     iam_enabled: bool = False
-    iam_base_url: str = "https://demo-invoice.iamsoftware.com.vn"  # production: link IAM cấp
-    iam_username: str = ""  # vd 0312303803-999 (MST-mã tài khoản)
+    iam_base_url: str = "https://invoice.iamsoftware.com.vn"  # demo: https://demo-invoice.iamsoftware.com.vn
+    iam_username: str = ""  # tài khoản thật: MST, vd 0111272400 (demo: 0312303803-999)
     iam_password: str = ""
     iam_invoice_form: str = "1"  # ký hiệu mẫu số (1 = HĐ GTGT)
     iam_invoice_serial: str = ""  # ký hiệu hoá đơn đã đăng ký, vd C26TYY
