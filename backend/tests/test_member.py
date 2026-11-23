@@ -298,6 +298,11 @@ def test_yeu_cau_enrich(admin, member):
 
 
 def test_yeu_cau_xuat_hoa_don_gui_email_ke_toan(member, monkeypatch):
+    """Tắt tự xuất khi thanh toán → khách gửi form thì email kế toán (mặc định đã tự email lúc thanh toán: test_einvoice)."""
+    from app.config import get_settings
+
+    monkeypatch.setenv("LEADSCAN_IAM_ISSUE_ON_PAYMENT", "false")
+    get_settings.cache_clear()
     sent = []
     monkeypatch.setattr("app.services.notify.send_mail", lambda cfg, subject, body, to=None: sent.append((to, subject, body)) or True)
     code = member.post("/api/member/orders", json={"kind": "membership"}).json()["order"]["code"]
