@@ -22,7 +22,7 @@ from app.schemas_jobs import slugify
 from app.services import event_files, events as ev, ocr
 from app.services.notify import event_inbox, mail_provider
 from app.services.storage import StorageError
-from app.worker import deliver_event_registration
+from app.worker import deliver_event_registration, enqueue_event_paid
 
 log = logging.getLogger("leadscan.admin.events")
 
@@ -238,11 +238,42 @@ def get_registration(rid: int, _: AdminUser = Depends(current_user), db: Session
     return _reg_out(_get_reg(db, rid))
 
 
+def _set_checked_in(r: EventRegistration, value: bool, user: AdminUser) -> None:
+    r.checked_in = value
+    r.checked_in_at = utcnow() if value else None
+    r.checked_in_by_id = user.id if value else None
+
+
+@router.get("/event-registrations/by-code/{code}")
+def registration_by_code(code: str, _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    """Lễ tân quét mã QR check-in (hoặc gõ mã đăng ký) → xem đăng ký trước khi xác nhận."""
+    r = db.scalar(select(EventRegistration).where(EventRegistration.code == code.strip().upper()))
+    if not r:
+        raise HTTPException(404, "Không tìm thấy mã đăng ký này.")
+    return _reg_out(r)
+
+
+@router.post("/event-registrations/{rid}/check-in")
+def check_in(rid: int, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    """Xác nhận khách đã đến. Bấm lại lần 2 không đổi giờ đến (trả về đăng ký như cũ, kèm already=true)."""
+    r = _get_reg(db, rid)
+    if r.status == "cancelled":
+        raise HTTPException(409, "Đăng ký này đã bị huỷ, không check-in được.")
+    already = r.checked_in
+    if not already:
+        _set_checked_in(r, True, user)
+        db.commit()
+        db.refresh(r)
+    return {**_reg_out(r), "already": already}
+
+
 @router.patch("/event-registrations/{rid}")
 def update_registration(rid: int, body: RegistrationAdminIn, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
     r = _get_reg(db, rid)
+    just_paid = False
     if body.status is not None and body.status != r.status:
         r.status = body.status
+        just_paid = body.status == "paid"
         if body.status == "paid":
             r.paid_at = r.paid_at or utcnow()
             r.confirmed_by_id = user.id
@@ -250,9 +281,11 @@ def update_registration(rid: int, body: RegistrationAdminIn, user: AdminUser = D
             r.paid_at = None
     if body.note is not None:
         r.note = body.note.strip()
-    if body.checked_in is not None:
-        r.checked_in = body.checked_in
+    if body.checked_in is not None and body.checked_in != r.checked_in:
+        _set_checked_in(r, body.checked_in, user)
     db.commit()
+    if just_paid:
+        enqueue_event_paid(r.id, notify_organizer=False)  # báo khách đã xác nhận; admin tự bấm nên không báo ban tổ chức
     db.refresh(r)
     return _reg_out(r)
 
@@ -297,8 +330,11 @@ async def recheck(rid: int, _: AdminUser = Depends(current_user), db: Session = 
 
     from app.routes.events import _apply_ocr
 
+    was_paid = r.status == "paid"
     _apply_ocr(r, res)
     db.commit()
+    if r.status == "paid" and not was_paid:
+        await run_in_threadpool(enqueue_event_paid, r.id, False)
     db.refresh(r)
     return _reg_out(r)
 
@@ -314,9 +350,10 @@ async def resend(rid: int, _: AdminUser = Depends(current_user), db: Session = D
         raise HTTPException(400, "Chưa cấu hình gửi email (Resend hoặc SMTP).")
     r.email_sent_at = None
     db.commit()
-    if not await run_in_threadpool(deliver_event_registration, rid):
-        raise HTTPException(502, "Gửi email chưa thành công, vui lòng thử lại sau.")
+    await run_in_threadpool(deliver_event_registration, rid)  # chỉ gửi lại ban tổ chức; khách đã nhận thì không gửi lại
     db.refresh(r)
+    if not r.email_sent_at:
+        raise HTTPException(502, "Gửi email chưa thành công, vui lòng thử lại sau.")
     return _reg_out(r)
 
 

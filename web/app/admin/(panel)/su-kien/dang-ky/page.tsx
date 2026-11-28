@@ -92,6 +92,7 @@ export default function EventRegistrationsPage() {
             Ảnh được đọc bằng OCR và so khớp mã đăng ký cùng số tiền; không khớp thì chờ bạn đối soát.
           </p>
         </div>
+        <Link href="/admin/su-kien/check-in" className="adm-btn primary"><Icon name="ticket" size={14} /> Check-in</Link>
       </div>
       <EventWarning meta={meta} />
       {error ? <div className="adm-alert" style={{ marginBottom: 16 }}>{error}</div> : null}
@@ -140,7 +141,10 @@ export default function EventRegistrationsPage() {
                       </div>
                     </td>
                     <td><OcrBadge r={r} /></td>
-                    <td><span className={`adm-badge ${REG_STATUS_CLASS[r.status] ?? ""}`}>{REG_STATUS[r.status] ?? r.status}</span></td>
+                    <td>
+                      <span className={`adm-badge ${REG_STATUS_CLASS[r.status] ?? ""}`}>{REG_STATUS[r.status] ?? r.status}</span>
+                      {r.checked_in ? <div className="sub" title={r.checked_in_at ? fmtDateTime(r.checked_in_at) : undefined}>✓ Đã đến</div> : null}
+                    </td>
                     <td style={{ whiteSpace: "nowrap" }} title={fmtDateTime(r.created_at)}>{fromNow(r.created_at)}</td>
                   </tr>
                 ))}
@@ -313,7 +317,7 @@ function RegistrationDialog({
       <div className="adm-field">
         <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <input type="checkbox" checked={checkedIn} onChange={(e) => setCheckedIn(e.target.checked)} />
-          <span>Đã check-in tại sự kiện</span>
+          <span>Đã check-in tại sự kiện{r.checked_in && r.checked_in_at ? ` (${fmtDateTime(r.checked_in_at)})` : ""}</span>
         </label>
       </div>
       <Field label="Ghi chú nội bộ" htmlFor="rg-note">

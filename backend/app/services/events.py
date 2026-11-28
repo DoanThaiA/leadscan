@@ -56,6 +56,29 @@ def payment_info(e: Event, r: EventRegistration, cfg: Settings | None = None) ->
     }
 
 
+def checkin_url(code: str, cfg: Settings | None = None) -> str:
+    """Nội dung mã QR check-in: trang quản trị cho lễ tân. Phải đăng nhập quản trị mới xem/xác nhận được,
+    nên khách quét thử chỉ gặp trang đăng nhập."""
+    cfg = cfg or get_settings()
+    return f"{cfg.site_url.rstrip('/')}/admin/su-kien/check-in?ma={code}"
+
+
+def checkin_qr_url(code: str, cfg: Settings | None = None) -> str:
+    """Ảnh PNG của mã QR check-in (email không hiện được ảnh nhúng data:, nên phục vụ qua URL)."""
+    cfg = cfg or get_settings()
+    return f"{cfg.site_url.rstrip('/')}/api/events/checkin-qr/{code}.png"
+
+
+def checkin_qr_png(code: str, cfg: Settings | None = None) -> bytes:
+    import io
+
+    import segno
+
+    buf = io.BytesIO()
+    segno.make(checkin_url(code, cfg), error="m").save(buf, kind="png", scale=8, border=3)
+    return buf.getvalue()
+
+
 def mask_email(email: str) -> str:
     """"binh@minhan.vn" → "b***@minhan.vn" — đủ để khách nhận ra hộp thư của mình mà không lộ địa chỉ đầy đủ."""
     name, sep, domain = email.partition("@")
