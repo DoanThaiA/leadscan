@@ -227,7 +227,7 @@ Chưa làm: tự dò đường dẫn tài liệu trên trang công bố HOSE / H
 
 Hai trang chỉ để **đăng sự kiện**: trang chủ là danh sách sự kiện của cổng, `/su-kien/<slug>` là chi tiết + đăng ký (cùng luồng form → QR → ảnh biên lai → OCR như leadscan.net), `/admin` là trang quản trị sự kiện riêng. Logo và màu theo từng đơn vị (`web/lib/sites.ts`, ảnh ở `web/public/sites/`): CEO 1989 xanh navy + xanh lá, EPC xanh navy + cam.
 
-- **Một bản code, 3 container web** (`docker-compose.yml`: `web`, `web-c89`, `web-epc` — cùng image, khác biến `SITE`), dùng chung API và CSDL. `web/proxy.ts` chuyển mọi đường dẫn của cổng vào `web/app/cong-su-kien/`; đường dẫn khác của LeadScan trên cổng trả 404. Trang quản trị cổng dùng lại đúng các trang sự kiện của admin LeadScan.
+- **Một bản code, 3 container web** (`docker-compose.yml`: `web`, `web-c89`, `web-epc` — cùng mã nguồn, khác biến `SITE`), dùng chung API và CSDL. `web/proxy.ts` chuyển mọi đường dẫn của cổng vào `web/app/cong-su-kien/`; đường dẫn khác của LeadScan trên cổng trả 404. Trang quản trị cổng dùng lại đúng các trang sự kiện của admin LeadScan.
 - **Trang của request**: header `X-LeadScan-Site` (`backend/app/sites.py`). Production: Nginx đặt ở từng khối server của cổng (`deploy/nginx-cong-su-kien.conf`) và **xoá** header khách tự gửi ở leadscan.net. Chạy dev: mở `http://c89.localhost:3000` / `http://epc.localhost:3000` (proxy nhận theo tên miền).
 - **Dữ liệu**: cột `site` (`leadscan` / `c89` / `epc`) trên `events`, `event_registrations`, `admin_users` (migration `a5c2e8f4b9d1`). Dữ liệu cũ thuộc `leadscan`. Slug sự kiện duy nhất trên mọi trang. Mỗi trang công khai chỉ hiện sự kiện của mình.
 - **Phân quyền** (`AdminUser.site`):

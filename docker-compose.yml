@@ -33,7 +33,6 @@ x-web: &web
       NEXT_PUBLIC_BING_SITE_VERIFICATION: ${BING_SITE_VERIFICATION:-}
       NEXT_PUBLIC_GA_ID: ${GA_MEASUREMENT_ID:-}
       API_INTERNAL_URL: http://api:8000
-  image: leadscan-web:latest  # build 1 lần, 3 container dùng chung
   restart: unless-stopped
   depends_on:
     - api
@@ -93,7 +92,7 @@ services:
     <<: *backend
     command: ["celery", "-A", "app.worker", "beat", "-l", "info", "-s", "/tmp/celerybeat-schedule"]
 
-  # 3 container web chạy CÙNG 1 image, khác biến SITE: leadscan.net (web), c89.leadscan.net (web-c89),
+  # 3 container web build từ cùng mã nguồn (Docker dùng lại cache nên chỉ biên dịch 1 lần), khác biến SITE: leadscan.net (web), c89.leadscan.net (web-c89),
   # epc.leadscan.net (web-epc). Cổng sự kiện chỉ có trang sự kiện + trang quản trị sự kiện (web/proxy.ts).
   web:
     <<: *web
