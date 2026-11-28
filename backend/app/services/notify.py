@@ -538,3 +538,111 @@ def send_application_receipt(cfg: Settings, a) -> bool:
         "Bộ phận Tuyển dụng LeadScan",
     ]
     return send_mail(cfg, f"[LeadScan] Đã nhận hồ sơ ứng tuyển {a.job_title}", "\n".join(lines) + "\n", to=a.email)
+
+
+# ------------------------------------------------------------------ sự kiện (/su-kien)
+
+
+def event_inbox(cfg: Settings, event=None) -> str:
+    """Hộp thư nhận đăng ký sự kiện: email riêng của sự kiện → LEADSCAN_EVENT_EMAIL → LEADSCAN_NOTIFY_EMAIL."""
+    return (getattr(event, "notify_email", "") or cfg.event_email or cfg.notify_email or "").strip()
+
+
+def _reg_lines(cfg: Settings, r) -> list[str]:
+    from app.models_events import ATTENDEE_TYPES, EVENT_REG_STATUSES
+
+    link = f"{cfg.site_url.rstrip('/')}/su-kien/{r.event.slug}" if r.event else "—"
+    return [
+        f"Sự kiện           : {r.event_title}",
+        f"Mã đăng ký        : {r.code}",
+        f"Họ và tên         : {r.full_name}",
+        f"Số điện thoại     : {r.phone}",
+        f"Email             : {r.email}",
+        f"Doanh nghiệp      : {r.company or '—'}{f' — {r.position}' if r.position else ''}",
+        f"Hình thức tham dự : {ATTENDEE_TYPES.get(r.attendee_type, r.attendee_type)}",
+        f"Phí tham dự       : {_vnd(r.amount)}",
+        f"Trạng thái        : {EVENT_REG_STATUSES.get(r.status, r.status)}",
+        f"Profile đính kèm  : {f'{r.profile_filename} ({_size(r.profile_size)}) — đính kèm email này' if r.profile_filename else '—'}",
+        f"Ảnh chuyển khoản  : {r.proof_filename or '—'}",
+        f"Đối soát OCR      : {r.ocr_message or '—'}",
+        f"Đăng ký lúc       : {_vn(r.created_at)}",
+        "",
+        "NHU CẦU XÚC TIẾN HỢP TÁC",
+        r.needs or "—",
+        "",
+        f"Trang sự kiện     : {link}",
+        f"Quản lý đăng ký   : {cfg.admin_url.rstrip('/')}/su-kien/dang-ky?id={r.id}",
+    ]
+
+
+def send_event_registration(cfg: Settings, r, profile_data: bytes | None = None) -> bool:
+    """Báo ban tổ chức có người đăng ký mới (Reply-To = email người đăng ký, đính kèm profile PDF nếu có)."""
+    to = event_inbox(cfg, r.event)
+    if not to:
+        log.warning("Chưa cấu hình email nhận đăng ký sự kiện — đăng ký #%s chỉ lưu trong hệ thống", r.id)
+        return False
+    body = "\n".join(["ĐĂNG KÝ THAM DỰ SỰ KIỆN", "=======================", "", *_reg_lines(cfg, r), "", "Trả lời email này để liên hệ trực tiếp với người đăng ký."])
+    attachments = (
+        [(r.profile_filename, r.profile_mime or "application/pdf", profile_data)] if r.profile_filename and profile_data else None
+    )
+    return send_mail(
+        cfg,
+        f"[Sự kiện] {r.event_title} — {r.full_name} ({r.code})",
+        body + "\n",
+        to=to,
+        reply_to=r.email,
+        attachments=attachments,
+    )
+
+
+def send_event_paid(cfg: Settings, r) -> bool:
+    """Báo ban tổ chức: đã đối soát tự động và ghi nhận thanh toán."""
+    to = event_inbox(cfg, r.event)
+    if not to:
+        return False
+    body = "\n".join(
+        [
+            "ĐÃ NHẬN THANH TOÁN THAM DỰ SỰ KIỆN",
+            "==================================",
+            "",
+            *_reg_lines(cfg, r),
+            "",
+            "Ảnh chuyển khoản khớp mã đăng ký và số tiền (đọc bằng OCR). Xem lại ảnh trong trang quản trị.",
+        ]
+    )
+    return send_mail(cfg, f"[Sự kiện] Đã thanh toán {_vnd(r.amount)} — {r.full_name} ({r.code})", body + "\n", to=to)
+
+
+def send_event_receipt(cfg: Settings, r, payment: dict | None = None) -> bool:
+    """Xác nhận cho người đăng ký: đã nhận đăng ký, kèm hướng dẫn chuyển khoản nếu còn phải nộp phí."""
+    from app.models_events import ATTENDEE_TYPES
+
+    lines = [
+        f"Chào {r.full_name},",
+        "",
+        f"Ban tổ chức đã nhận đăng ký tham dự sự kiện “{r.event_title}”.",
+        "",
+        f"  • Mã đăng ký      : {r.code}",
+        f"  • Hình thức tham dự: {ATTENDEE_TYPES.get(r.attendee_type, r.attendee_type)}",
+        f"  • Phí tham dự     : {_vnd(r.amount)}",
+    ]
+    if r.status == "paid":
+        lines += ["", "Đăng ký của bạn đã được xác nhận. Hẹn gặp bạn tại sự kiện!"]
+    else:
+        p = payment or {}
+        lines += [
+            "",
+            "ĐỂ HOÀN TẤT, VUI LÒNG CHUYỂN KHOẢN:",
+            f"  • Ngân hàng       : {p.get('bank_name') or '—'}",
+            f"  • Số tài khoản    : {p.get('account_no') or '—'}",
+            f"  • Chủ tài khoản   : {p.get('account_name') or '—'}",
+            f"  • Số tiền         : {_vnd(r.amount)}",
+            f"  • Nội dung        : {r.code}",
+            "",
+            "Chuyển khoản xong, mở lại trang sự kiện và tải ảnh chụp màn hình giao dịch lên để hệ thống",
+            "đối soát tự động. Ghi đúng nội dung chuyển khoản giúp xác nhận nhanh hơn.",
+        ]
+    if r.event:
+        lines += ["", f"Trang sự kiện: {cfg.site_url.rstrip('/')}/su-kien/{r.event.slug}?ma={r.code}"]
+    lines += ["", "Trân trọng,", "Ban tổ chức"]
+    return send_mail(cfg, f"[Sự kiện] Đã nhận đăng ký {r.event_title} — mã {r.code}", "\n".join(lines) + "\n", to=r.email)

@@ -803,3 +803,78 @@ def enrich_raw_purge_task() -> int:
 
     with new_session() as db:
         return scheduler.purge_raw(db)
+
+
+# ------------------------------------------------------------------ sự kiện (/su-kien)
+
+
+def deliver_event_registration(reg_id: int) -> bool:
+    """Gửi đăng ký sự kiện về hộp thư ban tổ chức (kèm profile PDF lấy từ R2) + email xác nhận cho khách."""
+    from app.db import new_session, utcnow
+    from app.models_events import EventRegistration
+    from app.services import event_files, events as ev
+    from app.services.notify import send_event_receipt, send_event_registration
+    from app.services.storage import StorageError
+
+    cfg = get_settings()
+    with new_session() as db:
+        r = db.get(EventRegistration, reg_id)
+        if not r:
+            return False
+        payment = ev.payment_info(r.event, r, cfg) if r.event else None
+        send_event_receipt(cfg, r, payment)  # khách luôn nhận xác nhận (lỗi gửi thì bỏ qua)
+        if r.email_sent_at:
+            return True
+        profile = None
+        if r.profile_key:
+            try:
+                profile = event_files.fetch(r.profile_key)
+            except StorageError:
+                log.exception("Không lấy được profile của đăng ký #%s trên R2", reg_id)
+                return False
+        if not send_event_registration(cfg, r, profile):
+            return False
+        r.email_sent_at = utcnow()
+        db.commit()
+        return True
+
+
+@celery_app.task(name="leadscan.event_registration", bind=True, max_retries=3)
+def event_registration_task(self, reg_id: int) -> None:
+    from app.services.notify import mail_provider
+
+    cfg = get_settings()
+    if not deliver_event_registration(reg_id) and mail_provider(cfg) and not cfg.celery_eager:
+        if self.request.retries < self.max_retries:
+            raise self.retry(countdown=120 * 2**self.request.retries)
+
+
+@celery_app.task(name="leadscan.event_paid")
+def event_paid_task(reg_id: int) -> None:
+    from app.db import new_session
+    from app.models_events import EventRegistration
+    from app.services.notify import send_event_paid, send_event_receipt
+
+    cfg = get_settings()
+    with new_session() as db:
+        r = db.get(EventRegistration, reg_id)
+        if r:
+            send_event_paid(cfg, r)
+            send_event_receipt(cfg, r)
+
+
+def enqueue_event_registration(reg_id: int) -> None:
+    """Redis lỗi → gửi luôn tại chỗ (đăng ký đã nằm trong DB, admin vẫn thấy)."""
+    if not enqueue(event_registration_task, reg_id):
+        try:
+            deliver_event_registration(reg_id)
+        except Exception:  # noqa: BLE001
+            log.exception("Không gửi được email đăng ký sự kiện #%s", reg_id)
+
+
+def enqueue_event_paid(reg_id: int) -> None:
+    if not enqueue(event_paid_task, reg_id):
+        try:
+            event_paid_task(reg_id)
+        except Exception:  # noqa: BLE001
+            log.exception("Không gửi được email xác nhận thanh toán sự kiện #%s", reg_id)

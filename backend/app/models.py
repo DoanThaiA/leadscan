@@ -23,6 +23,8 @@ RateHit                    đếm lượt để giới hạn tần suất (đăn
 ApiUsage                   đếm số lần gọi API ngoài theo tháng (Cohere: khoá Trial giới hạn 1.000 lần/tháng)
 JobPost                    bài tuyển dụng đăng trên /tuyen-dung
   └─ JobApplication         hồ sơ ứng viên gửi qua form (đồng thời email về hộp thư tuyển dụng)
+Event                      sự kiện đăng trên /su-kien (app/models_events.py)
+  └─ EventRegistration      đăng ký tham dự: profile PDF + ảnh chuyển khoản trên R2, đối soát bằng OCR
 PromoCode                  mã khuyến mãi giảm tiền đơn thanh toán (admin cấu hình)
 PartnerUser                tài khoản cổng đối tác (/doi-tac) — cùng email với MemberUser = cùng 1 tài khoản (app/accounts.py)
   ├─ PartnerSession / PartnerPasswordReset   phiên đăng nhập (cookie ls_partner) & đặt lại mật khẩu
@@ -1294,3 +1296,4 @@ from app import models_enrich  # noqa: E402, F401
 from app import models_crm  # noqa: E402, F401  — CRM Lite cho hạng Vàng
 from app import models_inbound  # noqa: E402, F401  — thu thập cơ hội từ Gmail
 from app import models_opp_mail  # noqa: E402, F401  — gửi phiếu cơ hội cho khách qua email
+from app import models_events  # noqa: E402, F401  — sự kiện /su-kien và đăng ký tham dự

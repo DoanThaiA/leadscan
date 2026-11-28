@@ -154,6 +154,24 @@ class Settings(BaseSettings):
     apply_cv_max_mb: int = 5
     site_url: str = "https://leadscan.net"  # link bài tuyển dụng trong email
 
+    # Sự kiện (/su-kien): đăng ký tham dự, đính kèm profile PDF, nộp ảnh chuyển khoản
+    event_email: str = ""  # email ban tổ chức nhận báo đăng ký mới (trống = email riêng của sự kiện → notify_email)
+    event_rate_limit_per_hour: int = 10  # số lượt đăng ký tối đa mỗi IP / giờ
+    event_profile_max_mb: int = 10  # profile PDF đính kèm
+    event_proof_max_mb: int = 8  # ảnh chụp màn hình chuyển khoản
+
+    # OCR ảnh chuyển khoản qua OCR.space (https://ocr.space/ocrapi). Trống = không đối soát tự động,
+    # mọi ảnh khách gửi vào trạng thái "Chờ đối soát" để ban tổ chức tự xác nhận.
+    ocr_space_api_key: str = Field("", validation_alias=AliasChoices("OCR_SPACE_API_KEY", "LEADSCAN_OCR_SPACE_API_KEY"))
+    ocr_space_url: str = "https://api.ocr.space/parse/image"
+    ocr_space_engine: int = 2  # 2 = máy nhận dạng mới (tốt với ảnh chụp màn hình app ngân hàng)
+    ocr_space_language: str = "eng"  # engine 2 tự nhận; engine 1 cần mã ngôn ngữ
+    ocr_space_timeout: float = 60.0
+    # Đối soát: phải đọc được MÃ ĐĂNG KÝ trong ảnh; số tiền khớp thì tự xác nhận "Đã thanh toán".
+    # Sai lệch cho phép khi so số tiền (đồng) — phòng phí chuyển khoản / làm tròn.
+    ocr_amount_tolerance: int = 0
+    ocr_require_amount: bool = True  # False = chỉ cần đúng mã đăng ký là tự xác nhận
+
     # So khớp cơ hội ↔ yêu cầu (hybrid: tiêu chí + từ khoá + embedding ngữ nghĩa, vector lưu bằng pgvector)
     # Embedding Cohere: chỉ cần đặt COHERE_API_KEY. Không có khoá → dùng vector "hash" chạy tại chỗ (dev/test).
     cohere_api_key: str = Field("", validation_alias=AliasChoices("COHERE_API_KEY", "LEADSCAN_COHERE_API_KEY"))

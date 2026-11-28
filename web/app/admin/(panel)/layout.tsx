@@ -12,7 +12,7 @@ import { Logo } from "@/components/brand/Logo";
 
 // tree: "articles" = mục cha xổ xuống các danh mục bài viết (tải từ API)
 // also: các trang khác cũng tính là thuộc mục này (vd tuyển dụng nằm trong menu xổ "Bài viết")
-type NavItem = { href: string; label: string; icon: string; exact?: boolean; adminOnly?: boolean; enrich?: boolean; tree?: "articles"; also?: string[] };
+type NavItem = { href: string; label: string; icon: string; exact?: boolean; adminOnly?: boolean; enrich?: boolean; tree?: "articles" | "events"; also?: string[] };
 type NavGroup = { id: string; label: string; items: NavItem[] };
 
 // Menu chia theo nhóm nghiệp vụ. Nhóm không có label (Tổng quan) luôn hiện, không thu gọn.
@@ -46,6 +46,7 @@ const NAV: NavGroup[] = [
   {
     id: "content", label: "Nội dung", items: [
       { href: "/admin/bai-viet", label: "Bài viết", icon: "note", tree: "articles", also: ["/admin/tuyen-dung"] },
+      { href: "/admin/su-kien", label: "Sự kiện", icon: "ticket", tree: "events" },
     ],
   },
   { id: "me", label: "Cá nhân", items: [{ href: "/admin/tai-khoan", label: "Tài khoản của tôi", icon: "key" }] },
@@ -136,6 +137,39 @@ function ArticlesTree({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
+/** Mục "Sự kiện": bấm để xổ xuống Danh sách sự kiện · Đăng ký sự kiện */
+function EventsTree({ item, active }: { item: NavItem; active: boolean }) {
+  const path = usePathname();
+  const [open, setOpen] = useState(active);
+
+  useEffect(() => {
+    if (active) setOpen(true);
+  }, [active]);
+
+  const regs = path.startsWith("/admin/su-kien/dang-ky");
+  const list = path === item.href || (path.startsWith(item.href + "/") && !regs);
+
+  return (
+    <div className="adm-nav-tree">
+      <div className={active ? "adm-nav-parent in" : "adm-nav-parent"}>
+        <Link href={item.href} onClick={() => setOpen(true)} aria-current={list ? "page" : undefined}>
+          <Icon name={item.icon} />
+          {item.label}
+        </Link>
+        <button type="button" className="adm-nav-caret" aria-expanded={open} aria-label={open ? "Thu gọn mục sự kiện" : "Xem danh sách sự kiện và đăng ký"} onClick={() => setOpen((o) => !o)}>
+          <span className={open ? "chev open" : "chev"} aria-hidden="true">›</span>
+        </button>
+      </div>
+      {open ? (
+        <div className="adm-nav-sub">
+          <Link href={item.href} className={list ? "on" : undefined} aria-current={list ? "page" : undefined}><span>Danh sách sự kiện</span></Link>
+          <Link href="/admin/su-kien/dang-ky" className={regs ? "on" : undefined} aria-current={regs ? "page" : undefined}><span>Đăng ký sự kiện</span></Link>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const COLLAPSE_KEY = "ls_adm_nav_closed";
 
 function Shell({ children }: { children: ReactNode }) {
@@ -214,6 +248,7 @@ function Shell({ children }: { children: ReactNode }) {
                 {isOpen
                   ? g.items.map((n) => {
                     const on = n.href === active;
+                    if (n.tree === "events") return <EventsTree key={n.href} item={n} active={on} />;
                     if (n.tree === "articles") {
                       // useSearchParams cần Suspense; trong lúc chờ hiện link thường
                       const plain = <Link href={n.href} className={on ? "on" : undefined}><Icon name={n.icon} />{n.label}</Link>;

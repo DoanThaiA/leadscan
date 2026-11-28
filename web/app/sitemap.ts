@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 
 import { fetchJobs } from "@/lib/careers-server";
+import { fetchEvents } from "@/lib/events-server";
 import { AREA_PAGES, articleAreasFor } from "@/lib/areas";
 import { DEFAULT_SECTION, fetchArticles, fetchSections, sectionHref } from "@/lib/blog";
 import { INDUSTRY_PAGES } from "@/lib/industries";
@@ -64,13 +65,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/doi-tac`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE_URL}/gioi-thieu`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE_URL}/tuyen-dung`, lastModified: now, changeFrequency: "weekly", priority: 0.5 },
+    { url: `${SITE_URL}/su-kien`, lastModified: now, changeFrequency: "weekly", priority: 0.6 },
   ];
-  const [inds, opps, allPosts, jobs, sections] = await Promise.all([
-    topicUrls().catch(() => []), oppUrls().catch(() => []), articleUrls().catch(() => []), fetchJobs(), fetchSections(),
+  const [inds, opps, allPosts, jobs, events, sections] = await Promise.all([
+    topicUrls().catch(() => []), oppUrls().catch(() => []), articleUrls().catch(() => []), fetchJobs(), fetchEvents(), fetchSections(),
   ]);
   const posts = allPosts.filter((p) => p.section === DEFAULT_SECTION);
   const strip = ({ section: _, ...rest }: (typeof allPosts)[number]) => rest;
   const jobUrls: MetadataRoute.Sitemap = (jobs ?? []).map((j) => ({ url: `${SITE_URL}/tuyen-dung/${encodeURIComponent(j.slug)}`, changeFrequency: "weekly", priority: 0.4 }));
+  const eventUrls: MetadataRoute.Sitemap = (events ?? []).map((e) => ({ url: `${SITE_URL}/su-kien/${encodeURIComponent(e.slug)}`, changeFrequency: "weekly", priority: 0.6 }));
   const counts = (await fetchArticles({ section: DEFAULT_SECTION, page_size: "1" }).catch(() => null))?.area_counts ?? {};
   const guideHubs: MetadataRoute.Sitemap = AREA_PAGES.filter((x) => articleAreasFor(x.slug).some((s) => (counts[s] ?? 0) > 0))
     .map((x) => ({ url: `${SITE_URL}/cam-nang/khu-vuc/${x.slug}`, lastModified: posts[0]?.lastModified, changeFrequency: "weekly" as const, priority: 0.6 }));
@@ -79,5 +82,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const others = allPosts.filter((p) => p.section !== DEFAULT_SECTION);
   const sectionHubs: MetadataRoute.Sitemap = (sections ?? []).filter((x) => x.slug !== DEFAULT_SECTION && x.count > 0)
     .map((x) => ({ url: `${SITE_URL}${sectionHref(x.slug)}`, lastModified: others.find((p) => p.section === x.slug)?.lastModified, changeFrequency: "weekly" as const, priority: 0.6 }));
-  return [...fixed, ...blog, ...sectionHubs, ...others.map(strip), ...inds, ...opps, ...jobUrls];
+  return [...fixed, ...blog, ...sectionHubs, ...others.map(strip), ...inds, ...opps, ...jobUrls, ...eventUrls];
 }

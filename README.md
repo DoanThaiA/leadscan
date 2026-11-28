@@ -24,6 +24,7 @@ web/                Next.js 16
   app/page.tsx        landing page
   app/admin/          trang quản trị (/admin/...)
   app/thanh-vien/     cổng thành viên (/thanh-vien/...)
+  app/su-kien/        trang sự kiện công khai (/su-kien/...)
 deploy/nginx.conf   Nginx trên VPS: /api → FastAPI, còn lại → Next.js (HTTPS bằng certbot)
 docker-compose.yml  db (pgvector) · redis · migrate · api · worker · beat · web
 ```
@@ -205,6 +206,22 @@ Chưa làm: tự dò đường dẫn tài liệu trên trang công bố HOSE / H
 - Nội dung bài viết bằng định dạng nhẹ: `## ` tiêu đề nhóm, `- ` gạch đầu dòng, `1. ` danh sách số, `**đậm**`.
 - Nginx: endpoint `/api/jobs/<slug>/apply` được nới `client_max_body_size 8m` (file CV gửi kèm) — cập nhật `deploy/nginx.conf` lên VPS.
 
+## Sự kiện (`/su-kien`)
+
+- **Trang công khai** `/su-kien`: danh sách sự kiện đang mở đăng ký (sắp diễn ra trước) và 4 bước đăng ký. `/su-kien/<slug>`: poster, nội dung đánh số 01–05 (tổng quan, chương trình chi tiết, khung nội dung chia sẻ, kết nối giao thương, chuẩn bị & lưu ý), cột "Thông tin chung", form đăng ký, JSON-LD `BusinessEvent`.
+- **Đăng ký 3 bước** (component `web/components/events/RegisterFlow.tsx`):
+  1. **Điền thông tin** — họ tên, SĐT, email, doanh nghiệp / chức vụ (tuỳ chọn), hình thức tham dự (Thành viên CLB / Khách mời ngoài CLB → quyết định mức phí), **nhu cầu xúc tiến hợp tác** (bắt buộc, dùng để ghép cặp) và nút đính kèm **profile doanh nghiệp dạng PDF** (≤ `LEADSCAN_EVENT_PROFILE_MAX_MB`, mặc định 10 MB). Chống spam: honeypot, thời gian điền tối thiểu, tối đa `LEADSCAN_EVENT_RATE_LIMIT_PER_HOUR` lượt/IP/giờ.
+  2. **Chuyển khoản** — hệ thống cấp **mã đăng ký** dạng `SK……` (dùng luôn làm nội dung chuyển khoản) và vẽ **mã VietQR** đã gồm số tiền + nội dung, kèm thông tin tài khoản để chép tay. Mã lưu trong `localStorage` và nhận qua `?ma=<mã>` nên khách quay lại trang là tiếp tục được.
+  3. **Tải ảnh biên lai** — ảnh JPG/PNG/WEBP (≤ `LEADSCAN_EVENT_PROOF_MAX_MB`, mặc định 8 MB) lên R2, backend gọi **OCR.space** đọc chữ rồi so khớp mã đăng ký + số tiền.
+- **Đối soát bằng OCR** (`backend/app/services/ocr.py`, khoá `OCR_SPACE_API_KEY`): khớp cả mã đăng ký lẫn số tiền → tự chuyển **Đã thanh toán**; thiếu một trong hai, ảnh không đọc được chữ, OCR lỗi hoặc chưa đặt khoá → **Chờ đối soát** để ban tổ chức tự xác nhận. Chữ đọc được lưu lại (cắt 4.000 ký tự) để admin xem; có nút **Đọc lại ảnh**. So khớp bỏ dấu cách và ký tự lạ; mã đăng ký không dùng chữ/số dễ đọc nhầm (`0/O`, `1/I`, `5/S`, `8/B`).
+- **Tệp lưu trên Cloudflare R2** (cùng bucket riêng tư `LEADSCAN_R2_*`): `SUKIEN/profile/<năm-tháng>/<uuid>/<tên file>` và `SUKIEN/thanh-toan/…`; DB chỉ giữ key. Tệp đi qua backend để kiểm đuôi + chữ ký đầu file rồi mới đẩy lên; admin xem/tải bằng link ký sẵn ngắn hạn; xoá đăng ký thì xoá luôn tệp. Chưa cấu hình R2 → form vẫn nhận đăng ký nhưng ẩn phần đính kèm và nộp ảnh.
+- **Tài khoản nhận phí**: đặt riêng cho từng sự kiện (BIN NAPAS, số tài khoản, chủ tài khoản) trong trang quản trị; để trống thì dùng tài khoản thu chung `LEADSCAN_PAYMENT_*`. Phí 0đ = miễn phí, bỏ qua bước thanh toán và xác nhận ngay.
+- **Email**: mỗi đăng ký gửi về `LEADSCAN_EVENT_EMAIL` (hoặc email riêng của sự kiện; trống thì `LEADSCAN_NOTIFY_EMAIL`), **đính kèm profile PDF**, Reply-To là email người đăng ký. Người đăng ký nhận email xác nhận kèm hướng dẫn chuyển khoản; OCR khớp xong thì cả hai bên nhận email đã thanh toán.
+- **Quản trị** `/admin/su-kien` (menu *Nội dung → Sự kiện*): tạo / sửa sự kiện (Bản nháp → Đang mở → Đã đóng; tự đóng khi quá hạn đăng ký), xem trước nội dung, đặt phí và tài khoản thu, tải ảnh poster. `/admin/su-kien/dang-ky`: danh sách đăng ký (lọc theo sự kiện / trạng thái, tìm theo tên, email, SĐT, doanh nghiệp, mã), mở chi tiết xem **nhu cầu xúc tiến, profile PDF, ảnh chuyển khoản và kết quả OCR**, xác nhận thanh toán thủ công, đánh dấu check-in, ghi chú, gửi lại email, xoá. Chân bảng hiện tổng tiền đã thu.
+- Nội dung trang sự kiện dùng định dạng nhẹ giống bài tuyển dụng: `## ` tiêu đề nhóm, `- ` gạch đầu dòng, `1. ` danh sách số, `**đậm**`.
+- Nginx: `/api/events/<slug>/register` nới `client_max_body_size 16m`, `/api/events/registrations/<mã>/proof` 12m + `proxy_read_timeout 120s` (chờ OCR), `/api/admin/event-registrations/<id>/recheck` 120s — cập nhật `deploy/nginx.conf` lên VPS.
+- Migration `e1a7c4d9b63f` tạo bảng `events` / `event_registrations` và **tạo sẵn sự kiện “Business Matching CLB CEO1989 × Coolmate”** (02/12/2026, văn phòng Coolmate Hà Đông; phí 500.000đ / 600.000đ). Ảnh ở `web/public/su-kien/`. Nhớ điền tài khoản nhận phí trong trang quản trị trước khi mời khách đăng ký.
+
 ## Tích hợp InfoCMS — cần hoàn tất khi có tài liệu
 
 InfoCMS (Smart Collect của InfoPlus) chưa công bố tài liệu API công khai. Hệ thống đã làm sẵn:
@@ -225,6 +242,8 @@ Các email hệ thống gửi:
 | Khách gửi thông tin xuất hoá đơn | Kế toán (`LEADSCAN_INVOICE_EMAIL`) |
 | Khách bấm "Quên mật khẩu" | Khách: link đặt lại mật khẩu (60 phút) |
 | Ứng viên gửi hồ sơ trên /tuyen-dung | Tuyển dụng (`LEADSCAN_RECRUIT_EMAIL` hoặc email riêng của bài): hồ sơ + file CV đính kèm · Ứng viên: xác nhận đã nhận hồ sơ |
+| Khách đăng ký sự kiện trên /su-kien | Ban tổ chức (`LEADSCAN_EVENT_EMAIL` hoặc email riêng của sự kiện): thông tin + nhu cầu + profile PDF đính kèm · Khách: xác nhận đã nhận đăng ký kèm hướng dẫn chuyển khoản |
+| Ảnh chuyển khoản khớp mã + số tiền (OCR) | Ban tổ chức: đã nhận phí tham dự · Khách: xác nhận đăng ký hoàn tất |
 
 Email gửi qua [Resend](https://resend.com) bằng HTTP API.
 Cấu hình `LEADSCAN_RESEND_API_KEY`, `LEADSCAN_NOTIFY_FROM` (vd `no-reply@mcv.network` — tên miền phải được xác minh trong Resend) và `LEADSCAN_MAIL_FROM_NAME`.

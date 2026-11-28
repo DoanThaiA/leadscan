@@ -1,0 +1,56 @@
+/* Trang sự kiện /su-kien — dùng chung token và lớp của landing.css + careers.css */
+
+/* Ảnh poster: giữ nguyên tỉ lệ (poster thường 3:2), không cắt như ảnh bìa tuyển dụng */
+.ev-cover img{aspect-ratio:auto;max-height:620px;object-fit:contain;background:#0B2A1C}
+.ev-inline-img{display:block;width:100%;height:auto;margin-top:18px;border-radius:12px;border:1px solid var(--line)}
+
+/* Các bước đăng ký */
+.ev-steps{list-style:none;display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.ev-steps li{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--soft);font-weight:500}
+.ev-steps li+li::before{content:"";width:16px;height:1px;background:#D5DADF;margin-right:2px}
+.ev-steps .n{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:#EEF0F2;color:var(--soft);flex:none}
+.ev-steps li.on{color:var(--ink)}
+.ev-steps li.on .n{background:var(--blue);color:#fff}
+.ev-steps li.done{color:var(--green)}
+.ev-steps li.done .n{background:#DCFCE7;color:var(--green)}
+
+/* Chọn hình thức tham dự */
+.ev-radios{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.ev-radio{position:relative;display:flex;align-items:center;gap:10px;padding:12px 14px;border:1.5px solid #D5DADF;border-radius:10px;background:#fff;cursor:pointer;transition:.15s}
+.ev-radio:hover{border-color:#B8BFC6}
+.ev-radio.on{border-color:var(--blue);background:var(--blue-50)}
+.ev-radio input{accent-color:var(--blue);width:17px;height:17px;flex:none}
+.ev-radio b{display:block;color:var(--ink);font-size:14.5px;font-weight:600}
+.ev-radio small{color:var(--muted);font-size:13px}
+.ev-radio.on small{color:var(--blue);font-weight:600}
+
+/* Khối thanh toán */
+.ev-pay-hd{margin-bottom:6px}
+.ev-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.06em;color:var(--blue)}
+.ev-pay-grid{display:grid;grid-template-columns:232px minmax(0,1fr);gap:22px;align-items:start;margin:18px 0 6px}
+.ev-qr{display:grid;gap:8px;justify-items:center;text-align:center}
+.ev-qr img{width:228px;height:228px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.ev-qr-ph{width:228px;height:228px;display:grid;place-items:center;padding:16px;text-align:center;font-size:13px;color:var(--muted);border:1px dashed #C7CDD3;border-radius:12px;background:#FBFCFD}
+.ev-qr span{font-size:12.5px;color:var(--soft)}
+.ev-bank{display:grid;gap:8px}
+.ev-copy{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:#FBFCFD}
+.ev-copy small{width:118px;flex:none;font-size:12.5px;color:var(--soft)}
+.ev-copy b{flex:1;min-width:0;color:var(--ink);font-size:14.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev-copy button{font:inherit;font-size:13px;border:0;background:none;color:var(--blue);text-decoration:underline;cursor:pointer;flex:none}
+
+.ev-note{padding:12px 14px;border-radius:8px;font-size:14px;margin:14px 0;border:1px solid var(--blue-100);background:var(--blue-50);color:var(--ink-2)}
+.ev-note.warn{border-color:#FDE68A;background:#FFFBEB;color:#92400E}
+.ev-note b{color:inherit}
+.ev-step-note{font-size:13.5px;color:var(--muted);margin-top:6px}
+
+.ev-upload{margin-top:24px;padding-top:22px;border-top:1px solid var(--line)}
+.ev-upload h4{font-family:var(--head);font-size:17px;color:var(--ink);margin-bottom:4px}
+.ev-link-btn{font:inherit;font-size:13.5px;border:0;background:none;color:var(--soft);text-decoration:underline;cursor:pointer;padding:0;margin-top:10px}
+.ev-link-btn:hover{color:var(--blue)}
+
+@media (max-width:720px){
+  .ev-pay-grid{grid-template-columns:1fr;justify-items:center}
+  .ev-bank{width:100%}
+  .ev-copy small{width:96px}
+  .ev-steps li+li::before{display:none}
+}

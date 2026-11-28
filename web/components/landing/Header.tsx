@@ -17,7 +17,7 @@ const LINKS = [
 type NavLink = { href: string; label: string; active?: boolean; posts?: boolean };
 
 /** Trang riêng luôn có trên menu (không phải link neo trong trang chủ). posts = xổ xuống các danh mục bài viết. */
-const PAGES: NavLink[] = [{ href: "/gioi-thieu", label: "Giới thiệu" }, { href: "/co-hoi", label: "Cơ hội" }, { href: "/bai-viet", label: "Bài viết", posts: true }];
+const PAGES: NavLink[] = [{ href: "/gioi-thieu", label: "Giới thiệu" }, { href: "/co-hoi", label: "Cơ hội" }, { href: "/su-kien", label: "Sự kiện" }, { href: "/bai-viet", label: "Bài viết", posts: true }];
 
 type PostSection = { slug: string; name: string; count: number };
 // Hiện ngay khi chưa tải xong danh mục; Cẩm nang luôn có trang riêng
