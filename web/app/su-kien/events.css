@@ -54,3 +54,31 @@
   .ev-copy small{width:96px}
   .ev-steps li+li::before{display:none}
 }
+
+/* Khối vé: tổng · đã đăng ký · còn lại */
+.ev-meter{border:1px solid var(--blue-100);border-radius:16px;padding:22px;margin-bottom:18px;background:linear-gradient(160deg,#fff,var(--blue-50));box-shadow:0 24px 50px -32px rgba(0,30,60,.3)}
+.ev-meter-hd{display:flex;align-items:center;gap:8px;font-family:var(--head);font-size:15px;font-weight:700;color:var(--ink)}
+.ev-live{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(22,163,74,.5);animation:ev-pulse 1.8s infinite;flex:none}
+@keyframes ev-pulse{70%{box-shadow:0 0 0 8px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
+@media (prefers-reduced-motion:reduce){.ev-live{animation:none}}
+.ev-meter-nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:8px;margin:16px 0 14px}
+.ev-meter-nums>div{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 8px;text-align:center}
+.ev-meter-nums dt{font-size:11.5px;color:var(--soft);font-weight:500;line-height:1.3}
+.ev-meter-nums dd{font-family:var(--head);font-size:24px;font-weight:700;color:var(--ink);letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums}
+.ev-meter-nums .rest dd{color:var(--blue)}
+.ev-bar{height:10px;border-radius:99px;background:#E4EAF0;overflow:hidden}
+.ev-bar span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--blue),#2E7BC4);transition:width .6s ease}
+.ev-meter-note{font-size:13px;color:var(--muted);margin-top:8px}
+.ev-meter .btn{width:100%;margin-top:14px}
+.ev-meter.low{border-color:#FCD34D;background:linear-gradient(160deg,#fff,#FFFBEB)}
+.ev-meter.low .ev-live{background:#F59E0B}
+.ev-meter.low .ev-bar span{background:linear-gradient(90deg,#F59E0B,#EF4444)}
+.ev-meter.low .rest dd{color:#DC2626}
+.ev-meter.out{border-color:#FECACA;background:#FEF2F2}
+.ev-meter.out .ev-live{background:#DC2626;animation:none}
+.ev-meter.out .ev-bar span{background:#DC2626}
+
+/* Nhãn "Còn x/y chỗ" */
+.ev-chip{font-size:12px;font-weight:700;padding:3px 10px;border-radius:99px;background:#DCFCE7;color:#15803D;white-space:nowrap}
+.ev-chip.low{background:#FEF3C7;color:#B45309}
+.ev-chip.out{background:#FEE2E2;color:#B91C1C}

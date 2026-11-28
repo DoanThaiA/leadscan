@@ -1,10 +1,14 @@
 import type { EventCard, EventPublic } from "./events";
+import { currentSite } from "./site-server";
+import { SITE_HEADER } from "./sites";
 
 // Trang /su-kien render phía máy chủ (tốt cho SEO) → gọi thẳng FastAPI, không qua Nginx.
+// Gửi kèm trang đang xem (leadscan / c89 / epc) để API chỉ trả sự kiện của trang đó.
 const API = process.env.API_INTERNAL_URL ?? "http://localhost:8000";
 
 async function get<T>(path: string): Promise<T | null> {
-  const r = await fetch(`${API}${path}`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
+  const site = (await currentSite()).key;
+  const r = await fetch(`${API}${path}`, { cache: "no-store", signal: AbortSignal.timeout(8000), headers: { [SITE_HEADER]: site } });
   if (r.status === 404) return null;
   if (!r.ok) throw new Error(`API ${path} → HTTP ${r.status}`);
   return (await r.json()) as T;

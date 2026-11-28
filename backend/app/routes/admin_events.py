@@ -2,24 +2,32 @@
 
 Mục "Đăng ký sự kiện" của admin hiển thị đủ: thông tin người đăng ký, nhu cầu xúc tiến, profile PDF
 đính kèm, ảnh chuyển khoản và kết quả đối soát OCR (có nút đọc lại ảnh / xác nhận thủ công).
+
+Phạm vi theo trang (app/sites.py) — hàm _scope:
+  - Tài khoản cổng sự kiện (AdminUser.site = c89 / epc): chỉ thấy và sửa sự kiện, đăng ký của cổng mình.
+  - Nhân viên LeadScan đăng nhập ở cổng c89 / epc: chỉ thấy cổng đó (giống người của cổng).
+  - Nhân viên LeadScan ở leadscan.net/admin: thấy TỔNG HỢP mọi trang, lọc được theo trang (?site=).
+Sự kiện / đăng ký ngoài phạm vi trả 404 như không tồn tại.
 """
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from app import sites
 from app.auth import current_user, require_admin
 from app.config import get_settings
 from app.db import get_db, utcnow
 from app.models import AdminUser
 from app.models_events import ATTENDEE_TYPES, EVENT_REG_STATUSES, EVENT_STATUSES, OCR_STATUSES, Event, EventRegistration
 from app.schemas_events import EventIn, EventOut, RegistrationAdminIn, RegistrationOut
+from app.schemas_jobs import CoverInitIn
 from app.schemas_jobs import slugify
-from app.services import event_files, events as ev, ocr
+from app.services import event_files, events as ev, job_covers, ocr
 from app.services.notify import event_inbox, mail_provider
 from app.services.storage import StorageError
 from app.worker import deliver_event_registration
@@ -29,18 +37,33 @@ log = logging.getLogger("leadscan.admin.events")
 router = APIRouter(prefix="/api/admin")
 
 
-def _get_event(db: Session, eid: int) -> Event:
+def _scope(request: Request, user: AdminUser) -> str | None:
+    """Trang người dùng đang quản lý; None = tổng hợp mọi trang (chỉ nhân viên LeadScan ở leadscan.net)."""
+    if user.site:
+        return user.site
+    s = sites.request_site(request)
+    return None if s == sites.MAIN else s
+
+
+def _get_event(db: Session, eid: int, scope: str | None) -> Event:
     e = db.get(Event, eid)
-    if not e:
+    if not e or (scope and e.site != scope):
         raise HTTPException(404, "Không tìm thấy sự kiện.")
     return e
 
 
-def _get_reg(db: Session, rid: int) -> EventRegistration:
+def _get_reg(db: Session, rid: int, scope: str | None) -> EventRegistration:
     r = db.get(EventRegistration, rid)
-    if not r:
+    if not r or (scope and r.site != scope):
         raise HTTPException(404, "Không tìm thấy đăng ký.")
     return r
+
+
+def _site_filter(scope: str | None, wanted: str) -> str | None:
+    """Trang dùng để lọc danh sách: phạm vi bắt buộc, hoặc ?site= khi đang xem tổng hợp."""
+    if scope:
+        return scope
+    return wanted if sites.valid(wanted) else None
 
 
 def _event_out(db: Session, e: Event) -> dict:
@@ -49,6 +72,7 @@ def _event_out(db: Session, e: Event) -> dict:
     d["paid"] = db.scalar(
         select(func.count()).where(EventRegistration.event_id == e.id, EventRegistration.status == "paid")
     ) or 0
+    d["tickets"] = ev.stats_for(db, e)
     return d
 
 
@@ -64,8 +88,16 @@ def _unique_slug(db: Session, wanted: str, title: str, exclude_id: int | None = 
         slug, n = f"{base}-{n}", n + 1
 
 
-def _apply(db: Session, e: Event, body: EventIn) -> None:
+def _apply(db: Session, e: Event, body: EventIn, scope: str | None) -> None:
     data = body.model_dump()
+    wanted_site = data.pop("site", None)
+    if scope:
+        e.site = scope  # tài khoản cổng / đang ở cổng: luôn đăng vào cổng đó, không đổi được
+    elif wanted_site:
+        if wanted_site != e.site and e.id:
+            # chuyển trang: đăng ký đã nhận đi theo sự kiện
+            db.execute(update(EventRegistration).where(EventRegistration.event_id == e.id).values(site=wanted_site))
+        e.site = wanted_site
     data["slug"] = _unique_slug(db, data["slug"], data["title"], exclude_id=e.id)
     for f, v in data.items():
         setattr(e, f, v)
@@ -76,10 +108,24 @@ def _apply(db: Session, e: Event, body: EventIn) -> None:
 # ------------------------------------------------------------------ sự kiện
 
 
+@router.post("/events/covers/init", status_code=201)
+def cover_init(body: CoverInitIn, _: AdminUser = Depends(current_user)):
+    """Ảnh bìa sự kiện: cấp link PUT ký sẵn (dùng chung kho ảnh bìa với tuyển dụng; mở cho tài khoản cổng sự kiện)."""
+    return job_covers.init_upload(body.filename, body.size)
+
+
+@router.post("/events/covers/{upload_id}/complete")
+def cover_complete(upload_id: str, _: AdminUser = Depends(current_user)):
+    return job_covers.complete_upload(upload_id)
+
+
 @router.get("/events/meta")
-def meta(_: AdminUser = Depends(current_user)):
+def meta(request: Request, user: AdminUser = Depends(current_user)):
     cfg = get_settings()
+    scope = _scope(request, user)
     return {
+        "scope": scope,  # None = đang xem tổng hợp mọi trang
+        "sites": sites.info(cfg),
         "statuses": EVENT_STATUSES,
         "registration_statuses": EVENT_REG_STATUSES,
         "attendee_types": ATTENDEE_TYPES,
@@ -100,8 +146,18 @@ def meta(_: AdminUser = Depends(current_user)):
 
 
 @router.get("/events")
-def list_events(status: str = "", q: str = Query("", max_length=100), _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+def list_events(
+    request: Request,
+    status: str = "",
+    site: str = "",
+    q: str = Query("", max_length=100),
+    user: AdminUser = Depends(current_user),
+    db: Session = Depends(get_db),
+):
     stmt = select(Event)
+    only = _site_filter(_scope(request, user), site)
+    if only:
+        stmt = stmt.where(Event.site == only)
     if q.strip():
         like = f"%{q.strip()}%"
         stmt = stmt.where(or_(Event.title.ilike(like), Event.venue.ilike(like), Event.partner.ilike(like)))
@@ -118,15 +174,19 @@ def list_events(status: str = "", q: str = Query("", max_length=100), _: AdminUs
                 EventRegistration.event_id,
                 func.count(),
                 func.sum(case((EventRegistration.status == "paid", 1), else_=0)),
-            ).group_by(EventRegistration.event_id)
+            )
+            .where(EventRegistration.event_id.in_([e.id for e in rows]))
+            .group_by(EventRegistration.event_id)
         ).all()
     }
+    web = ev.web_counts(db, [e.id for e in rows])
     items = []
     for e in rows:
         total, paid = agg.get(e.id, (0, 0))
         items.append(
             {
                 "id": e.id,
+                "site": e.site,
                 "slug": e.slug,
                 "status": e.status,
                 "title": e.title,
@@ -138,6 +198,7 @@ def list_events(status: str = "", q: str = Query("", max_length=100), _: AdminUs
                 "fee_guest": e.fee_guest,
                 "registrations": total,
                 "paid": int(paid or 0),
+                "tickets": ev.ticket_stats(e, web.get(e.id, 0)),
                 "updated_at": e.updated_at.isoformat() + "Z",
             }
         )
@@ -145,9 +206,9 @@ def list_events(status: str = "", q: str = Query("", max_length=100), _: AdminUs
 
 
 @router.post("/events", status_code=201)
-def create_event(body: EventIn, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
-    e = Event(created_by_id=user.id)
-    _apply(db, e, body)
+def create_event(body: EventIn, request: Request, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    e = Event(created_by_id=user.id, site=sites.MAIN)
+    _apply(db, e, body, _scope(request, user))
     db.add(e)
     db.commit()
     db.refresh(e)
@@ -155,23 +216,24 @@ def create_event(body: EventIn, user: AdminUser = Depends(current_user), db: Ses
 
 
 @router.get("/events/{eid}")
-def get_event(eid: int, _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
-    return _event_out(db, _get_event(db, eid))
+def get_event(eid: int, request: Request, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    return _event_out(db, _get_event(db, eid, _scope(request, user)))
 
 
 @router.put("/events/{eid}")
-def update_event(eid: int, body: EventIn, _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
-    e = _get_event(db, eid)
-    _apply(db, e, body)
+def update_event(eid: int, body: EventIn, request: Request, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    scope = _scope(request, user)
+    e = _get_event(db, eid, scope)
+    _apply(db, e, body, scope)
     db.commit()
     db.refresh(e)
     return _event_out(db, e)
 
 
 @router.delete("/events/{eid}", status_code=204)
-def delete_event(eid: int, _: AdminUser = Depends(require_admin), db: Session = Depends(get_db)):
+def delete_event(eid: int, request: Request, user: AdminUser = Depends(require_admin), db: Session = Depends(get_db)):
     """Xoá sự kiện; các đăng ký đã nhận vẫn giữ (kèm tên sự kiện). Muốn ẩn mà giữ link thì chuyển "Đã đóng"."""
-    e = _get_event(db, eid)
+    e = _get_event(db, eid, _scope(request, user))
     # tự gỡ liên kết (SQLite khi dev không bật khoá ngoại nên ON DELETE SET NULL không chạy)
     db.execute(update(EventRegistration).where(EventRegistration.event_id == e.id).values(event_id=None))
     db.delete(e)
@@ -189,15 +251,20 @@ def _reg_out(r: EventRegistration) -> dict:
 
 @router.get("/event-registrations")
 def list_registrations(
+    request: Request,
     event_id: int | None = None,
     status: str = "",
+    site: str = "",
     q: str = Query("", max_length=100),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    _: AdminUser = Depends(current_user),
+    user: AdminUser = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     stmt = select(EventRegistration)
+    only = _site_filter(_scope(request, user), site)
+    if only:
+        stmt = stmt.where(EventRegistration.site == only)
     if event_id:
         stmt = stmt.where(EventRegistration.event_id == event_id)
     if q.strip():
@@ -234,13 +301,13 @@ def list_registrations(
 
 
 @router.get("/event-registrations/{rid}")
-def get_registration(rid: int, _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
-    return _reg_out(_get_reg(db, rid))
+def get_registration(rid: int, request: Request, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    return _reg_out(_get_reg(db, rid, _scope(request, user)))
 
 
 @router.patch("/event-registrations/{rid}")
-def update_registration(rid: int, body: RegistrationAdminIn, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
-    r = _get_reg(db, rid)
+def update_registration(rid: int, body: RegistrationAdminIn, request: Request, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    r = _get_reg(db, rid, _scope(request, user))
     if body.status is not None and body.status != r.status:
         r.status = body.status
         if body.status == "paid":
@@ -268,21 +335,21 @@ def _file_redirect(key: str, filename: str, inline: bool, missing: str):
 
 
 @router.get("/event-registrations/{rid}/profile")
-def download_profile(rid: int, _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
-    r = _get_reg(db, rid)
+def download_profile(rid: int, request: Request, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    r = _get_reg(db, rid, _scope(request, user))
     return _file_redirect(r.profile_key, r.profile_filename, False, "Đăng ký này không đính kèm profile.")
 
 
 @router.get("/event-registrations/{rid}/proof")
-def view_proof(rid: int, _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
-    r = _get_reg(db, rid)
+def view_proof(rid: int, request: Request, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    r = _get_reg(db, rid, _scope(request, user))
     return _file_redirect(r.proof_key, r.proof_filename, True, "Đăng ký này chưa có ảnh chuyển khoản.")
 
 
 @router.post("/event-registrations/{rid}/recheck")
-async def recheck(rid: int, _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+async def recheck(rid: int, request: Request, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
     """Đọc lại ảnh chuyển khoản bằng OCR (ảnh mờ / OCR lỗi tạm thời)."""
-    r = _get_reg(db, rid)
+    r = _get_reg(db, rid, _scope(request, user))
     if not r.proof_key:
         raise HTTPException(400, "Đăng ký này chưa có ảnh chuyển khoản.")
     cfg = get_settings()
@@ -304,9 +371,9 @@ async def recheck(rid: int, _: AdminUser = Depends(current_user), db: Session = 
 
 
 @router.post("/event-registrations/{rid}/resend")
-async def resend(rid: int, _: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+async def resend(rid: int, request: Request, user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
     """Gửi lại đăng ký về hộp thư ban tổ chức ngay (đồng bộ để admin biết kết quả)."""
-    r = _get_reg(db, rid)
+    r = _get_reg(db, rid, _scope(request, user))
     cfg = get_settings()
     if not event_inbox(cfg, r.event):
         raise HTTPException(400, "Chưa cấu hình email nhận đăng ký (LEADSCAN_EVENT_EMAIL hoặc email riêng của sự kiện).")
@@ -321,9 +388,9 @@ async def resend(rid: int, _: AdminUser = Depends(current_user), db: Session = D
 
 
 @router.delete("/event-registrations/{rid}", status_code=204)
-def delete_registration(rid: int, _: AdminUser = Depends(require_admin), db: Session = Depends(get_db)):
+def delete_registration(rid: int, request: Request, user: AdminUser = Depends(require_admin), db: Session = Depends(get_db)):
     """Xoá vĩnh viễn 1 đăng ký kèm tệp trên R2."""
-    r = _get_reg(db, rid)
+    r = _get_reg(db, rid, _scope(request, user))
     keys = [r.profile_key, r.proof_key]
     db.delete(r)
     db.commit()

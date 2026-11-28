@@ -75,6 +75,9 @@ class AdminUser(Base):
     # Vai trò trong phân hệ làm giàu dữ liệu theo MST (models_enrich.ENRICH_ROLES). None = không truy cập,
     # riêng quản trị viên mặc định là "quan_tri" — xem enrich_access.
     enrich_role: Mapped[str | None] = mapped_column(String(16))
+    # Tài khoản cổng sự kiện (app/sites.py: "c89" / "epc"): chỉ đăng nhập được ở cổng đó và chỉ dùng được API sự kiện
+    # của cổng đó (auth.current_user chặn mọi API khác). None = nhân viên LeadScan.
+    site: Mapped[str | None] = mapped_column(String(20), index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -82,6 +85,8 @@ class AdminUser(Base):
     @property
     def enrich_access(self) -> str | None:
         """Vai trò hiệu lực trong phân hệ làm giàu dữ liệu (kho B mặc định ẩn: không có vai trò → không truy cập)."""
+        if self.site:  # tài khoản cổng sự kiện không bao giờ vào phân hệ làm giàu
+            return None
         if self.enrich_role:
             return self.enrich_role
         return "quan_tri" if self.role == "admin" else None

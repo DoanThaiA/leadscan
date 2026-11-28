@@ -26,6 +26,8 @@ def new_code(length: int = 6) -> str:
 
 class EventIn(BaseModel):
     title: Line = Field(min_length=3, max_length=200)
+    # Trang đăng (leadscan / c89 / epc). Chỉ nhân viên LeadScan ở trang tổng hợp chọn được; cổng thì cố định.
+    site: str | None = None
     slug: str = Field("", max_length=160)  # trống = tự sinh từ tiêu đề
     status: str = "draft"
     subtitle: Line = Field("", max_length=300)
@@ -37,7 +39,8 @@ class EventIn(BaseModel):
     venue: Line = Field("", max_length=200)
     address: Line = Field("", max_length=300)
     deadline: date | None = None
-    capacity: int | None = Field(None, ge=1, le=100000)
+    ticket_total: int | None = Field(None, ge=1, le=100000)  # trống = không giới hạn
+    tickets_sold: int = Field(0, ge=0, le=100000)  # vé đã bán ngoài form
     cover_image: str = Field("", max_length=500)
     banner_image: str = Field("", max_length=500)
     intro: str = Field("", max_length=20000)
@@ -65,6 +68,15 @@ class EventIn(BaseModel):
     @classmethod
     def _slug(cls, v: str) -> str:
         return slugify(v)
+
+    @field_validator("site")
+    @classmethod
+    def _site(cls, v: str | None) -> str | None:
+        from app import sites
+
+        if v and not sites.valid(v):
+            raise ValueError("Trang đăng không hợp lệ.")
+        return v or None
 
     @field_validator("status")
     @classmethod
@@ -102,7 +114,7 @@ class EventPublic(Out):
     venue: str
     address: str
     deadline: date | None
-    capacity: int | None
+    ticket_total: int | None
     cover_image: str
     banner_image: str
     intro: str
@@ -138,6 +150,8 @@ class EventCard(Out):
 
 class EventOut(EventPublic):
     id: int
+    site: str
+    tickets_sold: int
     bank_bin: str
     bank_name: str
     account_no: str
@@ -262,6 +276,7 @@ class RegistrationAdminIn(BaseModel):
 
 class RegistrationOut(Out):
     id: int
+    site: str
     event_id: int | None
     event_title: str
     code: str

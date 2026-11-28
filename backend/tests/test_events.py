@@ -353,3 +353,44 @@ def test_anh_lon_duoc_thu_nho_truoc_khi_ocr(admin, client, r2, ocr_key):
     with dbmod.new_session() as db:
         reg = db.query(EventRegistration).one()
     assert r2.objects[reg.proof_key][0] == original  # ảnh lưu trên R2 giữ nguyên
+
+
+# ------------------------------------------------------------------ tổng số vé · đã đăng ký · còn lại
+
+
+def test_so_ve_con_lai_hien_tren_trang_cong_khai(admin, client):
+    e = make_event(admin, ticket_total=100, tickets_sold=30)
+    d = client.get(f"/api/events/{e['slug']}").json()
+    assert d["tickets"] == {"total": 100, "registered": 30, "remaining": 70, "sold_out": False}
+    assert "tickets_sold" not in d  # không lộ số bán ngoài form riêng
+
+    _register(client, e["slug"])
+    d = client.get(f"/api/events/{e['slug']}").json()
+    assert d["tickets"]["registered"] == 31 and d["tickets"]["remaining"] == 69
+    assert client.get("/api/events").json()["items"][0]["tickets"]["remaining"] == 69
+
+    row = admin.get(EVENTS).json()["items"][0]["tickets"]
+    assert row["web"] == 1 and row["offline"] == 30
+
+
+def test_het_ve_thi_dong_form(admin, client):
+    e = make_event(admin, ticket_total=2, tickets_sold=1)
+    assert client.post(f"/api/events/{e['slug']}/register", json=registration()).status_code == 200
+    d = client.get(f"/api/events/{e['slug']}").json()
+    assert d["tickets"]["sold_out"] is True and d["is_open"] is False
+    r = client.post(f"/api/events/{e['slug']}/register", json=registration(email="k@x.vn"))
+    assert r.status_code == 410 and "hết vé" in r.json()["message"]
+
+
+def test_dang_ky_bi_huy_tra_lai_cho(admin, client):
+    e = make_event(admin, ticket_total=1)
+    _register(client, e["slug"])
+    rid = admin.get(REGS).json()["items"][0]["id"]
+    admin.patch(f"{REGS}/{rid}", json={"status": "cancelled"})
+    assert client.get(f"/api/events/{e['slug']}").json()["tickets"]["remaining"] == 1
+
+
+def test_khong_dat_tong_ve_la_khong_gioi_han(admin, client):
+    e = make_event(admin)
+    t = client.get(f"/api/events/{e['slug']}").json()["tickets"]
+    assert t["total"] is None and t["remaining"] is None and t["sold_out"] is False

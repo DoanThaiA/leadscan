@@ -1,8 +1,8 @@
 # LeadScan B2B — toàn bộ hệ thống trên 1 VPS.
 #   cp .env.example .env   # điền mật khẩu DB, tên miền, email
 #   docker compose up -d --build
-# Nginx cài trên VPS (deploy/nginx.conf) nhận 80/443 rồi chuyển vào api/web.
-# api và web chỉ mở cổng trên 127.0.0.1 nên bên ngoài không truy cập thẳng được;
+# Nginx cài trên VPS (deploy/nginx.conf + deploy/nginx-cong-su-kien.conf) nhận 80/443 rồi chuyển vào api / web / web-c89 / web-epc.
+# api và các container web chỉ mở cổng trên 127.0.0.1 nên bên ngoài không truy cập thẳng được;
 # db/redis/worker không mở cổng nào, chỉ nói chuyện trong mạng nội bộ của Docker.
 
 x-backend: &backend
@@ -21,6 +21,22 @@ x-backend: &backend
       condition: service_completed_successfully
     redis:
       condition: service_healthy
+
+x-web: &web
+  build:
+    context: ./web
+    args:
+      NEXT_PUBLIC_SITE_URL: ${SITE_URL:-https://leadscan.net}
+      NEXT_PUBLIC_C89_URL: ${C89_URL:-https://c89.leadscan.net}
+      NEXT_PUBLIC_EPC_URL: ${EPC_URL:-https://epc.leadscan.net}
+      NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION:-}
+      NEXT_PUBLIC_BING_SITE_VERIFICATION: ${BING_SITE_VERIFICATION:-}
+      NEXT_PUBLIC_GA_ID: ${GA_MEASUREMENT_ID:-}
+      API_INTERNAL_URL: http://api:8000
+  image: leadscan-web:latest  # build 1 lần, 3 container dùng chung
+  restart: unless-stopped
+  depends_on:
+    - api
 
 services:
   db:
@@ -77,20 +93,26 @@ services:
     <<: *backend
     command: ["celery", "-A", "app.worker", "beat", "-l", "info", "-s", "/tmp/celerybeat-schedule"]
 
+  # 3 container web chạy CÙNG 1 image, khác biến SITE: leadscan.net (web), c89.leadscan.net (web-c89),
+  # epc.leadscan.net (web-epc). Cổng sự kiện chỉ có trang sự kiện + trang quản trị sự kiện (web/proxy.ts).
   web:
-    build:
-      context: ./web
-      args:
-        NEXT_PUBLIC_SITE_URL: ${SITE_URL:-https://leadscan.net}
-        NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION:-}
-        NEXT_PUBLIC_BING_SITE_VERIFICATION: ${BING_SITE_VERIFICATION:-}
-        NEXT_PUBLIC_GA_ID: ${GA_MEASUREMENT_ID:-}
-        API_INTERNAL_URL: http://api:8000
-    restart: unless-stopped
+    <<: *web
     ports:
       - "127.0.0.1:${WEB_PORT:-3012}:3000"  # chỉ localhost — Nginx gọi vào /
-    depends_on:
-      - api
+
+  web-c89:
+    <<: *web
+    environment:
+      SITE: c89
+    ports:
+      - "127.0.0.1:${C89_PORT:-3013}:3000"  # c89.leadscan.net (deploy/nginx-cong-su-kien.conf)
+
+  web-epc:
+    <<: *web
+    environment:
+      SITE: epc
+    ports:
+      - "127.0.0.1:${EPC_PORT:-3014}:3000"  # epc.leadscan.net (deploy/nginx-cong-su-kien.conf)
 
 volumes:
   pgdata:

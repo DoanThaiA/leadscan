@@ -35,18 +35,27 @@ def cmd_create_admin(args) -> int:
     if len(password) < 10:
         print("Mật khẩu phải có ít nhất 10 ký tự.")
         return 1
+    from app import sites
+
+    site = (args.site or "").strip().lower() or None
+    if site and site not in sites.PORTALS:
+        print(f"--site chỉ nhận: {', '.join(sites.PORTALS)}")
+        return 1
     with new_session() as db:
         user = db.scalar(select(AdminUser).where(AdminUser.email == email))
         if user:
             user.password_hash, user.role, user.is_active = hash_password(password), "admin", True
             if args.name:
                 user.full_name = args.name
+            if args.site is not None:
+                user.site = site
             action = "Đã đặt lại mật khẩu và quyền quản trị cho"
         else:
-            db.add(AdminUser(email=email, full_name=args.name or email, role="admin", password_hash=hash_password(password)))
+            db.add(AdminUser(email=email, full_name=args.name or email, role="admin", site=site, password_hash=hash_password(password)))
             action = "Đã tạo tài khoản quản trị"
         db.commit()
-    print(f"{action} {email}")
+    where = f" (cổng sự kiện {sites.NAMES[site]}, đăng nhập tại {sites.admin_url(site)})" if site else ""
+    print(f"{action} {email}{where}")
     return 0
 
 
@@ -480,6 +489,7 @@ def main(argv: list[str] | None = None) -> int:
     a = sub.add_parser("create-admin", help="Tạo hoặc đặt lại tài khoản quản trị")
     a.add_argument("--email", required=True)
     a.add_argument("--name", default="")
+    a.add_argument("--site", default=None, help="c89 / epc = quản trị viên cổng sự kiện (chỉ quản lý sự kiện của cổng đó)")
     a.set_defaults(fn=cmd_create_admin)
     sub.add_parser("diagnose", help="Kiểm tra cấu hình và kết nối").set_defaults(fn=cmd_diagnose)
     i = sub.add_parser("import-legacy", help="Nhập hồ sơ JSON từ bản PHP cũ")

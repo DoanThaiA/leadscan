@@ -25,6 +25,7 @@ web/                Next.js 16
   app/admin/          trang quản trị (/admin/...)
   app/thanh-vien/     cổng thành viên (/thanh-vien/...)
   app/su-kien/        trang sự kiện công khai (/su-kien/...)
+  app/cong-su-kien/   2 cổng sự kiện c89.leadscan.net / epc.leadscan.net (web/proxy.ts chuyển vào đây)
 deploy/nginx.conf   Nginx trên VPS: /api → FastAPI, còn lại → Next.js (HTTPS bằng certbot)
 docker-compose.yml  db (pgvector) · redis · migrate · api · worker · beat · web
 ```
@@ -221,6 +222,20 @@ Chưa làm: tự dò đường dẫn tài liệu trên trang công bố HOSE / H
 - Nội dung trang sự kiện dùng định dạng nhẹ giống bài tuyển dụng: `## ` tiêu đề nhóm, `- ` gạch đầu dòng, `1. ` danh sách số, `**đậm**`.
 - Nginx: `/api/events/<slug>/register` và `/api/events/registrations/<mã>/proof` nới `client_max_body_size 30m` + `proxy_read_timeout 180s`, `/api/admin/event-registrations/<id>/recheck` 120s. Nginx cài thẳng trên VPS nên **deploy code không tự cập nhật** — chạy `sudo bash deploy/nginx-su-kien.sh` (giữ nguyên phần HTTPS của certbot). Chưa cập nhật thì tải tệp bị lỗi 413.
 - Migration `e1a7c4d9b63f` tạo bảng `events` / `event_registrations` và **tạo sẵn sự kiện “Business Matching CLB CEO1989 × Coolmate”** (02/12/2026, văn phòng Coolmate Hà Đông; phí 500.000đ / 600.000đ). Ảnh ở `web/public/su-kien/`. Nhớ điền tài khoản nhận phí trong trang quản trị trước khi mời khách đăng ký.
+
+## Cổng sự kiện c89.leadscan.net (CLB CEO 1989) và epc.leadscan.net (EPC)
+
+Hai trang chỉ để **đăng sự kiện**: trang chủ là danh sách sự kiện của cổng, `/su-kien/<slug>` là chi tiết + đăng ký (cùng luồng form → QR → ảnh biên lai → OCR như leadscan.net), `/admin` là trang quản trị sự kiện riêng. Logo và màu theo từng đơn vị (`web/lib/sites.ts`, ảnh ở `web/public/sites/`): CEO 1989 xanh navy + xanh lá, EPC xanh navy + cam.
+
+- **Một bản code, 3 container web** (`docker-compose.yml`: `web`, `web-c89`, `web-epc` — cùng image, khác biến `SITE`), dùng chung API và CSDL. `web/proxy.ts` chuyển mọi đường dẫn của cổng vào `web/app/cong-su-kien/`; đường dẫn khác của LeadScan trên cổng trả 404. Trang quản trị cổng dùng lại đúng các trang sự kiện của admin LeadScan.
+- **Trang của request**: header `X-LeadScan-Site` (`backend/app/sites.py`). Production: Nginx đặt ở từng khối server của cổng (`deploy/nginx-cong-su-kien.conf`) và **xoá** header khách tự gửi ở leadscan.net. Chạy dev: mở `http://c89.localhost:3000` / `http://epc.localhost:3000` (proxy nhận theo tên miền).
+- **Dữ liệu**: cột `site` (`leadscan` / `c89` / `epc`) trên `events`, `event_registrations`, `admin_users` (migration `a5c2e8f4b9d1`). Dữ liệu cũ thuộc `leadscan`. Slug sự kiện duy nhất trên mọi trang. Mỗi trang công khai chỉ hiện sự kiện của mình.
+- **Phân quyền** (`AdminUser.site`):
+  - Tài khoản cổng (`site = c89 / epc`) chỉ đăng nhập được ở `https://<cổng>/admin`, chỉ thấy và sửa sự kiện, đăng ký của cổng mình (sự kiện cổng khác trả 404). `auth.current_user` **chặn mặc định** mọi API admin khác (khách hàng, thanh toán, làm giàu MST…) — API thêm sau này cũng tự động bị chặn. Vai trò trong cổng: *Quản trị* xoá được sự kiện / đăng ký, *Nhân viên* thì không.
+  - Nhân viên LeadScan (`site` trống) đăng nhập ở leadscan.net/admin: thấy **tổng hợp mọi trang** — cột "Trang" (LeadScan / CEO 1989 / EPC) và bộ lọc theo trang ở danh sách sự kiện và đăng ký; ô **"Trang đăng"** khi tạo / sửa sự kiện (chuyển sự kiện sang cổng thì đăng ký đã nhận đi theo). Quản trị viên LeadScan cũng đăng nhập được ở admin cổng để hỗ trợ (khi đó chỉ thấy cổng đó).
+  - Cấp tài khoản cổng: `/admin/nhan-vien` → **Thêm nhân viên**, ô *Phạm vi* chọn *Cổng CEO 1989* / *Cổng EPC* (đổi phạm vi tài khoản đang có ở cột *Phạm vi*). Hoặc dòng lệnh: `docker compose exec api python -m app.cli create-admin --email ban@ceo1989.vn --name "BTC CEO 1989" --site c89`.
+- **Email** đăng ký của cổng dùng link theo tên miền cổng (`LEADSCAN_C89_URL`, `LEADSCAN_EPC_URL`) và dòng "Trang".
+- **Triển khai lần đầu**: trỏ DNS `c89.leadscan.net`, `epc.leadscan.net` về IP VPS → `git pull && docker compose up -d --build` → cài `deploy/nginx-cong-su-kien.conf` (hướng dẫn ở đầu file) → `sudo certbot --nginx -d c89.leadscan.net -d epc.leadscan.net` → chạy lại `sudo bash deploy/nginx-su-kien.sh` để leadscan.net xoá header `X-LeadScan-Site` khách tự gửi.
 
 ## Tích hợp InfoCMS — cần hoàn tất khi có tài liệu
 

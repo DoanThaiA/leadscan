@@ -9,6 +9,8 @@ export interface User {
   enrich_role: string | null;
   /** vai trò hiệu lực — quản trị viên mặc định "quan_tri"; null = không vào được phân hệ */
   enrich_access: string | null;
+  /** tài khoản cổng sự kiện (c89 / epc); null = nhân viên LeadScan */
+  site: string | null;
   is_active: boolean;
   created_at: string;
   last_login_at: string | null;
@@ -96,6 +98,7 @@ export interface Meta {
   opp_types: string[];
   tickets: string[];
   staff: UserRef[];
+  sites?: Record<string, string>;
 }
 
 export interface Stats {

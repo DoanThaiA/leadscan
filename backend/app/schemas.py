@@ -65,6 +65,7 @@ class UserOut(Out):
     role: str
     enrich_role: str | None = None  # vai trò làm giàu dữ liệu đã gán (None = theo mặc định)
     enrich_access: str | None = None  # vai trò hiệu lực (quản trị viên mặc định "quan_tri")
+    site: str | None = None  # tài khoản cổng sự kiện (c89 / epc); None = nhân viên LeadScan
     is_active: bool
     created_at: UtcDatetime
     last_login_at: UtcDatetime | None
@@ -93,12 +94,28 @@ def _check_enrich_role(v: str | None) -> str | None:
     return v
 
 
+def _check_site(v: str | None) -> str | None:
+    from app import sites
+
+    if not v:
+        return None
+    if v not in sites.PORTALS:
+        raise ValueError("Trang quản lý không hợp lệ.")
+    return v
+
+
 class UserCreateIn(BaseModel):
     email: Email = Field(max_length=150)
     full_name: Line = Field(min_length=1, max_length=100)
     role: str = "staff"
     enrich_role: str | None = None
+    site: str | None = None  # "c89" / "epc" = tài khoản cổng sự kiện
     password: str = Field(min_length=10, max_length=200)
+
+    @field_validator("site")
+    @classmethod
+    def _site(cls, v: str | None) -> str | None:
+        return _check_site(v)
 
     @field_validator("role")
     @classmethod
@@ -119,6 +136,12 @@ class UserUpdateIn(BaseModel):
     enrich_role: str | None = None  # "" = bỏ vai trò (về mặc định); chỉ áp dụng khi có gửi trường này
     is_active: bool | None = None
     password: str | None = Field(None, min_length=10, max_length=200)
+    site: str | None = None  # "" = chuyển về nhân viên LeadScan; chỉ áp dụng khi có gửi trường này
+
+    @field_validator("site")
+    @classmethod
+    def _site(cls, v: str | None) -> str | None:
+        return _check_site(v)
 
     @field_validator("role")
     @classmethod

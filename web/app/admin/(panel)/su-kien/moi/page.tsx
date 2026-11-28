@@ -5,15 +5,17 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { EventForm, EventWarning } from "@/components/admin/EventForm";
+import { useAdminBrand } from "@/components/sites/SiteContext";
 import { Icon } from "@/components/admin/ui";
 import { api } from "@/lib/admin/api";
 import type { EventAdmin, EventsMeta } from "@/lib/events";
 
 export default function NewEventPage() {
   const router = useRouter();
+  const brand = useAdminBrand();
   const [meta, setMeta] = useState<EventsMeta | null>(null);
   useEffect(() => {
-    document.title = "Tạo sự kiện · Quản trị LeadScan";
+    document.title = `Tạo sự kiện · ${brand}`;
     api.get<EventsMeta>("/events/meta").then(setMeta, () => {});
   }, []);
   return (

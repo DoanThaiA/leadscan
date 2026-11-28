@@ -9,7 +9,8 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from app.auth import create_session, current_user, destroy_session, require_admin
+from app import sites
+from app.auth import create_session, current_user, destroy_session, login_allowed, require_admin
 from app.config import get_settings
 from app.db import get_db, utcnow
 from app.models import COMPANY_STATUSES, ROLES, Activity, AdminSession, AdminUser, Company, Contact, Profile
@@ -64,6 +65,9 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
         add_hit(db, key)  # chỉ đếm lần sai
         db.commit()
         raise HTTPException(401, "Email hoặc mật khẩu không đúng.")
+    blocked = login_allowed(user, sites.request_site(request))
+    if blocked:
+        raise HTTPException(403, blocked)
     create_session(db, user, request, response)
     return user
 
@@ -90,8 +94,10 @@ def change_password(body: PasswordChangeIn, user: AdminUser = Depends(current_us
 
 
 @router.get("/meta")
-def meta(_: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
-    staff = db.scalars(select(AdminUser).where(AdminUser.is_active).order_by(AdminUser.full_name)).all()
+def meta(user: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
+    # Người phụ trách chỉ gồm tài khoản cùng trang: nhân viên LeadScan không thấy tài khoản cổng sự kiện và ngược lại
+    site_filter = AdminUser.site.is_(None) if user.site is None else AdminUser.site == user.site
+    staff = db.scalars(select(AdminUser).where(AdminUser.is_active, site_filter).order_by(AdminUser.full_name)).all()
     return {
         "statuses": COMPANY_STATUSES,
         "roles": ROLES,
@@ -101,6 +107,7 @@ def meta(_: AdminUser = Depends(current_user), db: Session = Depends(get_db)):
         "opp_types": OPP_TYPES,
         "tickets": TICKETS,
         "staff": [{"id": u.id, "full_name": u.full_name} for u in staff],
+        "sites": sites.NAMES,
     }
 
 
@@ -329,6 +336,7 @@ def create_user(body: UserCreateIn, _: AdminUser = Depends(require_admin), db: S
         full_name=body.full_name,
         role=body.role,
         enrich_role=body.enrich_role,
+        site=body.site,
         password_hash=hash_password(body.password),
     )
     db.add(u)
@@ -350,6 +358,11 @@ def update_user(user_id: int, body: UserUpdateIn, me_: AdminUser = Depends(requi
         u.role = body.role
     if "enrich_role" in body.model_fields_set:
         u.enrich_role = body.enrich_role
+    if "site" in body.model_fields_set and body.site != u.site:
+        if u.id == me_.id:
+            raise HTTPException(400, "Không thể tự chuyển tài khoản của mình sang cổng sự kiện.")
+        u.site = body.site
+        db.execute(delete(AdminSession).where(AdminSession.user_id == u.id))  # đổi phạm vi → đăng nhập lại
     if body.is_active is not None:
         u.is_active = body.is_active
     if body.password:

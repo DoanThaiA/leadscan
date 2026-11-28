@@ -38,6 +38,14 @@ export const EVENT_SECTIONS = [
 
 export type EventSectionKey = (typeof EVENT_SECTIONS)[number][0];
 
+/** Vé: total = null → không giới hạn chỗ. registered gồm cả vé bán ngoài form. */
+export interface TicketStats {
+  total: number | null;
+  registered: number;
+  remaining: number | null;
+  sold_out: boolean;
+}
+
 export interface EventCard {
   slug: string;
   title: string;
@@ -53,12 +61,13 @@ export interface EventCard {
   fee_member: number;
   fee_guest: number;
   published_at: string | null;
+  tickets?: TicketStats;
 }
 
 export interface EventPublic extends EventCard, Record<EventSectionKey, string> {
   status: string;
   ends_at: string | null;
-  capacity: number | null;
+  ticket_total: number | null;
   banner_image: string;
   fee_note: string;
   contact_name: string;
@@ -75,9 +84,12 @@ export interface EventPublic extends EventCard, Record<EventSectionKey, string> 
 
 export interface EventAdmin extends Omit<EventPublic, "is_open" | "file_upload" | "profile_max_mb" | "proof_max_mb" | "payment_ready"> {
   id: number;
+  site: string; // leadscan / c89 / epc
   bank_bin: string;
   account_no: string;
   notify_email: string;
+  tickets_sold: number;
+  tickets?: TicketStats & { web: number; offline: number };
   registrations: number;
   paid: number;
   created_at: string;
@@ -85,6 +97,7 @@ export interface EventAdmin extends Omit<EventPublic, "is_open" | "file_upload" 
 
 export interface EventAdminListItem {
   id: number;
+  site: string;
   slug: string;
   status: string;
   title: string;
@@ -96,6 +109,7 @@ export interface EventAdminListItem {
   fee_guest: number;
   registrations: number;
   paid: number;
+  tickets?: TicketStats & { web: number; offline: number };
   updated_at: string;
 }
 
@@ -128,6 +142,7 @@ export interface RegistrationState {
 
 export interface EventRegistration {
   id: number;
+  site: string;
   event_id: number | null;
   event_slug: string | null;
   event_title: string;
@@ -160,6 +175,9 @@ export interface EventRegistration {
 }
 
 export interface EventsMeta {
+  /** trang đang quản lý; null = nhân viên LeadScan xem tổng hợp mọi trang */
+  scope: string | null;
+  sites: Record<string, { name: string; url: string }>;
   event_email: string;
   mail_ready: boolean;
   storage_ready: boolean;
@@ -167,6 +185,28 @@ export interface EventsMeta {
   profile_max_mb: number;
   proof_max_mb: number;
   default_bank: { bank_bin: string; bank_name: string; account_no: string; account_name: string };
+}
+
+/** Còn ít chỗ → nhấn mạnh để khách đăng ký sớm: ≤ 10 chỗ hoặc ≤ 15% tổng */
+export function ticketsLow(t: TicketStats | undefined): boolean {
+  if (!t || t.total === null || t.remaining === null || t.sold_out) return false;
+  return t.remaining <= 10 || t.remaining <= t.total * 0.15;
+}
+
+/** Phần trăm đã đăng ký (0–100) để vẽ thanh tiến độ */
+export const ticketsPct = (t: TicketStats) => (t.total ? Math.min(100, Math.round((t.registered / t.total) * 100)) : 0);
+
+/** Nhãn trang (cột "Trang" ở admin LeadScan): màu theo logo từng đơn vị */
+export const SITE_BADGE: Record<string, { label: string; color: string; bg: string }> = {
+  leadscan: { label: "LeadScan", color: "#004B87", bg: "#EEF4FA" },
+  c89: { label: "CEO 1989", color: "#0E873D", bg: "#EAF8EF" },
+  epc: { label: "EPC", color: "#C9520C", bg: "#FEF1E8" },
+};
+
+/** Link công khai của sự kiện: ở cổng dùng đường dẫn tương đối, ở admin tổng hợp dùng tên miền của trang đăng */
+export function eventPublicUrl(meta: EventsMeta | null, site: string, slug: string): string {
+  const base = meta && meta.scope === null ? (meta.sites[site]?.url ?? "") : "";
+  return `${base}/su-kien/${slug}`;
 }
 
 export const fmtVnd = (n: number) => `${(n || 0).toLocaleString("vi-VN")}đ`;

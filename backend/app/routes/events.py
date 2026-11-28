@@ -17,6 +17,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from app import sites
 from app.config import Settings, get_settings
 from app.db import new_session, utcnow
 from app.models_events import Event, EventRegistration
@@ -49,34 +50,43 @@ def _no_store(data: dict) -> JSONResponse:
     return JSONResponse(data, headers={"Cache-Control": "no-store"})
 
 
-def _get_public(db: Session, slug: str) -> Event:
-    e = db.scalar(select(Event).where(Event.slug == slug, Event.status != "draft"))
+def _get_public(db: Session, slug: str, site: str) -> Event:
+    e = db.scalar(select(Event).where(Event.slug == slug, Event.site == site, Event.status != "draft"))
     if not e:
         raise HTTPException(404, "Không tìm thấy sự kiện.")
     return e
 
 
 @router.get("")
-def list_events():
-    """Sự kiện đang mở đăng ký, sắp diễn ra trước."""
+def list_events(request: Request):
+    """Sự kiện đang mở đăng ký của trang đang xem (leadscan.net / c89 / epc), sắp diễn ra trước."""
+    site = sites.request_site(request)
     with new_session() as db:
         rows = db.scalars(
             select(Event)
-            .where(Event.status == "published", or_(Event.deadline.is_(None), Event.deadline >= ev.today_vn()))
+            .where(Event.status == "published", Event.site == site, or_(Event.deadline.is_(None), Event.deadline >= ev.today_vn()))
             .order_by(Event.starts_at.asc().nulls_last(), Event.id.desc())
         ).all()
-        return {"items": [EventCard.model_validate(e).model_dump(mode="json") for e in rows]}
+        web = ev.web_counts(db, [e.id for e in rows])
+        return {
+            "items": [
+                {**EventCard.model_validate(e).model_dump(mode="json"), "tickets": ev.public_tickets(ev.ticket_stats(e, web.get(e.id, 0)))}
+                for e in rows
+            ]
+        }
 
 
 @router.get("/{slug}")
-def get_event(slug: str):
+def get_event(slug: str, request: Request):
     cfg = get_settings()
     with new_session() as db:
-        e = _get_public(db, slug)
+        e = _get_public(db, slug, sites.request_site(request))
         bank = ev.bank_of(e, cfg)
+        tickets = ev.stats_for(db, e)
         return {
             **EventPublic.model_validate(e).model_dump(mode="json"),
-            "is_open": ev.is_open(e),
+            "tickets": ev.public_tickets(tickets),
+            "is_open": ev.is_open(e) and not tickets["sold_out"],
             "file_upload": event_files.enabled(),  # chưa cấu hình R2 → ẩn nút đính kèm profile / nộp ảnh
             "profile_max_mb": cfg.event_profile_max_mb,
             "proof_max_mb": cfg.event_proof_max_mb,
@@ -136,7 +146,7 @@ async def register(slug: str, request: Request):
 
     ip = client_ip(request, cfg)
     ua = request.headers.get("user-agent", "")[:300]
-    result = await run_in_threadpool(_save, slug, form, profile, ip, ua, cfg)
+    result = await run_in_threadpool(_save, slug, sites.request_site(request), form, profile, ip, ua, cfg)
     if isinstance(result, JSONResponse):
         return result
     reg_id, state = result
@@ -144,14 +154,19 @@ async def register(slug: str, request: Request):
     return _no_store({"ok": True, **state})
 
 
-def _save(slug: str, form: RegisterIn, profile, ip: str, ua: str, cfg: Settings):
+def _save(slug: str, site: str, form: RegisterIn, profile, ip: str, ua: str, cfg: Settings):
     rl_key = "event:" + sha256(ip)
     with new_session() as db:
-        e = db.scalar(select(Event).where(Event.slug == slug, Event.status != "draft"))
+        # Khoá dòng sự kiện tới khi lưu xong → 2 người cùng giành vé cuối không vượt tổng số vé (PostgreSQL)
+        e = db.scalar(
+            select(Event).where(Event.slug == slug, Event.site == site, Event.status != "draft").with_for_update(of=Event)
+        )
         if not e:
             return _fail(404, "Không tìm thấy sự kiện.")
         if not ev.is_open(e):
             return _fail(410, "Sự kiện đã ngừng nhận đăng ký.")
+        if ev.stats_for(db, e)["sold_out"]:
+            return _fail(410, "Sự kiện đã hết vé. Vui lòng liên hệ ban tổ chức nếu muốn vào danh sách chờ.")
         if rate_limited(db, rl_key, cfg.event_rate_limit_per_hour, timedelta(hours=1)):
             return _fail(429, "Bạn đã gửi quá nhiều đăng ký. Vui lòng thử lại sau ít phút.")
 
@@ -159,6 +174,7 @@ def _save(slug: str, form: RegisterIn, profile, ip: str, ua: str, cfg: Settings)
         r = EventRegistration(
             event_id=e.id,
             event_title=e.title,
+            site=e.site,
             code=_free_code(db),
             status="paid" if amount == 0 else "new",
             full_name=form.full_name,

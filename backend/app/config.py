@@ -29,8 +29,14 @@ class Settings(BaseSettings):
             "www.leadscan.net",
             "leadscanb2b.com",
             "www.leadscanb2b.com",
+            "c89.leadscan.net",
+            "epc.leadscan.net",
         ]
     )
+
+    # 2 cổng chỉ đăng sự kiện (app/sites.py) — dùng cho link trong email và trang quản trị của từng cổng
+    c89_url: str = "https://c89.leadscan.net"
+    epc_url: str = "https://epc.leadscan.net"
 
     # Header chứa IP thật khi chạy sau proxy (Nginx ghi đè X-Real-IP). Để trống = IP kết nối trực tiếp.
     # CHỈ đặt khi proxy phía trước luôn ghi đè header này.

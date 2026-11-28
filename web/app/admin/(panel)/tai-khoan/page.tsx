@@ -4,17 +4,19 @@ import { type FormEvent, useEffect, useState } from "react";
 
 import { useAdmin } from "@/components/admin/AdminContext";
 import { Field } from "@/components/admin/ui";
+import { useAdminBrand } from "@/components/sites/SiteContext";
 import { api, ApiError } from "@/lib/admin/api";
 
 export default function AccountPage() {
   const { user, meta } = useAdmin();
+  const brand = useAdminBrand();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    document.title = "Tài khoản · Quản trị LeadScan";
-  }, []);
+    document.title = `Tài khoản · ${brand}`;
+  }, [brand]);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

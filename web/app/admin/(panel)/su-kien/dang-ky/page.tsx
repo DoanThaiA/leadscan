@@ -5,11 +5,14 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAdmin } from "@/components/admin/AdminContext";
 import { EventWarning } from "@/components/admin/EventForm";
+import { SiteBadge } from "@/components/admin/SiteBadge";
+import { useAdminBrand } from "@/components/sites/SiteContext";
 import { Dialog, Field, Icon, Skeleton } from "@/components/admin/ui";
 import { api, errMsg, qs } from "@/lib/admin/api";
 import { fmtDateTime, fmtNum, fromNow } from "@/lib/admin/format";
 import {
   ATTENDEE_TYPES,
+  eventPublicUrl,
   OCR_STATUS,
   REG_STATUS,
   REG_STATUS_CLASS,
@@ -33,6 +36,8 @@ const proofHref = (r: EventRegistration) => `/api/admin/event-registrations/${r.
 
 export default function EventRegistrationsPage() {
   const { user } = useAdmin();
+  const brand = useAdminBrand();
+  const [site, setSite] = useState("");
   const [events, setEvents] = useState<EventAdminListItem[]>([]);
   const [meta, setMeta] = useState<EventsMeta | null>(null);
   const [eventId, setEventId] = useState("");
@@ -47,7 +52,7 @@ export default function EventRegistrationsPage() {
 
   // ?su_kien= lọc theo sự kiện, ?id= mở thẳng 1 đăng ký (link trong email báo ban tổ chức)
   useEffect(() => {
-    document.title = "Đăng ký sự kiện · Quản trị LeadScan";
+    document.title = `Đăng ký sự kiện · ${brand}`;
     const p = new URLSearchParams(location.search);
     setEventId(p.get("su_kien") ?? "");
     const id = p.get("id");
@@ -64,8 +69,10 @@ export default function EventRegistrationsPage() {
 
   const load = useCallback(() => {
     if (!ready) return;
-    api.get<Resp>("/event-registrations" + qs({ event_id: eventId, status, q, page, page_size: PAGE_SIZE })).then(setD, (e) => setError(errMsg(e)));
-  }, [ready, eventId, status, q, page]);
+    api.get<Resp>("/event-registrations" + qs({ event_id: eventId, status, q, site, page, page_size: PAGE_SIZE })).then(setD, (e) => setError(errMsg(e)));
+  }, [ready, eventId, status, q, site, page]);
+
+  const all_sites = meta?.scope === null;
 
   useEffect(() => {
     setD(null);
@@ -112,8 +119,14 @@ export default function EventRegistrationsPage() {
           </div>
           <select className="adm-input" style={{ width: "auto", maxWidth: 300 }} value={eventId} onChange={(e) => { setEventId(e.target.value); setPage(1); }} aria-label="Lọc theo sự kiện">
             <option value="">Mọi sự kiện</option>
-            {events.map((e) => <option key={e.id} value={e.id}>{e.title}</option>)}
+            {events.filter((e) => !site || e.site === site).map((e) => <option key={e.id} value={e.id}>{e.title}</option>)}
           </select>
+          {all_sites ? (
+            <select className="adm-input" style={{ width: "auto" }} value={site} onChange={(e) => { setSite(e.target.value); setEventId(""); setPage(1); }} aria-label="Lọc theo trang">
+              <option value="">Mọi trang</option>
+              {Object.entries(meta!.sites).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
+            </select>
+          ) : null}
         </div>
         {!d ? (
           <div className="bd" style={{ display: "grid", gap: 12 }}>{[1, 2, 3, 4].map((i) => <Skeleton key={i} h={36} />)}</div>
@@ -122,7 +135,7 @@ export default function EventRegistrationsPage() {
         ) : (
           <div className="adm-table-wrap">
             <table className="adm-table">
-              <thead><tr><th>Người đăng ký</th><th>Sự kiện</th><th>Mã · Phí</th><th>Tệp</th><th>Đối soát</th><th>Trạng thái</th><th>Nhận lúc</th></tr></thead>
+              <thead><tr><th>Người đăng ký</th>{all_sites ? <th>Trang</th> : null}<th>Sự kiện</th><th>Mã · Phí</th><th>Tệp</th><th>Đối soát</th><th>Trạng thái</th><th>Nhận lúc</th></tr></thead>
               <tbody>
                 {d.items.map((r) => (
                   <tr key={r.id} className="link" onClick={() => setOpen(r)}>
@@ -130,6 +143,7 @@ export default function EventRegistrationsPage() {
                       <button type="button" className="name" style={{ background: "none", border: 0, padding: 0, font: "inherit", cursor: "pointer", textAlign: "left" }} onClick={(e) => { e.stopPropagation(); setOpen(r); }}>{r.full_name}</button>
                       <div className="sub">{r.phone} · {r.email}{r.company ? ` · ${r.company}` : ""}</div>
                     </td>
+                    {all_sites ? <td><SiteBadge site={r.site} /></td> : null}
                     <td>{r.event_title}<div className="sub">{ATTENDEE_TYPES[r.attendee_type] ?? r.attendee_type}</div></td>
                     <td style={{ whiteSpace: "nowrap" }}><span className="mono">{r.code}</span><div className="sub">{fmtVnd(r.amount)}</div></td>
                     <td onClick={(e) => e.stopPropagation()}>
@@ -246,7 +260,8 @@ function RegistrationDialog({
     >
       {msg ? <div className={msg.ok ? "adm-alert ok" : "adm-alert"}>{msg.text}</div> : null}
       <dl className="adm-dl">
-        <div><dt>Sự kiện</dt><dd>{r.event_slug ? <a href={`/su-kien/${r.event_slug}`} target="_blank" rel="noopener" style={{ color: "var(--brand-600)" }}>{r.event_title}</a> : r.event_title}</dd></div>
+        {meta?.scope === null ? <div><dt>Trang</dt><dd><SiteBadge site={r.site} /></dd></div> : null}
+        <div><dt>Sự kiện</dt><dd>{r.event_slug ? <a href={eventPublicUrl(meta, r.site, r.event_slug)} target="_blank" rel="noopener" style={{ color: "var(--brand-600)" }}>{r.event_title}</a> : r.event_title}</dd></div>
         <div><dt>Hình thức tham dự</dt><dd>{ATTENDEE_TYPES[r.attendee_type] ?? r.attendee_type} · <b>{fmtVnd(r.amount)}</b></dd></div>
         <div><dt>Điện thoại</dt><dd><a href={`tel:${r.phone}`}>{r.phone}</a></dd></div>
         <div><dt>Email</dt><dd><a href={`mailto:${r.email}`} style={{ color: "var(--brand-600)" }}>{r.email}</a></dd></div>

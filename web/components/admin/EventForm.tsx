@@ -12,8 +12,8 @@ import { Field, Icon } from "./ui";
 type Values = Record<string, string>;
 
 const TEXT_KEYS = [
-  "title", "slug", "status", "subtitle", "summary", "host", "partner", "starts_at", "ends_at", "venue", "address",
-  "deadline", "capacity", "cover_image", "banner_image", "fee_member", "fee_guest", "fee_note",
+  "site", "title", "slug", "status", "subtitle", "summary", "host", "partner", "starts_at", "ends_at", "venue", "address",
+  "deadline", "ticket_total", "tickets_sold", "cover_image", "banner_image", "fee_member", "fee_guest", "fee_note",
   "bank_bin", "bank_name", "account_no", "account_name", "contact_name", "contact_phone", "notify_email",
   ...EVENT_SECTIONS.map(([k]) => k),
 ] as const;
@@ -38,8 +38,10 @@ function initialValues(e?: EventAdmin): Values {
   v.starts_at = toLocalInput(e?.starts_at);
   v.ends_at = toLocalInput(e?.ends_at);
   v.status ||= "draft";
+  v.site ||= "leadscan";
   v.fee_member ||= "0";
   v.fee_guest ||= "0";
+  v.tickets_sold ||= "0";
   return v;
 }
 
@@ -75,7 +77,8 @@ export function EventForm({
       starts_at: v.starts_at || null,
       ends_at: v.ends_at || null,
       deadline: v.deadline || null,
-      capacity: digits(v.capacity) ? Number(digits(v.capacity)) : null,
+      ticket_total: digits(v.ticket_total) ? Number(digits(v.ticket_total)) : null,
+      tickets_sold: Number(digits(v.tickets_sold) || 0),
       fee_member: Number(digits(v.fee_member) || 0),
       fee_guest: Number(digits(v.fee_guest) || 0),
     };
@@ -136,9 +139,25 @@ export function EventForm({
               {input("venue", "Địa điểm", { max: 200, placeholder: "Văn phòng Coolmate" })}
               {input("address", "Địa chỉ", { full: true, max: 300, placeholder: "Tòa nhà BMM, Km2 Đường Phùng Hưng, Hà Đông, Hà Nội" })}
               {input("deadline", "Hạn đăng ký", { type: "date" })}
-              {input("capacity", "Quy mô dự kiến (người)", { placeholder: "100" })}
               {input("contact_name", "Đầu mối liên hệ", { max: 120, placeholder: "Mr Phúc (CLB CEO1989)" })}
               {input("contact_phone", "Điện thoại đầu mối", { max: 20, placeholder: "0909802998" })}
+            </div>
+          </section>
+
+          <section className="adm-card">
+            <div className="hd">
+              <div>
+                <h2>Vé tham dự</h2>
+                <p className="muted" style={{ fontSize: 12.5 }}>Trang sự kiện hiện Tổng người tham dự · Đã đăng ký · Còn lại. Hết chỗ thì tự đóng form.</p>
+              </div>
+            </div>
+            <div className="bd adm-form">
+              {input("ticket_total", "Tổng số vé (người)", { placeholder: "100 — để trống = không giới hạn" })}
+              {input("tickets_sold", "Vé đã bán ngoài form", { placeholder: "0" })}
+              <p className="muted" style={{ fontSize: 12.5, gridColumn: "1 / -1" }}>
+                “Vé đã bán ngoài form” là vé bạn bán trực tiếp (chuyển khoản riêng, bán tại CLB…). Đã đăng ký = số này + đăng ký trên web chưa huỷ
+                {initial?.tickets ? <> (hiện <b>{initial.tickets.web}</b> đăng ký trên web → tổng <b>{initial.tickets.registered}</b>{initial.tickets.remaining !== null ? <>, còn <b>{initial.tickets.remaining}</b> chỗ</> : null})</> : null}.
+              </p>
             </div>
           </section>
 
@@ -199,6 +218,13 @@ export function EventForm({
           <section className="adm-card">
             <div className="hd"><div><h2>Đăng bài</h2></div></div>
             <div className="bd adm-form">
+              {meta?.scope === null ? (
+                <Field label="Trang đăng" error={errors.site} full htmlFor="e-site">
+                  <select id="e-site" className="adm-input" value={v.site} onChange={set("site")}>
+                    {Object.entries(meta.sites).map(([k, s]) => <option key={k} value={k}>{s.name} — {s.url.replace(/^https?:\/\//, "")}</option>)}
+                  </select>
+                </Field>
+              ) : null}
               <Field label="Trạng thái" error={errors.status} full htmlFor="e-status">
                 <select id="e-status" className="adm-input" value={v.status} onChange={set("status")}>
                   {Object.entries(EVENT_STATUS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
@@ -225,7 +251,7 @@ export function EventForm({
                 value={v.cover_image}
                 error={errors.cover_image}
                 onChange={(url) => setV((s) => ({ ...s, cover_image: url }))}
-                endpoint="/jobs/covers"
+                endpoint="/events/covers"
                 label="Ảnh bìa / poster"
                 hint="JPG, PNG, WebP. Hiện ở đầu trang, thẻ danh sách và khi chia sẻ link."
                 id="e-cover_image"
@@ -235,7 +261,7 @@ export function EventForm({
                 value={v.banner_image}
                 error={errors.banner_image}
                 onChange={(url) => setV((s) => ({ ...s, banner_image: url }))}
-                endpoint="/jobs/covers"
+                endpoint="/events/covers"
                 label="Ảnh minh hoạ trong bài"
                 hint="Chèn dưới mục “Khung nội dung chia sẻ”. Bỏ trống nếu không cần."
                 id="e-banner_image"
@@ -251,7 +277,8 @@ export function EventForm({
 
 /** Cảnh báo cấu hình còn thiếu (email, kho tệp R2, OCR) — hiện ở đầu các trang sự kiện của admin. */
 export function EventWarning({ meta }: { meta: EventsMeta | null }) {
-  if (!meta) return null;
+  // chỉ nhân viên LeadScan (trang tổng hợp) cần xem cảnh báo cấu hình máy chủ; ban tổ chức ở cổng không sửa được
+  if (!meta || meta.scope !== null) return null;
   const items: ReactNode[] = [];
   if (!meta.storage_ready)
     items.push(<>Chưa cấu hình Cloudflare R2 — form đăng ký <b>chưa nhận được profile PDF và ảnh chuyển khoản</b>.</>);

@@ -5,6 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
 from app.config import Settings, get_settings
 from app.models_events import Event, EventRegistration
 from app.services.vietqr import build_payload
@@ -19,6 +22,42 @@ def today_vn():
 def is_open(e: Event) -> bool:
     """Còn nhận đăng ký: đang mở và chưa quá hạn (hạn tính hết ngày theo giờ Việt Nam)."""
     return e.status == "published" and (e.deadline is None or e.deadline >= today_vn())
+
+
+def web_counts(db: Session, event_ids: list[int]) -> dict[int, int]:
+    """Số đăng ký trên web chưa huỷ của từng sự kiện (giữ chỗ kể cả khi chưa thanh toán)."""
+    if not event_ids:
+        return {}
+    rows = db.execute(
+        select(EventRegistration.event_id, func.count())
+        .where(EventRegistration.event_id.in_(event_ids), EventRegistration.status != "cancelled")
+        .group_by(EventRegistration.event_id)
+    ).all()
+    return {eid: int(n) for eid, n in rows}
+
+
+def ticket_stats(e: Event, web: int) -> dict:
+    """Tổng vé · đã đăng ký · còn lại. total = None → không giới hạn chỗ (không bao giờ hết vé)."""
+    registered = int(e.tickets_sold or 0) + int(web or 0)
+    total = e.ticket_total
+    remaining = None if total is None else max(0, total - registered)
+    return {
+        "total": total,
+        "registered": registered,
+        "remaining": remaining,
+        "sold_out": remaining == 0,
+        "web": int(web or 0),
+        "offline": int(e.tickets_sold or 0),
+    }
+
+
+def stats_for(db: Session, e: Event) -> dict:
+    return ticket_stats(e, web_counts(db, [e.id]).get(e.id, 0))
+
+
+def public_tickets(t: dict) -> dict:
+    """Bản cho trang công khai — không tách số bán ngoài form / trên web."""
+    return {k: t[k] for k in ("total", "registered", "remaining", "sold_out")}
 
 
 def fee_for(e: Event, attendee_type: str) -> int:

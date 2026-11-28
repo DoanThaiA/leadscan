@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Cập nhật Nginx đang chạy trên VPS cho trang sự kiện (cho tải profile PDF / ảnh chuyển khoản tới 20 MB).
+# Cập nhật Nginx đang chạy trên VPS cho trang sự kiện (cho tải profile PDF / ảnh chuyển khoản tới 20 MB)
+# và xoá header X-LeadScan-Site khách tự gửi tới leadscan.net (cổng c89 / epc dùng deploy/nginx-cong-su-kien.conf).
 #
 #   sudo bash deploy/nginx-su-kien.sh                        # file mặc định /etc/nginx/sites-available/leadscan.conf
 #   sudo bash deploy/nginx-su-kien.sh /duong/dan/file.conf   # file cấu hình khác
@@ -36,6 +37,15 @@ if len(blocks) != 3:
     sys.exit(f"deploy/nginx.conf phải có 3 khối sự kiện, thấy {len(blocks)}.")
 
 conf = BLOCK.sub("", conf)  # bỏ bản cũ (nếu đã chèn trước đó)
+
+# Trang chính xoá header X-LeadScan-Site khách tự gửi (2 cổng sự kiện tự đặt header này ở file riêng)
+if "X-LeadScan-Site" not in conf:
+    conf = re.sub(
+        r"^([ \t]*)proxy_set_header X-Forwarded-Host \$host;\n",
+        lambda m: m.group(0) + m.group(1) + 'proxy_set_header X-LeadScan-Site "";\n',
+        conf,
+        flags=re.M,
+    )
 anchor = re.compile(r"(?:^[ \t]*#[^\n]*\n)*^[ \t]*location /api/ \{", re.M)
 if not anchor.search(conf):
     sys.exit(f"Không thấy 'location /api/' trong {path} — hãy chép tay 3 khối sự kiện từ deploy/nginx.conf.")

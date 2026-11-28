@@ -563,8 +563,11 @@ def _profile_line(cfg: Settings, r) -> str:
 def _reg_lines(cfg: Settings, r) -> list[str]:
     from app.models_events import ATTENDEE_TYPES, EVENT_REG_STATUSES
 
-    link = f"{cfg.site_url.rstrip('/')}/su-kien/{r.event.slug}" if r.event else "—"
+    from app import sites
+
+    link = f"{sites.url(r.site, cfg)}/su-kien/{r.event.slug}" if r.event else "—"
     return [
+        f"Trang             : {sites.NAMES.get(r.site, r.site)}",
         f"Sự kiện           : {r.event_title}",
         f"Mã đăng ký        : {r.code}",
         f"Họ và tên         : {r.full_name}",
@@ -583,7 +586,7 @@ def _reg_lines(cfg: Settings, r) -> list[str]:
         r.needs or "—",
         "",
         f"Trang sự kiện     : {link}",
-        f"Quản lý đăng ký   : {cfg.admin_url.rstrip('/')}/su-kien/dang-ky?id={r.id}",
+        f"Quản lý đăng ký   : {sites.admin_url(r.site, cfg)}/su-kien/dang-ky?id={r.id}",
     ]
 
 
@@ -655,6 +658,8 @@ def send_event_receipt(cfg: Settings, r, payment: dict | None = None) -> bool:
             "đối soát tự động. Ghi đúng nội dung chuyển khoản giúp xác nhận nhanh hơn.",
         ]
     if r.event:
-        lines += ["", f"Trang sự kiện: {cfg.site_url.rstrip('/')}/su-kien/{r.event.slug}?ma={r.code}"]
+        from app import sites
+
+        lines += ["", f"Trang sự kiện: {sites.url(r.site, cfg)}/su-kien/{r.event.slug}?ma={r.code}"]
     lines += ["", "Trân trọng,", "Ban tổ chức"]
     return send_mail(cfg, f"[Sự kiện] Đã nhận đăng ký {r.event_title} — mã {r.code}", "\n".join(lines) + "\n", to=r.email)

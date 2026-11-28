@@ -51,7 +51,10 @@ class Event(Base):
     __tablename__ = "events"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    slug: Mapped[str] = mapped_column(String(160), unique=True)  # /su-kien/<slug>
+    # Trang đăng sự kiện (app/sites.py): leadscan / c89 / epc. Mỗi trang chỉ hiện và quản lý sự kiện của mình;
+    # admin LeadScan xem tổng hợp mọi trang.
+    site: Mapped[str] = mapped_column(String(20), default="leadscan", server_default="leadscan", index=True)
+    slug: Mapped[str] = mapped_column(String(160), unique=True)  # /su-kien/<slug>, duy nhất trên mọi trang
     status: Mapped[str] = mapped_column(String(16), default="draft", index=True)
 
     title: Mapped[str] = mapped_column(String(200))
@@ -65,7 +68,10 @@ class Event(Base):
     venue: Mapped[str] = mapped_column(String(200), default="")  # tên địa điểm
     address: Mapped[str] = mapped_column(String(300), default="")
     deadline: Mapped[date | None] = mapped_column(Date)  # hạn đăng ký (hết ngày này tự đóng form)
-    capacity: Mapped[int | None] = mapped_column(Integer)  # số chỗ (trống = không giới hạn)
+    ticket_total: Mapped[int | None] = mapped_column(Integer)  # tổng số vé / chỗ (trống = không giới hạn)
+    # Vé ban tổ chức đã bán ngoài form (chuyển khoản riêng, bán tại CLB…), nhập tay.
+    # Đã đăng ký hiển thị = tickets_sold + số đăng ký trên web chưa huỷ (services/events.ticket_stats).
+    tickets_sold: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     cover_image: Mapped[str] = mapped_column(String(500), default="")  # ảnh bìa / poster
     banner_image: Mapped[str] = mapped_column(String(500), default="")  # ảnh minh hoạ trong bài
@@ -105,6 +111,7 @@ class EventRegistration(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     event_id: Mapped[int | None] = mapped_column(ForeignKey("events.id", ondelete="SET NULL"), index=True)
     event_title: Mapped[str] = mapped_column(String(200))  # giữ lại kể cả khi sự kiện bị xoá
+    site: Mapped[str] = mapped_column(String(20), default="leadscan", server_default="leadscan", index=True)  # = event.site
     code: Mapped[str] = mapped_column(String(16), unique=True)  # vd SK7KQ4M2 — nội dung chuyển khoản
     status: Mapped[str] = mapped_column(String(16), default="new", index=True)
 

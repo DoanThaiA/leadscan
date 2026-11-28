@@ -7,11 +7,15 @@ FROM node:24-alpine AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 ARG NEXT_PUBLIC_SITE_URL=https://leadscan.net
+ARG NEXT_PUBLIC_C89_URL=https://c89.leadscan.net
+ARG NEXT_PUBLIC_EPC_URL=https://epc.leadscan.net
 ARG API_INTERNAL_URL=http://api:8000
 ARG NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=
 ARG NEXT_PUBLIC_BING_SITE_VERIFICATION=
 ARG NEXT_PUBLIC_GA_ID=
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL \
+    NEXT_PUBLIC_C89_URL=$NEXT_PUBLIC_C89_URL \
+    NEXT_PUBLIC_EPC_URL=$NEXT_PUBLIC_EPC_URL \
     API_INTERNAL_URL=$API_INTERNAL_URL \
     NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=$NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION \
     NEXT_PUBLIC_BING_SITE_VERIFICATION=$NEXT_PUBLIC_BING_SITE_VERIFICATION \
@@ -22,7 +26,8 @@ RUN npm run build
 
 FROM node:24-alpine
 WORKDIR /app
-# Trang /tuyen-dung render phía máy chủ và gọi thẳng FastAPI lúc chạy → cần API_INTERNAL_URL ở cả image chạy
+# Trang /tuyen-dung render phía máy chủ và gọi thẳng FastAPI lúc chạy → cần API_INTERNAL_URL ở cả image chạy.
+# SITE (c89 / epc) đặt lúc chạy trong docker-compose: cùng image phục vụ leadscan.net và 2 cổng sự kiện.
 ARG API_INTERNAL_URL=http://api:8000
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 API_INTERNAL_URL=$API_INTERNAL_URL
 COPY --from=build --chown=node:node /app/.next/standalone ./

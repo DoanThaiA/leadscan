@@ -4,9 +4,11 @@ import { cache } from "react";
 
 import { RichText } from "@/components/careers/RichText";
 import RegisterFlow from "@/components/events/RegisterFlow";
+import { TicketChip, TicketMeter } from "@/components/events/TicketMeter";
 import { EVENT_SECTIONS, daysLeft, fmtDay, fmtRange, fmtVnd, parseLocal, type EventPublic } from "@/lib/events";
 import { fetchEvent, fetchEvents } from "@/lib/events-server";
-import { SITE_URL, breadcrumbLd, ldJson } from "@/lib/seo";
+import { currentSite } from "@/lib/site-server";
+import { ldJson } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -19,17 +21,20 @@ const plain = (s: string) => s.replace(/^#{2,3}\s+|^[-•*+]\s+|\*\*/gm, "").tri
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const e = await getEvent((await params).slug);
-  if (!e) return { title: "Không tìm thấy sự kiện – LeadScan B2B" };
+  const site = await currentSite();
+  const siteName = site.key === "leadscan" ? "LeadScan B2B" : site.name;
+  if (!e) return { title: `Không tìm thấy sự kiện – ${siteName}` };
   const title = `${e.title} – Sự kiện`;
   const description = (e.summary || e.subtitle || plain(e.intro)).slice(0, 200);
-  const image = e.cover_image || "/brand/leadscan-og.jpg";
+  const image = e.cover_image || (site.key === "leadscan" ? "/brand/leadscan-og.jpg" : site.logo);
   return {
     title,
     description,
-    alternates: { canonical: `/su-kien/${e.slug}` },
+    // cổng sự kiện: link tuyệt đối theo tên miền của cổng (metadataBase gốc là leadscan.net)
+    alternates: { canonical: `${site.url}/su-kien/${e.slug}` },
     robots: e.is_open ? undefined : { index: false },
     openGraph: {
-      type: "website", locale: "vi_VN", siteName: "LeadScan B2B", url: `/su-kien/${e.slug}`, title, description,
+      type: "website", locale: "vi_VN", siteName, url: `${site.url}/su-kien/${e.slug}`, title, description,
       images: [{ url: image, alt: e.title }],
     },
     twitter: { card: "summary_large_image", title, description, images: [image] },
@@ -37,7 +42,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 /** Dữ liệu có cấu trúc cho Google (thẻ sự kiện trong kết quả tìm kiếm) */
-function eventLd(e: EventPublic) {
+function eventLd(e: EventPublic, base: string, host: string) {
   const offers = [
     ["Thành viên CLB", e.fee_member],
     ["Khách mời ngoài CLB", e.fee_guest],
@@ -48,8 +53,8 @@ function eventLd(e: EventPublic) {
       name,
       price: String(price),
       priceCurrency: "VND",
-      availability: e.is_open ? "https://schema.org/InStock" : "https://schema.org/SoldOut",
-      url: `${SITE_URL}/su-kien/${e.slug}`,
+      availability: e.tickets?.sold_out ? "https://schema.org/SoldOut" : e.is_open ? "https://schema.org/InStock" : "https://schema.org/Discontinued",
+      url: `${base}/su-kien/${e.slug}`,
       ...(e.deadline ? { validThrough: `${e.deadline}T23:59:59+07:00` } : {}),
     }));
   return {
@@ -61,20 +66,22 @@ function eventLd(e: EventPublic) {
     ...(e.ends_at ? { endDate: `${e.ends_at}+07:00` } : {}),
     eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
     eventStatus: "https://schema.org/EventScheduled",
-    ...(e.cover_image ? { image: [new URL(e.cover_image, SITE_URL).toString()] } : {}),
+    ...(e.cover_image ? { image: [new URL(e.cover_image, base).toString()] } : {}),
     location: {
       "@type": "Place",
       name: e.venue || "Việt Nam",
       address: { "@type": "PostalAddress", streetAddress: e.address || e.venue || "Việt Nam", addressCountry: "VN" },
     },
-    ...(e.host ? { organizer: { "@type": "Organization", name: e.host } } : {}),
-    ...(e.capacity ? { maximumAttendeeCapacity: e.capacity } : {}),
+    ...(e.host || host ? { organizer: { "@type": "Organization", name: e.host || host, url: base } } : {}),
+    ...(e.ticket_total ? { maximumAttendeeCapacity: e.ticket_total } : {}),
+    ...(e.tickets?.remaining !== null && e.tickets?.remaining !== undefined ? { remainingAttendeeCapacity: e.tickets.remaining } : {}),
     offers,
   };
 }
 
 export default async function EventDetailPage({ params }: Props) {
   const { slug } = await params;
+  const site = await currentSite();
   const e = await getEvent(slug);
   if (!e) notFound();
   const others = ((await fetchEvents()) ?? []).filter((x) => x.slug !== e.slug).slice(0, 3);
@@ -90,7 +97,6 @@ export default async function EventDetailPage({ params }: Props) {
       ["i-factory", "Chủ nhà", e.partner],
       ["i-ticket", "Phí thành viên CLB", e.fee_member > 0 ? `${fmtVnd(e.fee_member)}/người` : "Miễn phí"],
       ["i-ticket", "Phí khách mời ngoài CLB", e.fee_guest > 0 ? `${fmtVnd(e.fee_guest)}/người` : "Miễn phí"],
-      ["i-user", "Quy mô dự kiến", e.capacity ? `${e.capacity} người` : ""],
       ["i-clipboard", "Hạn đăng ký", e.deadline ? `${fmtDay(e.deadline)}${left !== null && left >= 0 && e.is_open ? ` (còn ${left} ngày)` : ""}` : ""],
       ["i-phone", "Đầu mối liên hệ", [e.contact_name, e.contact_phone].filter(Boolean).join(" – ")],
     ] as [string, string, string][]
@@ -98,8 +104,8 @@ export default async function EventDetailPage({ params }: Props) {
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(eventLd(e)).replace(/</g, "\\u003c") }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson([breadcrumbLd([["Trang chủ", "/"], ["Sự kiện", "/su-kien"], [e.title, `/su-kien/${e.slug}`]])]) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(eventLd(e, site.url, site.name)).replace(/</g, "\\u003c") }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson([{ "@type": "BreadcrumbList", itemListElement: ([["Trang chủ", "/"], ["Sự kiện", "/su-kien"], [e.title, `/su-kien/${e.slug}`]] as const).map(([name, path], i) => ({ "@type": "ListItem", position: i + 1, name, item: `${site.url}${path}` })) }]) }} />
 
       <section className="cr-dhero">
         <div className="container">
@@ -109,6 +115,7 @@ export default async function EventDetailPage({ params }: Props) {
           <div className="cr-dhero-tags">
             <span className="pill"><i className="cr-dot" aria-hidden="true" />{e.host || "Sự kiện"}{e.partner ? ` × ${e.partner}` : ""}</span>
             {when ? <span className="pill-tag">{when.day}</span> : null}
+            <TicketChip t={e.tickets} />
             {e.is_open && left !== null && left >= 0 ? <span className={left <= 3 ? "cr-due soon" : "cr-due"}>{left === 0 ? "Hạn đăng ký hôm nay" : `Còn ${left} ngày đăng ký`}</span> : null}
           </div>
           <h1 className="h-display">{e.title}</h1>
@@ -127,7 +134,7 @@ export default async function EventDetailPage({ params }: Props) {
               <a href="#noi-dung" className="btn btn-outline">Xem chương trình</a>
             </div>
           ) : (
-            <div className="cr-closed" role="status"><svg className="icon"><use href="#i-info" /></svg>Sự kiện này đã ngừng nhận đăng ký. <a href="/su-kien">Xem các sự kiện khác →</a></div>
+            <div className="cr-closed" role="status"><svg className="icon"><use href="#i-info" /></svg>{e.tickets?.sold_out ? "Sự kiện đã hết vé." : "Sự kiện này đã ngừng nhận đăng ký."} <a href="/su-kien">Xem các sự kiện khác →</a></div>
           )}
         </div>
       </section>
@@ -162,6 +169,7 @@ export default async function EventDetailPage({ params }: Props) {
           </article>
 
           <aside className="cr-aside">
+            {e.tickets ? <TicketMeter t={e.tickets} open={e.is_open} /> : null}
             <div className="cr-info">
               <h3>Thông tin chung</h3>
               <dl>

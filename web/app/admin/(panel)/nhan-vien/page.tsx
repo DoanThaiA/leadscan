@@ -10,6 +10,9 @@ import type { Role, User } from "@/lib/admin/types";
 
 type Errors = Record<string, string>;
 
+/** Cổng sự kiện gán được cho tài khoản (backend/app/sites.py) */
+const PORTAL_LABEL: Record<string, string> = { c89: "Cổng CEO 1989", epc: "Cổng EPC" };
+
 export default function StaffPage() {
   const { user: me, meta, reloadMeta } = useAdmin();
   const [users, setUsers] = useState<User[] | null>(null);
@@ -26,7 +29,7 @@ export default function StaffPage() {
     load();
   }, [load]);
 
-  async function update(u: User, body: Partial<{ role: Role; is_active: boolean; enrich_role: string }>) {
+  async function update(u: User, body: Partial<{ role: Role; is_active: boolean; enrich_role: string; site: string }>) {
     try {
       await api.patch(`/users/${u.id}`, body);
       load();
@@ -46,6 +49,7 @@ export default function StaffPage() {
         <div>
           <h1>Nhân viên</h1>
           <p>Tài khoản đăng nhập trang quản trị. Nhân viên xem và chăm sóc khách hàng; quản trị viên thêm quản lý tài khoản và xoá khách hàng. Cột “Làm giàu theo MST” quyết định ai xem được dữ liệu doanh nghiệp (kho A) và dữ liệu cá nhân (kho B).</p>
+          <p style={{ marginTop: 6 }}>Cột <b>Phạm vi</b>: chọn một cổng sự kiện (CEO 1989, EPC) thì tài khoản chỉ đăng nhập được ở <span className="mono">c89.leadscan.net/admin</span> / <span className="mono">epc.leadscan.net/admin</span> và chỉ quản lý sự kiện, đăng ký của cổng đó — không vào được dữ liệu khác của LeadScan.</p>
         </div>
         <button className="adm-btn primary" onClick={() => setCreating(true)}><Icon name="plus" size={16} /> Thêm nhân viên</button>
       </div>
@@ -59,7 +63,7 @@ export default function StaffPage() {
           <div className="adm-table-wrap">
             <table className="adm-table">
               <thead>
-                <tr><th>Nhân viên</th><th>Vai trò</th><th>Làm giàu theo MST</th><th>Trạng thái</th><th>Đăng nhập gần nhất</th><th style={{ textAlign: "right" }}>Thao tác</th></tr>
+                <tr><th>Nhân viên</th><th>Phạm vi</th><th>Vai trò</th><th>Làm giàu theo MST</th><th>Trạng thái</th><th>Đăng nhập gần nhất</th><th style={{ textAlign: "right" }}>Thao tác</th></tr>
               </thead>
               <tbody>
                 {users.map((u) => {
@@ -76,12 +80,18 @@ export default function StaffPage() {
                         </div>
                       </td>
                       <td>
+                        <select className="adm-input" style={{ width: 170, height: 32 }} value={u.site ?? ""} disabled={self} onChange={(e) => { const v = e.target.value; const label = v ? PORTAL_LABEL[v] : "LeadScan"; if (confirm(`Chuyển ${u.full_name} sang phạm vi “${label}”? Tài khoản sẽ bị đăng xuất và phải đăng nhập lại.`)) update(u, { site: v }); }} aria-label={`Phạm vi của ${u.full_name}`}>
+                          <option value="">LeadScan (toàn hệ thống)</option>
+                          {Object.entries(PORTAL_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                        </select>
+                      </td>
+                      <td>
                         <select className="adm-input" style={{ width: 130, height: 32 }} value={u.role} disabled={self} onChange={(e) => update(u, { role: e.target.value as Role })} aria-label={`Vai trò của ${u.full_name}`}>
                           {Object.entries(meta.roles).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                         </select>
                       </td>
                       <td>
-                        <select className="adm-input" style={{ width: 190, height: 32 }} value={u.enrich_role ?? ""} onChange={(e) => update(u, { enrich_role: e.target.value })} aria-label={`Vai trò làm giàu dữ liệu của ${u.full_name}`}>
+                        <select className="adm-input" style={{ width: 190, height: 32 }} value={u.enrich_role ?? ""} disabled={!!u.site} title={u.site ? "Tài khoản cổng sự kiện không vào phân hệ làm giàu" : undefined} onChange={(e) => update(u, { enrich_role: e.target.value })} aria-label={`Vai trò làm giàu dữ liệu của ${u.full_name}`}>
                           <option value="">{u.role === "admin" ? `Mặc định (${meta.enrich_roles.quan_tri})` : "Không truy cập"}</option>
                           {Object.entries(meta.enrich_roles).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                         </select>
@@ -150,6 +160,12 @@ function CreateUserDialog({ open, onClose, onCreated, roles, enrichRoles }: { op
           </Field>
           <Field label="Email đăng nhập" error={errors.email} full htmlFor="u-email">
             <input id="u-email" className="adm-input" name="email" type="email" maxLength={150} autoComplete="off" aria-invalid={!!errors.email} />
+          </Field>
+          <Field label="Phạm vi" error={errors.site} full htmlFor="u-site">
+            <select id="u-site" className="adm-input" name="site" defaultValue="">
+              <option value="">Nhân viên LeadScan (toàn hệ thống theo vai trò)</option>
+              {Object.entries(PORTAL_LABEL).map(([k, v]) => <option key={k} value={k}>{v} — chỉ quản lý sự kiện của cổng</option>)}
+            </select>
           </Field>
           <Field label="Vai trò" error={errors.role} htmlFor="u-role">
             <select id="u-role" className="adm-input" name="role" defaultValue="staff">
