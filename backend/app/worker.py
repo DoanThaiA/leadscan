@@ -813,7 +813,7 @@ def deliver_event_registration(reg_id: int) -> bool:
     from app.db import new_session, utcnow
     from app.models_events import EventRegistration
     from app.services import event_files, events as ev
-    from app.services.notify import send_event_receipt, send_event_registration
+    from app.services.notify import profile_attachable, send_event_receipt, send_event_registration
     from app.services.storage import StorageError
 
     cfg = get_settings()
@@ -826,7 +826,7 @@ def deliver_event_registration(reg_id: int) -> bool:
         if r.email_sent_at:
             return True
         profile = None
-        if r.profile_key:
+        if r.profile_key and profile_attachable(cfg, r):
             try:
                 profile = event_files.fetch(r.profile_key)
             except StorageError:

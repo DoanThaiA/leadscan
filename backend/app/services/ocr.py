@@ -13,11 +13,13 @@ So khớp (hàm `verify`):
 
 from __future__ import annotations
 
+import io
 import logging
 import re
 from dataclasses import dataclass, field
 
 import httpx
+from PIL import Image, ImageOps
 
 from app.config import Settings, get_settings
 
@@ -46,6 +48,33 @@ def _normalize(s: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", s.upper())
 
 
+def shrink(data: bytes, filename: str, mime: str, max_bytes: int) -> tuple[bytes, str, str]:
+    """Ảnh vượt giới hạn của OCR.space → thu nhỏ thành JPEG vừa đủ. Chỉ bản gửi đi OCR bị đổi, ảnh gốc giữ nguyên.
+
+    Ảnh hỏng / quá nhiều điểm ảnh → trả nguyên bản, để OCR.space báo lỗi và đơn vào "Chờ đối soát".
+    """
+    if max_bytes <= 0 or len(data) <= max_bytes:
+        return data, filename, mime
+    try:
+        with Image.open(io.BytesIO(data)) as src:
+            img = ImageOps.exif_transpose(src)
+            if img.mode != "RGB":  # nền trong suốt → nền trắng để chữ đen không bị chìm
+                rgba = img.convert("RGBA")
+                img = Image.new("RGB", rgba.size, "white")
+                img.paste(rgba, mask=rgba.getchannel("A"))
+            for side in (2600, 2000, 1600, 1280, 1000, 800):
+                small = img.copy()
+                small.thumbnail((side, side), Image.Resampling.LANCZOS)
+                for quality in (85, 70):
+                    out = io.BytesIO()
+                    small.save(out, "JPEG", quality=quality, optimize=True)
+                    if out.tell() <= max_bytes:
+                        return out.getvalue(), "bien-lai.jpg", "image/jpeg"
+    except Exception:  # noqa: BLE001
+        log.warning("Không thu nhỏ được ảnh %s trước khi OCR", filename, exc_info=True)
+    return data, filename, mime
+
+
 def read_text(data: bytes, filename: str, mime: str, cfg: Settings | None = None) -> tuple[str, str]:
     """Gọi OCR.space, trả về (chữ đọc được, thông báo lỗi). Lỗi → ("", "lý do")."""
     cfg = cfg or get_settings()
@@ -60,6 +89,7 @@ def read_text(data: bytes, filename: str, mime: str, cfg: Settings | None = None
     }
     if cfg.ocr_space_engine != 2:
         payload["language"] = cfg.ocr_space_language
+    data, filename, mime = shrink(data, filename, mime, cfg.ocr_space_max_kb * 1024)
     try:
         r = httpx.post(
             cfg.ocr_space_url,

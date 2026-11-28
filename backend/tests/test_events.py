@@ -1,10 +1,12 @@
 """Sự kiện: admin tạo trang sự kiện, khách đăng ký → QR thanh toán → nộp ảnh chuyển khoản, OCR đối soát."""
 
 import base64
+import io
 
 import httpx
 import pytest
 import respx
+from PIL import Image
 
 from app import db as dbmod
 from app.config import get_settings
@@ -315,3 +317,39 @@ def test_danh_sach_su_kien_cua_admin_dem_dang_ky(admin, client):
 def test_khach_khong_vao_duoc_api_quan_tri(client):
     assert client.get(REGS).status_code == 401
     assert client.get(EVENTS).status_code == 401
+
+
+# ------------------------------------------------------------------ tệp lớn (tới 20 MB)
+
+
+def test_profile_gan_20mb_van_nhan(admin, client, r2):
+    e = make_event(admin)
+    big = PDF + b"0" * (19 * 1024 * 1024)
+    r = client.post(f"/api/events/{e['slug']}/register", json=registration(profile_file=b64(big, "to.pdf")))
+    assert r.status_code == 200, r.text
+    assert client.get(f"/api/events/{e['slug']}").json()["profile_max_mb"] == 20
+
+
+def test_profile_qua_20mb_bao_loi_ro(admin, client, r2):
+    e = make_event(admin)
+    big = PDF + b"0" * (20 * 1024 * 1024)
+    r = client.post(f"/api/events/{e['slug']}/register", json=registration(profile_file=b64(big, "to.pdf")))
+    assert r.status_code in (413, 422) and "20 MB" in r.json()["fields"]["profile_file"]
+
+
+@respx.mock
+def test_anh_lon_duoc_thu_nho_truoc_khi_ocr(admin, client, r2, ocr_key):
+    buf = io.BytesIO()
+    Image.effect_noise((1600, 2400), 90).convert("RGB").save(buf, "PNG")
+    original = buf.getvalue()
+    assert len(original) > 1024 * 1024
+
+    e = make_event(admin)
+    d = _register(client, e["slug"])
+    route = respx.post(OCR_URL).mock(return_value=ocr_reply(f"500.000 {d['code']}"))
+    out = client.post(f"/api/events/registrations/{d['code']}/proof", json={"image": b64(original, "to.png")}).json()
+    assert out["status"] == "paid"
+    assert len(route.calls[0].request.content) < 1100 * 1024  # bản gửi OCR đã nhỏ lại
+    with dbmod.new_session() as db:
+        reg = db.query(EventRegistration).one()
+    assert r2.objects[reg.proof_key][0] == original  # ảnh lưu trên R2 giữ nguyên

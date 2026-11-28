@@ -157,8 +157,10 @@ class Settings(BaseSettings):
     # Sự kiện (/su-kien): đăng ký tham dự, đính kèm profile PDF, nộp ảnh chuyển khoản
     event_email: str = ""  # email ban tổ chức nhận báo đăng ký mới (trống = email riêng của sự kiện → notify_email)
     event_rate_limit_per_hour: int = 10  # số lượt đăng ký tối đa mỗi IP / giờ
-    event_profile_max_mb: int = 10  # profile PDF đính kèm
-    event_proof_max_mb: int = 8  # ảnh chụp màn hình chuyển khoản
+    # Đổi 2 mức dưới thì đổi cả client_max_body_size trong deploy/nginx.conf (tệp gửi dạng base64 → to hơn ~1/3)
+    event_profile_max_mb: int = 20  # profile PDF đính kèm
+    event_proof_max_mb: int = 20  # ảnh chụp màn hình chuyển khoản
+    event_email_attach_max_mb: int = 15  # profile lớn hơn mức này không đính kèm email (admin tải trong trang quản trị)
 
     # OCR ảnh chuyển khoản qua OCR.space (https://ocr.space/ocrapi). Trống = không đối soát tự động,
     # mọi ảnh khách gửi vào trạng thái "Chờ đối soát" để ban tổ chức tự xác nhận.
@@ -167,6 +169,7 @@ class Settings(BaseSettings):
     ocr_space_engine: int = 2  # 2 = máy nhận dạng mới (tốt với ảnh chụp màn hình app ngân hàng)
     ocr_space_language: str = "eng"  # engine 2 tự nhận; engine 1 cần mã ngôn ngữ
     ocr_space_timeout: float = 60.0
+    ocr_space_max_kb: int = 1024  # gói miễn phí của OCR.space nhận tệp ≤ 1 MB → ảnh lớn hơn được thu nhỏ trước khi gửi
     # Đối soát: phải đọc được MÃ ĐĂNG KÝ trong ảnh; số tiền khớp thì tự xác nhận "Đã thanh toán".
     # Sai lệch cho phép khi so số tiền (đồng) — phòng phí chuyển khoản / làm tròn.
     ocr_amount_tolerance: int = 0

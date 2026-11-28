@@ -548,6 +548,18 @@ def event_inbox(cfg: Settings, event=None) -> str:
     return (getattr(event, "notify_email", "") or cfg.event_email or cfg.notify_email or "").strip()
 
 
+def profile_attachable(cfg: Settings, r) -> bool:
+    """Profile đủ nhỏ để đính kèm email (nhiều hộp thư từ chối thư quá lớn)."""
+    return r.profile_size <= cfg.event_email_attach_max_mb * 1024 * 1024
+
+
+def _profile_line(cfg: Settings, r) -> str:
+    if not r.profile_filename:
+        return "—"
+    where = "đính kèm email báo đăng ký" if profile_attachable(cfg, r) else "tệp lớn, tải trong trang quản trị"
+    return f"{r.profile_filename} ({_size(r.profile_size)}) — {where}"
+
+
 def _reg_lines(cfg: Settings, r) -> list[str]:
     from app.models_events import ATTENDEE_TYPES, EVENT_REG_STATUSES
 
@@ -562,7 +574,7 @@ def _reg_lines(cfg: Settings, r) -> list[str]:
         f"Hình thức tham dự : {ATTENDEE_TYPES.get(r.attendee_type, r.attendee_type)}",
         f"Phí tham dự       : {_vnd(r.amount)}",
         f"Trạng thái        : {EVENT_REG_STATUSES.get(r.status, r.status)}",
-        f"Profile đính kèm  : {f'{r.profile_filename} ({_size(r.profile_size)}) — đính kèm email này' if r.profile_filename else '—'}",
+        f"Profile đính kèm  : {_profile_line(cfg, r)}",
         f"Ảnh chuyển khoản  : {r.proof_filename or '—'}",
         f"Đối soát OCR      : {r.ocr_message or '—'}",
         f"Đăng ký lúc       : {_vn(r.created_at)}",

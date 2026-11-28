@@ -27,6 +27,10 @@ function readAsDataUrl(file: File): Promise<string> {
   });
 }
 
+// Tệp đã qua kiểm tra dung lượng ở trình duyệt mà vẫn bị 413 → proxy của máy chủ chặn, không phải do tệp quá mức
+const BLOCKED_413 = "Máy chủ đang chặn tệp tải lên (lỗi 413) dù tệp chưa vượt giới hạn. Vui lòng báo ban tổ chức.";
+const UPLOAD_TIMEOUT_MS = 300_000; // tệp 20 MB trên mạng di động có thể mất vài phút
+
 const storeKey = (slug: string) => `ls_event_${slug}`;
 
 /** Đăng ký tham dự 3 bước: điền form → quét QR chuyển khoản → tải ảnh biên lai để đối soát. */
@@ -121,7 +125,7 @@ function RegisterForm({ event: e, onDone }: { event: EventPublic; onDone: (s: Re
   const [file, setFile] = useState<File | null>(null);
   const [kind, setKind] = useState("member");
   const [needsLen, setNeedsLen] = useState(0);
-  const maxMb = e.profile_max_mb || 10;
+  const maxMb = e.profile_max_mb || 20;
 
   useEffect(() => {
     startedAt.current = Date.now();
@@ -191,7 +195,7 @@ function RegisterForm({ event: e, onDone }: { event: EventPublic; onDone: (s: Re
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(90000),
+        signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
       });
       let j: { ok?: boolean; message?: string; fields?: Errors } & Partial<RegistrationState> = {};
       try {
@@ -201,7 +205,7 @@ function RegisterForm({ event: e, onDone }: { event: EventPublic; onDone: (s: Re
         onDone(j as RegistrationState);
       } else {
         if (j.fields && Object.keys(j.fields).length) showErrors(j.fields);
-        setBanner(j.message || (r.status === 413 ? `Profile tối đa ${maxMb} MB.` : "Chưa gửi được đăng ký, vui lòng thử lại."));
+        setBanner(j.message || (r.status === 413 ? BLOCKED_413 : "Chưa gửi được đăng ký, vui lòng thử lại."));
       }
     } catch {
       setBanner("Không kết nối được máy chủ. Kiểm tra mạng và thử lại.");
@@ -365,7 +369,7 @@ function PayPanel({
   const [fieldErr, setFieldErr] = useState("");
   const imgRef = useRef<HTMLInputElement>(null);
   const p = reg.payment;
-  const maxMb = e.proof_max_mb || 8;
+  const maxMb = e.proof_max_mb || 20;
 
   useEffect(() => {
     setQr("");
@@ -398,7 +402,7 @@ function PayPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: { name: image.name, data: await readAsDataUrl(image) } }),
-        signal: AbortSignal.timeout(120000),
+        signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
       });
       let j: { ok?: boolean; message?: string; fields?: Errors } & Partial<RegistrationState> = {};
       try {
@@ -410,7 +414,7 @@ function PayPanel({
         onChange(j as RegistrationState);
       } else {
         setFieldErr(j.fields?.image ?? "");
-        setBanner(j.message || "Chưa gửi được ảnh, vui lòng thử lại.");
+        setBanner(j.message || (r.status === 413 ? BLOCKED_413 : "Chưa gửi được ảnh, vui lòng thử lại."));
       }
     } catch {
       setBanner("Không kết nối được máy chủ. Kiểm tra mạng và thử lại.");
