@@ -302,6 +302,9 @@ class RegistrationOut(Out):
     ocr_at: UtcDatetime | None
     paid_at: UtcDatetime | None
     checked_in: bool
+    checked_in_at: UtcDatetime | None = None
     note: str
     email_sent_at: UtcDatetime | None
+    receipt_sent_at: UtcDatetime | None = None
+    confirm_sent_at: UtcDatetime | None = None
     created_at: UtcDatetime

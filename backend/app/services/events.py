@@ -95,6 +95,32 @@ def payment_info(e: Event, r: EventRegistration, cfg: Settings | None = None) ->
     }
 
 
+def checkin_url(code: str, site: str | None = None, cfg: Settings | None = None) -> str:
+    """Nội dung mã QR check-in: trang quản trị của đúng cổng sự kiện (LeadScan / c89 / epc) cho lễ tân.
+    Phải đăng nhập quản trị mới xem/xác nhận được, nên khách quét thử chỉ gặp trang đăng nhập."""
+    from app import sites
+
+    return f"{sites.admin_url(site or sites.MAIN, cfg)}/su-kien/check-in?ma={code}"
+
+
+def checkin_qr_url(code: str, site: str | None = None, cfg: Settings | None = None) -> str:
+    """Ảnh PNG của mã QR check-in (email không hiện được ảnh nhúng data:, nên phục vụ qua URL).
+    Ảnh nằm trên tên miền của cổng → API biết cổng qua header X-LeadScan-Site, không cần tra DB."""
+    from app import sites
+
+    return f"{sites.url(site or sites.MAIN, cfg)}/api/events/checkin-qr/{code}.png"
+
+
+def checkin_qr_png(code: str, site: str | None = None, cfg: Settings | None = None) -> bytes:
+    import io
+
+    import segno
+
+    buf = io.BytesIO()
+    segno.make(checkin_url(code, site, cfg), error="m").save(buf, kind="png", scale=8, border=3)
+    return buf.getvalue()
+
+
 def mask_email(email: str) -> str:
     """"binh@minhan.vn" → "b***@minhan.vn" — đủ để khách nhận ra hộp thư của mình mà không lộ địa chỉ đầy đủ."""
     name, sep, domain = email.partition("@")

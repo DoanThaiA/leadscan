@@ -147,7 +147,8 @@ function EventsTree({ item, active }: { item: NavItem; active: boolean }) {
   }, [active]);
 
   const regs = path.startsWith("/admin/su-kien/dang-ky");
-  const list = path === item.href || (path.startsWith(item.href + "/") && !regs);
+  const checkin = path.startsWith("/admin/su-kien/check-in");
+  const list = path === item.href || (path.startsWith(item.href + "/") && !regs && !checkin);
 
   return (
     <div className="adm-nav-tree">
@@ -164,6 +165,7 @@ function EventsTree({ item, active }: { item: NavItem; active: boolean }) {
         <div className="adm-nav-sub">
           <Link href={item.href} className={list ? "on" : undefined} aria-current={list ? "page" : undefined}><span>Danh sách sự kiện</span></Link>
           <Link href="/admin/su-kien/dang-ky" className={regs ? "on" : undefined} aria-current={regs ? "page" : undefined}><span>Đăng ký sự kiện</span></Link>
+          <Link href="/admin/su-kien/check-in" className={checkin ? "on" : undefined} aria-current={checkin ? "page" : undefined}><span>Check-in</span></Link>
         </div>
       ) : null}
     </div>

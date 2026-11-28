@@ -176,3 +176,30 @@ def test_nhan_vien_cong_khong_xoa_duoc(c89_admin):
     e = c89_admin.post(EVENTS, json=event()).json()
     assert nv.delete(f"{EVENTS}/{e['id']}").status_code == 403
     assert c89_admin.delete(f"{EVENTS}/{e['id']}").status_code == 204
+
+
+# ------------------------------------------------------------------ check-in bằng QR theo cổng
+
+
+def test_check_in_chi_trong_cong_cua_minh(c89_admin, epc_admin, client):
+    e = c89_admin.post(EVENTS, json=event()).json()
+    code = client.post(f"/api/events/{e['slug']}/register", json=registration(), headers=C89).json()["code"]
+    got = c89_admin.get(f"{REGS}/by-code/{code}")
+    assert got.status_code == 200
+    rid = got.json()["id"]
+    assert epc_admin.get(f"{REGS}/by-code/{code}").status_code == 404
+    assert epc_admin.post(f"{REGS}/{rid}/check-in").status_code == 404
+    assert c89_admin.post(f"{REGS}/{rid}/check-in").json()["checked_in"] is True
+
+
+def test_anh_qr_tren_cong_tro_ve_trang_quan_tri_cua_cong(client):
+    import io
+
+    from PIL import Image
+
+    from app.services.events import checkin_qr_png
+
+    on_c89 = client.get("/api/events/checkin-qr/SK7KQ4MX.png", headers=C89)
+    assert on_c89.status_code == 200
+    assert on_c89.content == checkin_qr_png("SK7KQ4MX", "c89") != checkin_qr_png("SK7KQ4MX")
+    assert Image.open(io.BytesIO(on_c89.content)).format == "PNG"

@@ -394,3 +394,209 @@ def test_khong_dat_tong_ve_la_khong_gioi_han(admin, client):
     e = make_event(admin)
     t = client.get(f"/api/events/{e['slug']}").json()["tickets"]
     assert t["total"] is None and t["remaining"] is None and t["sold_out"] is False
+
+# ------------------------------------------------------------------ email cho khách: không trùng, admin xác nhận cũng báo
+
+RESEND = "https://api.resend.com/emails"
+BTC = "btc@ceo1989.vn"
+
+
+@pytest.fixture
+def mail(monkeypatch):
+    monkeypatch.setenv("LEADSCAN_RESEND_API_KEY", "re_test_key")
+    monkeypatch.setenv("LEADSCAN_EVENT_EMAIL", BTC)
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+def _mails(route) -> list[tuple[str, str]]:
+    import json
+
+    return [(b["to"][0], b["subject"]) for b in (json.loads(c.request.content) for c in route.calls)]
+
+
+def _guest(route) -> list[str]:
+    return [s for to, s in _mails(route) if to != BTC]
+
+
+def _reg(db_id=None) -> EventRegistration:
+    from sqlalchemy import select
+
+    with dbmod.new_session() as db:
+        return db.scalar(select(EventRegistration))
+
+
+@respx.mock
+def test_dang_ky_gui_khach_va_ban_to_chuc_moi_ben_1_email(admin, client, mail):
+    route = respx.post(RESEND).respond(200, json={"id": "e1"})
+    e = make_event(admin)
+    d = _register(client, e["slug"])
+    mails = _mails(route)
+    assert len(mails) == 2 and {to for to, _ in mails} == {BTC, "binh@gmail.com"}
+    assert any("Đã nhận đăng ký" in s and d["code"] in s for s in _guest(route))
+    r = _reg()
+    assert r.receipt_sent_at and r.email_sent_at and r.confirm_sent_at is None
+
+
+def test_hop_thu_btc_loi_thi_thu_lai_khong_gui_trung_khach(admin, client, mail):
+    from app.worker import deliver_event_registration
+
+    e = make_event(admin)
+    with respx.mock() as m:
+        route = m.post(RESEND).mock(side_effect=lambda req: httpx.Response(500 if BTC in req.content.decode() else 200, json={"id": "x"}))
+        _register(client, e["slug"])
+        r = _reg()
+        assert r.receipt_sent_at and r.email_sent_at is None
+        assert deliver_event_registration(r.id) is False  # lần thử lại: BTC vẫn lỗi
+        assert len(_guest(route)) == 1  # khách chỉ nhận 1 email
+
+        route.mock(return_value=httpx.Response(200, json={"id": "ok"}))
+        assert deliver_event_registration(r.id) is True
+        assert len(_guest(route)) == 1 and _reg().email_sent_at
+
+
+def test_email_khach_loi_thi_lan_sau_gui_lai(admin, client, mail):
+    from app.worker import deliver_event_registration
+
+    e = make_event(admin)
+    with respx.mock() as m:
+        route = m.post(RESEND).mock(side_effect=lambda req: httpx.Response(200 if BTC in req.content.decode() else 500, json={"id": "x"}))
+        _register(client, e["slug"])
+        r = _reg()
+        assert r.email_sent_at and r.receipt_sent_at is None
+        route.mock(return_value=httpx.Response(200, json={"id": "ok"}))
+        assert deliver_event_registration(r.id) is True
+        assert [to for to, _ in _mails(route)].count(BTC) == 1  # BTC không bị báo lại
+        assert _reg().receipt_sent_at
+
+
+@respx.mock
+def test_nut_gui_lai_chi_gui_ban_to_chuc(admin, client, mail):
+    route = respx.post(RESEND).respond(200, json={"id": "e1"})
+    e = make_event(admin)
+    _register(client, e["slug"])
+    rid = admin.get(REGS).json()["items"][0]["id"]
+    assert admin.post(f"{REGS}/{rid}/resend").status_code == 200
+    assert len(_guest(route)) == 1 and [to for to, _ in _mails(route)].count(BTC) == 2
+
+
+@respx.mock
+def test_admin_xac_nhan_thu_cong_thi_bao_khach_mot_lan(admin, client, mail):
+    route = respx.post(RESEND).respond(200, json={"id": "e1"})
+    e = make_event(admin)
+    _register(client, e["slug"])
+    rid = admin.get(REGS).json()["items"][0]["id"]
+    before = len(route.calls)
+    assert admin.patch(f"{REGS}/{rid}", json={"status": "paid"}).json()["confirm_sent_at"]
+    new = _mails(route)[before:]
+    assert new == [("binh@gmail.com", new[0][1])]  # chỉ khách, không báo lại ban tổ chức
+    # đổi qua lại trạng thái không gửi thêm
+    admin.patch(f"{REGS}/{rid}", json={"status": "review"})
+    admin.patch(f"{REGS}/{rid}", json={"status": "paid"})
+    admin.patch(f"{REGS}/{rid}", json={"note": "ok"})
+    assert len(route.calls) == before + 1
+
+
+@respx.mock
+def test_admin_doc_lai_ocr_khop_thi_bao_khach(admin, client, r2, ocr_key, mail):
+    route = respx.post(RESEND).respond(200, json={"id": "e1"})
+    e = make_event(admin)
+    d = _register(client, e["slug"])
+    respx.post(OCR_URL).mock(return_value=ocr_reply("mo qua"))
+    client.post(f"/api/events/registrations/{d['code']}/proof", json={"image": b64(PNG, "a.png")})
+    rid = admin.get(REGS).json()["items"][0]["id"]
+    before = len(route.calls)
+    assert before == 2  # OCR không khớp → chưa gửi gì thêm
+
+    respx.post(OCR_URL).mock(return_value=ocr_reply(f"500,000d  {d['code']}"))
+    assert admin.post(f"{REGS}/{rid}/recheck").json()["status"] == "paid"
+    assert [to for to, _ in _mails(route)[before:]] == ["binh@gmail.com"]
+
+
+@respx.mock
+def test_ocr_tu_xac_nhan_bao_ca_hai_ben(admin, client, r2, ocr_key, mail):
+    route = respx.post(RESEND).respond(200, json={"id": "e1"})
+    e = make_event(admin)
+    d = _register(client, e["slug"])
+    respx.post(OCR_URL).mock(return_value=ocr_reply(f"500,000d  {d['code']}"))
+    client.post(f"/api/events/registrations/{d['code']}/proof", json={"image": b64(PNG, "a.png")})
+    assert sorted(to for to, _ in _mails(route)[2:]) == sorted([BTC, "binh@gmail.com"])
+    assert _reg().confirm_sent_at
+
+
+@respx.mock
+def test_mien_phi_khong_gui_them_email_xac_nhan(admin, client, mail):
+    route = respx.post(RESEND).respond(200, json={"id": "e1"})
+    e = make_event(admin, fee_member=0)
+    _register(client, e["slug"])
+    r = _reg()
+    assert r.status == "paid" and r.confirm_sent_at and len(_guest(route)) == 1
+
+
+# ------------------------------------------------------------------ mã QR check-in
+
+
+@respx.mock
+def test_email_xac_nhan_co_ma_qr_check_in(admin, client, mail):
+    import json
+
+    route = respx.post(RESEND).respond(200, json={"id": "e1"})
+    e = make_event(admin)
+    d = _register(client, e["slug"])
+    sent = [json.loads(c.request.content) for c in route.calls]
+    first = next(m for m in sent if m["to"] != [BTC])
+    assert "checkin-qr" not in first["html"]  # chưa thanh toán → chưa có QR
+
+    rid = admin.get(REGS).json()["items"][0]["id"]
+    admin.patch(f"{REGS}/{rid}", json={"status": "paid"})
+    mail_ = json.loads(route.calls[-1].request.content)
+    assert mail_["to"] == ["binh@gmail.com"] and "Đã xác nhận tham dự" in mail_["subject"]
+    qr = f"/api/events/checkin-qr/{d['code']}.png"
+    assert qr in mail_["html"] and qr in mail_["text"]
+
+
+def test_anh_qr_check_in_chua_link_trang_le_tan(client):
+    import io
+
+    from PIL import Image
+
+    r = client.get("/api/events/checkin-qr/SK7KQ4MX.png")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+    assert Image.open(io.BytesIO(r.content)).size[0] > 150
+    assert client.get("/api/events/checkin-qr/abc.png").status_code == 404
+    from app.services.events import checkin_url
+
+    assert checkin_url("SK7KQ4MX").endswith("/admin/su-kien/check-in?ma=SK7KQ4MX")
+    assert checkin_url("SK7KQ4MX", "c89").startswith(get_settings().c89_url.rstrip("/") + "/admin/su-kien/check-in")
+
+
+def test_le_tan_tra_ma_va_check_in(admin, client):
+    e = make_event(admin)
+    d = _register(client, e["slug"])
+    got = admin.get(f"{REGS}/by-code/{d['code'].lower()}").json()
+    assert got["code"] == d["code"] and got["checked_in"] is False
+    assert admin.get(f"{REGS}/by-code/SK0000000").status_code == 404
+
+    out = admin.post(f"{REGS}/{got['id']}/check-in").json()
+    assert out["checked_in"] and out["checked_in_at"] and out["already"] is False
+    again = admin.post(f"{REGS}/{got['id']}/check-in").json()
+    assert again["already"] is True and again["checked_in_at"] == out["checked_in_at"]
+    item = admin.get(REGS).json()["items"][0]
+    assert item["checked_in"] and item["checked_in_at"]
+
+    # bỏ check-in trong trang quản trị → xoá giờ đến
+    assert admin.patch(f"{REGS}/{got['id']}", json={"checked_in": False}).json()["checked_in_at"] is None
+
+
+def test_dang_ky_da_huy_khong_check_in_duoc(admin, client):
+    e = make_event(admin)
+    _register(client, e["slug"])
+    rid = admin.get(REGS).json()["items"][0]["id"]
+    admin.patch(f"{REGS}/{rid}", json={"status": "cancelled"})
+    assert admin.post(f"{REGS}/{rid}/check-in").status_code == 409
+
+
+def test_khach_khong_check_in_duoc(client):
+    assert client.get(f"{REGS}/by-code/SK7KQ4MX").status_code == 401
+    assert client.post(f"{REGS}/1/check-in").status_code == 401

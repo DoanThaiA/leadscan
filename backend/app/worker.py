@@ -809,7 +809,11 @@ def enrich_raw_purge_task() -> int:
 
 
 def deliver_event_registration(reg_id: int) -> bool:
-    """Gửi đăng ký sự kiện về hộp thư ban tổ chức (kèm profile PDF lấy từ R2) + email xác nhận cho khách."""
+    """Gửi đăng ký sự kiện về hộp thư ban tổ chức (kèm profile PDF lấy từ R2) + email xác nhận cho khách.
+
+    Mỗi phía ghi mốc đã gửi riêng (receipt_sent_at / email_sent_at) nên lần thử lại chỉ gửi phần còn thiếu:
+    khách không nhận trùng email khi hộp thư ban tổ chức lỗi, và email của khách lỗi thì vẫn được thử lại.
+    Trả về True khi cả hai phía đều đã gửi xong."""
     from app.db import new_session, utcnow
     from app.models_events import EventRegistration
     from app.services import event_files, events as ev
@@ -821,10 +825,15 @@ def deliver_event_registration(reg_id: int) -> bool:
         r = db.get(EventRegistration, reg_id)
         if not r:
             return False
-        payment = ev.payment_info(r.event, r, cfg) if r.event else None
-        send_event_receipt(cfg, r, payment)  # khách luôn nhận xác nhận (lỗi gửi thì bỏ qua)
+        if not r.receipt_sent_at:
+            payment = ev.payment_info(r.event, r, cfg) if r.event else None
+            if send_event_receipt(cfg, r, payment):
+                r.receipt_sent_at = utcnow()
+                if r.status == "paid":  # miễn phí: email này đã báo "đăng ký đã được xác nhận"
+                    r.confirm_sent_at = r.receipt_sent_at
+                db.commit()
         if r.email_sent_at:
-            return True
+            return bool(r.receipt_sent_at)
         profile = None
         if r.profile_key and profile_attachable(cfg, r):
             try:
@@ -836,7 +845,7 @@ def deliver_event_registration(reg_id: int) -> bool:
             return False
         r.email_sent_at = utcnow()
         db.commit()
-        return True
+        return bool(r.receipt_sent_at)
 
 
 @celery_app.task(name="leadscan.event_registration", bind=True, max_retries=3)
@@ -849,18 +858,40 @@ def event_registration_task(self, reg_id: int) -> None:
             raise self.retry(countdown=120 * 2**self.request.retries)
 
 
-@celery_app.task(name="leadscan.event_paid")
-def event_paid_task(reg_id: int) -> None:
-    from app.db import new_session
+def deliver_event_paid(reg_id: int, notify_organizer: bool = True) -> bool:
+    """Đăng ký vừa chuyển sang "Đã thanh toán" → email xác nhận cho khách (1 lần duy nhất, ghi confirm_sent_at).
+
+    notify_organizer: OCR tự xác nhận thì báo thêm ban tổ chức; admin tự bấm xác nhận thì không cần.
+    Trả về True khi khách đã nhận email xác nhận (hoặc không còn gì để gửi)."""
+    from app.db import new_session, utcnow
     from app.models_events import EventRegistration
     from app.services.notify import send_event_paid, send_event_receipt
 
     cfg = get_settings()
     with new_session() as db:
         r = db.get(EventRegistration, reg_id)
-        if r:
+        if not r or r.status != "paid":
+            return True
+        if r.confirm_sent_at:
+            return True
+        if notify_organizer:
             send_event_paid(cfg, r)
-            send_event_receipt(cfg, r)
+        if not send_event_receipt(cfg, r):
+            return False
+        r.confirm_sent_at = utcnow()
+        db.commit()
+        return True
+
+
+@celery_app.task(name="leadscan.event_paid", bind=True, max_retries=3)
+def event_paid_task(self, reg_id: int, notify_organizer: bool = True) -> None:
+    from app.services.notify import mail_provider
+
+    cfg = get_settings()
+    if not deliver_event_paid(reg_id, notify_organizer) and mail_provider(cfg) and not cfg.celery_eager:
+        if self.request.retries < self.max_retries:
+            # lần thử lại chỉ gửi khách, không báo trùng ban tổ chức
+            raise self.retry(args=(reg_id, False), countdown=120 * 2**self.request.retries)
 
 
 def enqueue_event_registration(reg_id: int) -> None:
@@ -872,9 +903,9 @@ def enqueue_event_registration(reg_id: int) -> None:
             log.exception("Không gửi được email đăng ký sự kiện #%s", reg_id)
 
 
-def enqueue_event_paid(reg_id: int) -> None:
-    if not enqueue(event_paid_task, reg_id):
+def enqueue_event_paid(reg_id: int, notify_organizer: bool = True) -> None:
+    if not enqueue(event_paid_task, reg_id, notify_organizer):
         try:
-            event_paid_task(reg_id)
+            deliver_event_paid(reg_id, notify_organizer)
         except Exception:  # noqa: BLE001
             log.exception("Không gửi được email xác nhận thanh toán sự kiện #%s", reg_id)

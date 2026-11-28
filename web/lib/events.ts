@@ -169,8 +169,11 @@ export interface EventRegistration {
   ocr_at: string | null;
   paid_at: string | null;
   checked_in: boolean;
+  checked_in_at: string | null;
   note: string;
   email_sent_at: string | null;
+  receipt_sent_at: string | null;
+  confirm_sent_at: string | null;
   created_at: string;
 }
 

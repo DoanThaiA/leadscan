@@ -8,10 +8,11 @@ Luồng của khách:
 
 import json
 import logging
+import re
 from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -22,6 +23,8 @@ from app.config import Settings, get_settings
 from app.db import new_session, utcnow
 from app.models_events import Event, EventRegistration
 from app.schemas_events import (
+    CODE_ALPHABET,
+    CODE_PREFIX,
     EventCard,
     EventPublic,
     ProofIn,
@@ -39,6 +42,7 @@ log = logging.getLogger("leadscan.events")
 
 router = APIRouter(prefix="/api/events")
 
+CODE_RE = re.compile(f"{CODE_PREFIX}[{CODE_ALPHABET}]{{6}}")
 LOOKUP_PER_HOUR = 120  # số lần tra cứu / nộp ảnh tối đa mỗi IP trong 1 giờ (chặn dò mã đăng ký, hạn chế gọi OCR phí)
 
 
@@ -74,6 +78,17 @@ def list_events(request: Request):
                 for e in rows
             ]
         }
+
+
+@router.get("/checkin-qr/{code}.png")
+def checkin_qr(code: str, request: Request):
+    """Ảnh mã QR check-in trong email xác nhận. Không tra DB: chỉ vẽ đúng định dạng mã đăng ký,
+    nên không dùng để dò mã nào có thật. Cổng (LeadScan / c89 / epc) lấy theo tên miền của ảnh."""
+    code = code.strip().upper()
+    if not CODE_RE.fullmatch(code):
+        raise HTTPException(404, "Mã không hợp lệ.")
+    png = ev.checkin_qr_png(code, sites.request_site(request))
+    return Response(png, media_type="image/png", headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 @router.get("/{slug}")

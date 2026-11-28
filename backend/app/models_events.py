@@ -150,11 +150,15 @@ class EventRegistration(Base):
     paid_at: Mapped[datetime | None] = mapped_column(DateTime)
     confirmed_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
     checked_in: Mapped[bool] = mapped_column(Boolean, default=False)
+    checked_in_at: Mapped[datetime | None] = mapped_column(DateTime)  # lễ tân quét QR / bấm "Đã đến" lúc nào
+    checked_in_by_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id", ondelete="SET NULL"))
 
     note: Mapped[str] = mapped_column(Text, default="")  # ghi chú nội bộ của ban tổ chức
     ip: Mapped[str] = mapped_column(String(64), default="")
     user_agent: Mapped[str] = mapped_column(String(300), default="")
     email_sent_at: Mapped[datetime | None] = mapped_column(DateTime)  # đã báo ban tổ chức
+    receipt_sent_at: Mapped[datetime | None] = mapped_column(DateTime)  # đã gửi khách email "đã nhận đăng ký"
+    confirm_sent_at: Mapped[datetime | None] = mapped_column(DateTime)  # đã gửi khách email "đã xác nhận thanh toán"
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
     event: Mapped[Event | None] = relationship(lazy="joined")

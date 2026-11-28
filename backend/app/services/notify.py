@@ -629,10 +629,15 @@ def send_event_paid(cfg: Settings, r) -> bool:
 
 
 def send_event_receipt(cfg: Settings, r, payment: dict | None = None) -> bool:
-    """Xác nhận cho người đăng ký: đã nhận đăng ký, kèm hướng dẫn chuyển khoản nếu còn phải nộp phí."""
-    from app.models_events import ATTENDEE_TYPES
+    """Xác nhận cho người đăng ký: đã nhận đăng ký, kèm hướng dẫn chuyển khoản nếu còn phải nộp phí.
 
-    lines = [
+    Đã thanh toán (hoặc miễn phí) → kèm mã QR check-in để lễ tân quét khi khách đến sự kiện."""
+    from app import sites
+    from app.models_events import ATTENDEE_TYPES
+    from app.services import events as ev, mail_layout as ml
+
+    paid = r.status == "paid"
+    head = [
         f"Chào {r.full_name},",
         "",
         f"Ban tổ chức đã nhận đăng ký tham dự sự kiện “{r.event_title}”.",
@@ -640,13 +645,19 @@ def send_event_receipt(cfg: Settings, r, payment: dict | None = None) -> bool:
         f"  • Mã đăng ký      : {r.code}",
         f"  • Hình thức tham dự: {ATTENDEE_TYPES.get(r.attendee_type, r.attendee_type)}",
         f"  • Phí tham dự     : {_vnd(r.amount)}",
+        "",
     ]
-    if r.status == "paid":
-        lines += ["", "Đăng ký của bạn đã được xác nhận. Hẹn gặp bạn tại sự kiện!"]
+    qr = ev.checkin_qr_url(r.code, r.site, cfg) if paid else ""
+    if paid:
+        head.append("Đăng ký của bạn đã được xác nhận. Hẹn gặp bạn tại sự kiện!")
+        qr_text = [
+            "",
+            "MÃ QR CHECK-IN: khi đến sự kiện, vui lòng đưa mã QR trong email này cho lễ tân quét",
+            f"(hoặc đọc mã đăng ký {r.code}). Ảnh mã QR: {qr}",
+        ]
     else:
         p = payment or {}
-        lines += [
-            "",
+        head += [
             "ĐỂ HOÀN TẤT, VUI LÒNG CHUYỂN KHOẢN:",
             f"  • Ngân hàng       : {p.get('bank_name') or '—'}",
             f"  • Số tài khoản    : {p.get('account_no') or '—'}",
@@ -657,9 +668,24 @@ def send_event_receipt(cfg: Settings, r, payment: dict | None = None) -> bool:
             "Chuyển khoản xong, mở lại trang sự kiện và tải ảnh chụp màn hình giao dịch lên để hệ thống",
             "đối soát tự động. Ghi đúng nội dung chuyển khoản giúp xác nhận nhanh hơn.",
         ]
+        qr_text = []
+    tail = []
     if r.event:
-        from app import sites
+        tail += ["", f"Trang sự kiện: {sites.url(r.site, cfg)}/su-kien/{r.event.slug}?ma={r.code}"]
+    tail += ["", "Trân trọng,", "Ban tổ chức"]
 
-        lines += ["", f"Trang sự kiện: {sites.url(r.site, cfg)}/su-kien/{r.event.slug}?ma={r.code}"]
-    lines += ["", "Trân trọng,", "Ban tổ chức"]
-    return send_mail(cfg, f"[Sự kiện] Đã nhận đăng ký {r.event_title} — mã {r.code}", "\n".join(lines) + "\n", to=r.email)
+    subject = f"[Sự kiện] {'Đã xác nhận tham dự' if paid else 'Đã nhận đăng ký'} {r.event_title} — mã {r.code}"
+    body = "\n".join(head + qr_text + tail) + "\n"
+    html = None
+    if paid:
+        block = (
+            f'<div style="margin:16px 0 8px;padding:18px;border:1px solid {ml.LINE};border-radius:10px;text-align:center">'
+            f'<div style="font-size:12px;font-weight:700;color:{ml.BRAND};letter-spacing:.04em;text-transform:uppercase;margin-bottom:10px">Mã QR check-in</div>'
+            f'<img src="{ml.esc(qr)}" alt="Mã QR check-in {ml.esc(r.code)}" width="220" height="220" '
+            'style="display:block;margin:0 auto;width:220px;height:220px;border:0">'
+            f'<div style="margin-top:10px;font-size:20px;font-weight:700;letter-spacing:.12em;color:{ml.INK}">{ml.esc(r.code)}</div>'
+            f'<div style="margin-top:6px;font-size:13px;color:{ml.MUTED}">Đưa mã này cho lễ tân quét khi đến sự kiện</div></div>'
+        )
+        inner = ml.text_to_html("\n".join(head)) + block + ml.text_to_html("\n".join(tail))
+        html = ml.wrap(subject, inner, preheader=f"Mã QR check-in sự kiện {r.event_title}", cfg=cfg)
+    return send_mail(cfg, subject, body, to=r.email, html=html)
